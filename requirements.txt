@@ -8,7 +8,6 @@ debugpy==1.4.3
 fsspec==2021.9.0
 idna==3.2
 importlib-metadata==4.8.1
-intbitset==2.4.1
 joblib==1.0.1
 locket==0.2.1
 nltk==3.6.3
