@@ -1,16 +1,12 @@
-from project.src import download_abstracts
-import unittest
+from ..src import km_util as util
+import pytest
 
-class TestDownloadPubMedAbstracts(unittest.TestCase):
-    def test_connect_to_ftp_server(self):
-        #ftp = DownloadPubMedAbstracts.connect_to_ftp_server(
-        #    'ftp.ncbi.nlm.nih.gov', 'pubmed/baseline/')
+def test_assert():
+    print("test output")
+    util.report_progress(1, 2)
+    print("\ntest output 2")
+    assert 4 == 2 + 2
+    
 
-        #items = ftp.dir()
-
-        #ftp.quit()
-
-        self.assertTrue(False)
-
-if __name__ == '__main__':
-    unittest.main()
+def test_assert_2():
+    assert True
