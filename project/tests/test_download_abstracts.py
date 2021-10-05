@@ -12,4 +12,4 @@ def test_assert_2():
     assert True
 
 def test_assert_3():
-    assert False
+    assert 2 == 2
