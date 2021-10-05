@@ -11,7 +11,7 @@ jobs:
     - uses: actions/checkout@v2
     - name: Download build script
       run: |
-        wget . https://github.com/stewart-lab/fast_km/blob/master/build-actions/build_workflow.sh
+        wget https://github.com/stewart-lab/fast_km/blob/master/build-actions/build_workflow.sh
     - name: Run build script
       run: |
         chmod +x ./build_workflow.sh
