@@ -1,3 +1,3 @@
-# Build Linux Docker Image (Dev Build)
-echo -e “\\e[0;40mBuilding Docker Image (Dev Build)\\e[0m”
+echo -e "\e[1;97;40m Building Docker Image \e[0m"
+
 docker build -t stewart-morgridge/fast_km:dev .
