@@ -9,22 +9,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Set up Python 3.7.5
-      uses: actions/setup-python@v2
-      with:
-        python-version: 3.7.5
-    - name: Install dependencies
+    - name: Download build script
       run: |
-        python -m pip install --upgrade pip
-        pip install pylint
-    - name: Analyzing the code with pylint
+        wget . https://github.com/stewart-lab/fast_km/blob/master/build-actions/build_workflow.sh
+    - name: Run build script
       run: |
-        pylint `ls -R|grep .py$|xargs`
-    - name: Run unit tests
-      run:
-        echo This is a test
-        python -V
-        #python unit_tests.py
-#    - name: Build Docker image
-#    - name: Test Docker image
-#    - name: Deploy Docker image
+        chmod +x ./build_workflow.sh
+        ./build_workflow.sh
