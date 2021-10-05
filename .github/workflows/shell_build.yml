@@ -1,4 +1,4 @@
-name: Pylint
+name: shell_build
 
 on: [pull_request]
 
