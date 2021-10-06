@@ -7,7 +7,7 @@ class Database():
         self.connection = sqlite3.connect(path_to_db)
         self._initialize_ngram_table()
         self._initialize_indexed_files_table()
-        self._initialize_publication_year_table()
+        self._initialize_publication_year_table() # test
 
     def _initialize_ngram_table(self) -> None:
         sql = """ 
