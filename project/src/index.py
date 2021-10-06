@@ -1,7 +1,9 @@
 import math
 import os
 import pickle
-from project.src.database import Database
+import nltk
+from .ngram_trie import NGramTrie
+from .abstract import Abstract
 
 class Index():
     def __init__(self, path_to_db: str):
@@ -13,7 +15,7 @@ class Index():
         if os.path.exists(path_to_db):
             self._db = self._load_existing_trie()
         else:
-            self._db = Database()
+            self._db = NGramTrie()
 
     def dump_cache_to_db(self):
         """Call this method while building the index periodically. Saves 

@@ -9,6 +9,7 @@ numpy==1.21.2
 packaging==21.0
 pluggy==1.0.0
 py==1.10.0
+pygtrie==2.4.2
 pyparsing==2.4.7
 pytest==6.2.5
 regex==2021.9.30
