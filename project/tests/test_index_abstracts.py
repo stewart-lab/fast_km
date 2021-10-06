@@ -1,6 +1,7 @@
 import os
 import pytest
 import gzip
+import shutil
 from ..src.index import Index
 from ..src.abstract import Abstract
 from ..src import index_abstracts as indexer
@@ -56,3 +57,26 @@ def test_parse_xml(data_dir):
     abs_test = next(obj for obj in abstracts if obj.pmid == 34582133)
     assert abs_test.text.startswith("To describe healthcare professionals")
     assert abs_test.text.endswith("family members at the end-of-life.")
+
+def test_indexer(data_dir):
+    index_dir = indexer.get_index_dir(data_dir)
+
+    # delete the index if it exists already
+    if os.path.exists(index_dir):
+        shutil.rmtree(index_dir)
+    assert not os.path.exists(index_dir)
+
+    # build the index
+    index = indexer.index_abstracts(data_dir, 1, 1)
+
+    # query the index
+    query = index.query_index("polysaccharide")
+    query = query | index.query_index("polysaccharides")
+    query = query | index.query_index("lipopolysaccharides")
+    query = query | index.query_index("lipopolysaccharide")
+    query = query | index.query_index("exopolysaccharide")
+
+    assert len(query) == 37
+
+    # delete the index when the test is done
+    shutil.rmtree(index_dir)

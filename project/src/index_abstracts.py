@@ -96,7 +96,8 @@ def index_abstracts(abstracts_dir: str, n_per_cache_dump=10, n=1) -> Index:
     print('Building index...')
 
     the_index = Index(get_db_path(abstracts_dir))
-    files_to_index = get_files_to_index(abstracts_dir, the_index)
+    already_indexed_files = the_index.list_indexed_files()
+    files_to_index = get_files_to_index(abstracts_dir, already_indexed_files)
 
     if not files_to_index:
         print('Done reading existing index')

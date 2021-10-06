@@ -86,7 +86,7 @@ class Index():
 
         return table
 
-    def get_indexed_abstracts_files(self) -> 'list[str]':
+    def list_indexed_files(self) -> 'list[str]':
         return self._db.get_indexed_abstracts_files()
 
     def censor_by_year(self, original_set: set, censor_year: int) -> set:
@@ -105,5 +105,10 @@ class Index():
             return b
         
     def _save_to_disk(self):
+        dir = os.path.dirname(self.path_to_db)
+        
+        if not os.path.exists(dir):
+            os.mkdir(dir)
+
         with open(self.path_to_db, 'wb') as handle:
             pickle.dump(self._db, handle)
