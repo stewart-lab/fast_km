@@ -1,0 +1,5 @@
+[run]
+omit = project/tests/*,*__init__*
+
+[report]
+omit = project/tests/*,*__init__*
