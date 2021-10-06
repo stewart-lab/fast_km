@@ -34,3 +34,8 @@ def test_index(tmp_path):
     assert len(expected_set ^ query) == 0
     assert loaded_index.get_publication_year(pmid1) == pub_year1
     assert loaded_index.get_publication_year(pmid2) == pub_year2
+
+    # query the index for an n-gram that doesn't exist
+    empty_query = loaded_index.query_index("test_test")
+    assert type(empty_query) is set
+    assert len(empty_query) == 0
