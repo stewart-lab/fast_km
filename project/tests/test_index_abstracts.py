@@ -34,7 +34,7 @@ def test_get_files_to_index(data_dir):
 
     # pretend we've already indexed the pubmed21n1432.xml.gz file
     # should have 0 files remaining to index (no other .xml.gz files in dir)
-    test_xml_file = os.path.join(data_dir, "pubmed21n1432.xml.gz")
+    test_xml_file = "pubmed21n1432.xml.gz"
     files_to_index = indexer.get_files_to_index(data_dir, [test_xml_file])
     assert len(files_to_index) == 0
 

@@ -21,7 +21,7 @@ def get_files_to_index(abstracts_dir: str, already_indexed: Iterable) -> 'list[s
     not_indexed_yet = []
 
     for file in all_abstracts_files:
-        if file not in already_indexed:
+        if os.path.basename(file) not in already_indexed:
             not_indexed_yet.append(file)
 
     return not_indexed_yet
@@ -118,7 +118,8 @@ def index_abstracts(abstracts_dir: str, n_per_cache_dump=10, n=1) -> Index:
                 for ngram in ngrams:
                     the_index.place_value(ngram, abs.pmid, abs.pub_year)
 
-            the_index._indexed_filenames.add(gzip_file)
+            filename = os.path.basename(gzip_file)
+            the_index._indexed_filenames.add(filename)
             i = i + 1
             util.report_progress(i, len(files_to_index))
 
