@@ -78,18 +78,6 @@ class Index():
         
             return num_articles_censored
 
-    def populate_fet_table(self, a_term_set: set, b_term_set: set, censor_year: int):
-        """Populates the table for the Fisher's exact test"""
-        a_term_and_b_term = len(a_term_set & b_term_set)
-        not_a_term_b_term = len(b_term_set) - a_term_and_b_term
-        a_term_not_b_term = len(a_term_set) - a_term_and_b_term
-        not_a_term_not_b_term = self.n_articles(censor_year) - a_term_and_b_term - not_a_term_b_term - a_term_not_b_term
-
-        table = [[a_term_and_b_term, not_a_term_b_term],
-                [a_term_not_b_term, not_a_term_not_b_term]]
-
-        return table
-
     def list_indexed_files(self) -> 'list[str]':
         return self._db.get_indexed_abstracts_files()
 
