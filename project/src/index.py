@@ -45,7 +45,11 @@ class Index():
         if query_lower in self._ngrams_with_pmids:
             return self._ngrams_with_pmids[query_lower]
         else:
-            return self._db.query(query_lower)
+            # look up in trie + cache result
+            # TODO: clear cache occasionally or put limit on size?
+            db_result = self._db.query(query_lower)
+            self._ngrams_with_pmids[query_lower] = db_result
+            return db_result
 
     def get_publication_year(self, id: int) -> int:
         if id in self._publication_years:
