@@ -1,6 +1,7 @@
 import os
 import glob
 import gzip
+import re
 from typing import Iterable
 import nltk
 import xml.etree.ElementTree as ET
@@ -26,8 +27,13 @@ def get_files_to_index(abstracts_dir: str, already_indexed: Iterable) -> 'list[s
 
     return not_indexed_yet
 
+def get_sanitized_text(text: str, regex: str):
+    sanitized_text = re.sub(regex, '', text)
+    return sanitized_text
+
 def get_n_grams(text: str, n: int, n_gram_mem_buffer: list) -> 'list[str]':
-    tokens = tokenizer.tokenize(text)
+    sanitized_text = get_sanitized_text(text, r'[^\w\s]')
+    tokens = tokenizer.tokenize(sanitized_text)
     n_gram_mem_buffer.clear()
 
     for i, token in enumerate(tokens):

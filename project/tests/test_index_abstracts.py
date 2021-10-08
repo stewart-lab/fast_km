@@ -11,12 +11,19 @@ from ..src import km_util as util
 def data_dir():
     return os.path.join(os.getcwd(), "project", "tests", "test_data", "indexer")
 
+def test_text_sanitization():
+    text = "The qui-ck brown fox [jumped ]over the la'zy dog."
+    sanitized = indexer.get_sanitized_text(text, r'[^\w\s]')
+    assert sanitized == "The quick brown fox jumped over the lazy dog"
+
 def test_ngrams():
     text = "The qui-ck brown fox [jumped ]over the la'zy dog."
     memory_buffer = []
 
     mono_grams = indexer.get_n_grams(text, 1, memory_buffer)
     assert "The" in mono_grams
+    assert "quick" in mono_grams
+    assert "lazy" in mono_grams
     assert "brown fox" not in mono_grams
     assert "brown fox jumped" not in mono_grams
 
@@ -24,6 +31,7 @@ def test_ngrams():
     assert "The" in mono_and_bi_grams
     assert "brown fox" in mono_and_bi_grams
     assert "jumped over" in mono_and_bi_grams
+    assert "lazy dog" in mono_and_bi_grams
     assert "brown fox jumped" not in mono_and_bi_grams
 
 def test_get_files_to_index(data_dir):
