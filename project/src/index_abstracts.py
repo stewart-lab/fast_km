@@ -1,15 +1,11 @@
 import os
 import glob
 import gzip
-import re
 from typing import Iterable
-import nltk
 import xml.etree.ElementTree as ET
 from . import km_util as util
 from .index import Index
 from .abstract import Abstract
-
-tokenizer = nltk.RegexpTokenizer(r"\w+")
 
 def get_index_dir(abstracts_dir: str) -> str:
     return os.path.join(abstracts_dir, 'Index')
@@ -26,24 +22,6 @@ def get_files_to_index(abstracts_dir: str, already_indexed: Iterable) -> 'list[s
             not_indexed_yet.append(file)
 
     return not_indexed_yet
-
-def get_sanitized_text(text: str, regex: str):
-    sanitized_text = re.sub(regex, '', text)
-    return sanitized_text
-
-def get_n_grams(text: str, n: int, n_gram_mem_buffer: list) -> 'list[str]':
-    sanitized_text = get_sanitized_text(text, r'[^\w\s]')
-    tokens = tokenizer.tokenize(sanitized_text)
-    n_gram_mem_buffer.clear()
-
-    for i, token in enumerate(tokens):
-        if n > 1:
-            for j in range(i + 1, i + n + 1):
-                n_gram_mem_buffer.append(' '.join(tokens[i:j]))
-        else:
-            n_gram_mem_buffer.append(tokens[i])
-
-    return n_gram_mem_buffer
 
 def parse_xml(xml_content: str) -> 'list[Abstract]':
     """"""
@@ -119,7 +97,7 @@ def index_abstracts(abstracts_dir: str, n_per_cache_dump=10, n=1) -> Index:
             abstracts = parse_xml(file.read())
 
             for abs in abstracts:
-                ngrams = get_n_grams(abs.text, n, memory_buffer)
+                ngrams = util.get_n_grams(abs.text, n, memory_buffer)
 
                 for ngram in ngrams:
                     the_index.place_value(ngram, abs.pmid, abs.pub_year)
