@@ -74,8 +74,7 @@ def parse_xml(xml_content: str) -> 'list[Abstract]':
 
 # TODO: unzip .gz.md5
 # TODO: verify .xml with .md5
-# TODO: handle synonyms
-def index_abstracts(abstracts_dir: str, n_per_cache_dump=10, n=1) -> Index:
+def index_abstracts(abstracts_dir: str, n_per_cache_dump = 10) -> Index:
     """"""
     print('Building index...')
 
@@ -83,24 +82,14 @@ def index_abstracts(abstracts_dir: str, n_per_cache_dump=10, n=1) -> Index:
     already_indexed_files = the_index.list_indexed_files()
     files_to_index = get_files_to_index(abstracts_dir, already_indexed_files)
 
-    if not files_to_index:
-        print('Done reading existing index')
-        return the_index
+    util.report_progress(0, len(files_to_index))
 
-    i = 0
-    util.report_progress(i, len(files_to_index))
-    the_index.start_building_index()
-    memory_buffer = []
+    for i, gzip_file in enumerate(files_to_index):
+        with gzip.open(gzip_file, 'rb') as xml_file:
+            abstracts = parse_xml(xml_file.read())
 
-    for gzip_file in files_to_index:
-        with gzip.open(gzip_file, 'rb') as file:
-            abstracts = parse_xml(file.read())
-
-            for abs in abstracts:
-                ngrams = util.get_n_grams(abs.text, n, memory_buffer)
-
-                for ngram in ngrams:
-                    the_index.place_value(ngram, abs.pmid, abs.pub_year)
+            for abstract in abstracts:
+                the_index.index_abstract(abstract)
 
             filename = os.path.basename(gzip_file)
             the_index._indexed_filenames.add(filename)
@@ -108,9 +97,8 @@ def index_abstracts(abstracts_dir: str, n_per_cache_dump=10, n=1) -> Index:
             util.report_progress(i, len(files_to_index))
 
         if i % n_per_cache_dump == 0:
-            the_index.dump_cache_to_db()
+            the_index.dump_index_to_trie()
 
     the_index.finish_building_index()
-    print('\n')
     print('Done building index')
     return the_index

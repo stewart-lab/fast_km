@@ -45,20 +45,13 @@ def write_all_lines(path: str, items: 'list[str]') -> None:
             f.write(str(item))
             f.write('\n')
 
-def get_sanitized_text(text: str, regex: str):
+def _get_sanitized_text(text: str, regex: str):
     sanitized_text = re.sub(regex, '', text)
     return sanitized_text
 
-def get_n_grams(text: str, n: int, n_gram_mem_buffer: list) -> 'list[str]':
-    sanitized_text = get_sanitized_text(text, r'[^\w\s]')
-    tokens = tokenizer.tokenize(sanitized_text)
-    n_gram_mem_buffer.clear()
-
-    for i, token in enumerate(tokens):
-        if n > 1:
-            for j in range(i + 1, i + n + 1):
-                n_gram_mem_buffer.append(' '.join(tokens[i:j]))
-        else:
-            n_gram_mem_buffer.append(tokens[i])
-
-    return n_gram_mem_buffer
+def get_tokens(text: str) -> 'list[str]':
+    #sanitized_text = _get_sanitized_text(text, r'[^\w\s]').lower()
+    #tokens = tokenizer.tokenize(sanitized_text)
+    l_text = text.lower()
+    tokens = tokenizer.tokenize(l_text)
+    return tokens
