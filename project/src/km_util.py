@@ -1,5 +1,9 @@
 import sys
 import os
+import re
+import nltk
+
+tokenizer = nltk.RegexpTokenizer(r"\w+")
 
 def report_progress(completed: float, total: float) -> None:
     """Shows a progress bar. Adapted from: 
@@ -15,6 +19,9 @@ def report_progress(completed: float, total: float) -> None:
         int(total))
     sys.stdout.write(text)
     sys.stdout.flush()
+
+    if completed == total:
+        print("\n")
 
 def read_all_lines(path: str) -> 'list[str]':
     """Reads a text file into a list of strings"""
@@ -37,3 +44,14 @@ def write_all_lines(path: str, items: 'list[str]') -> None:
         for item in items:
             f.write(str(item))
             f.write('\n')
+
+def _get_sanitized_text(text: str, regex: str):
+    sanitized_text = re.sub(regex, '', text)
+    return sanitized_text
+
+def get_tokens(text: str) -> 'list[str]':
+    #sanitized_text = _get_sanitized_text(text, r'[^\w\s]').lower()
+    #tokens = tokenizer.tokenize(sanitized_text)
+    l_text = text.lower()
+    tokens = tokenizer.tokenize(l_text)
+    return tokens

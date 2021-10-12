@@ -11,20 +11,20 @@ from ..src import km_util as util
 def data_dir():
     return os.path.join(os.getcwd(), "project", "tests", "test_data", "indexer")
 
-def test_ngrams():
+def test_text_sanitization():
     text = "The qui-ck brown fox [jumped ]over the la'zy dog."
-    memory_buffer = []
+    sanitized = util._get_sanitized_text(text, r'[^\w\s]')
+    assert sanitized == "The quick brown fox jumped over the lazy dog"
 
-    mono_grams = indexer.get_n_grams(text, 1, memory_buffer)
-    assert "The" in mono_grams
-    assert "brown fox" not in mono_grams
-    assert "brown fox jumped" not in mono_grams
+def test_tokenization():
+    text = "The quick brown fox jumped over the lazy dog."
 
-    mono_and_bi_grams = indexer.get_n_grams(text, 2, memory_buffer)
-    assert "The" in mono_and_bi_grams
-    assert "brown fox" in mono_and_bi_grams
-    assert "jumped over" in mono_and_bi_grams
-    assert "brown fox jumped" not in mono_and_bi_grams
+    tokens = util.get_tokens(text)
+    assert "the" in tokens
+    assert "quick" in tokens
+    assert "lazy" in tokens
+    assert "brown fox" not in tokens
+    assert "brown fox jumped" not in tokens
 
 def test_get_files_to_index(data_dir):
     # pretend we have not indexed any files yet
@@ -67,7 +67,7 @@ def test_indexer(data_dir):
     assert not os.path.exists(index_dir)
 
     # build the index
-    index = indexer.index_abstracts(data_dir, 1, 1)
+    index = indexer.index_abstracts(data_dir, 1)
 
     # query the index
     query = index.query_index("polysaccharide")
