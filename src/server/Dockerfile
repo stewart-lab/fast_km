@@ -14,4 +14,4 @@ RUN pip install -r requirements.txt
 EXPOSE 5000
 
 ## Default command on running the container
-ENTRYPOINT ["python", "-u", "src/main.py", "--server"]
+ENTRYPOINT ["python", "-u", "src/run_server.py"]

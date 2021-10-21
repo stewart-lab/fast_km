@@ -11,4 +11,4 @@ RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 
 ## Default command on running the container
-ENTRYPOINT ["python", "-u", "src/main.py", "--worker"]
+ENTRYPOINT ["python", "-u", "src/run_worker.py"]
