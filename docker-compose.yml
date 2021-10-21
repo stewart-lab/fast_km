@@ -1,0 +1,23 @@
+version: "3.8"
+services:
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - /Users/rmillikin/PubmedAbstracts:/mnt/pubmed
+    depends_on:
+      - redis
+
+#  workers:
+#    build:
+#      context: .
+#      dockerfile: yeah
+#      depends_on:
+#        - redis
+
+  redis:
+    image: redis

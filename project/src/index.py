@@ -1,9 +1,10 @@
 import math
 import os
 import pickle
-from . import km_util as util
-from .token_trie import TokenTrie
-from .abstract import Abstract
+#from multiprocessing import Lock
+from project.src import km_util as util
+from project.src.token_trie import TokenTrie
+from project.src.abstract import Abstract
 
 class Index():
     def __init__(self, path_to_db: str):
@@ -12,6 +13,7 @@ class Index():
         self._publication_years = dict()
         self._indexed_filenames = set()
         self.path_to_db = path_to_db
+        #self.lock = Lock()
 
         if os.path.exists(path_to_db):
             self._trie = self._load_existing_trie()
@@ -51,7 +53,7 @@ class Index():
                 raise ValueError("Query must have <=10 words")
 
             result = self._query_trie(tokens)
-            self._query_cache[l_query] = result
+            self.save_to_cache(self._query_cache, l_query, result)
             return result
 
     def n_articles(self, censor_year = math.inf) -> int:
@@ -131,7 +133,7 @@ class Index():
             token0_pmids = self._tokens_with_pmids[tokens[0]]
         else:
             token0_pmids = self._trie.query(tokens[0])
-            self._tokens_with_pmids[tokens[0]] = token0_pmids
+            self.save_to_cache(self._tokens_with_pmids, tokens[0], token0_pmids)
 
         # handle 1-grams
         if len(tokens) == 1:
@@ -165,14 +167,14 @@ class Index():
                         token_pmids = self._tokens_with_pmids[token]
                     else:
                         token_pmids = self._trie.query(token)
-                        self._tokens_with_pmids[token] = token_pmids
+                        self.save_to_cache(self._tokens_with_pmids, token, token_pmids)
 
                     if pmid not in token_pmids:
                         possibly_in_pmid = False
                         break
 
                     loc = loc_0 + i
-                    if loc == token_pmids[pmid] or loc in token_pmids[pmid]:
+                    if loc == token_pmids[pmid] or (type(token_pmids[pmid]) is list and loc in token_pmids[pmid]):
                         if i == len(tokens) - 1:
                             ngram_found_in_pmid = True
                     else:
@@ -187,3 +189,7 @@ class Index():
                 result.add(pmid)
 
         return result
+
+    def save_to_cache(self, cache, key, value):
+        #with self.lock:
+        cache[key] = value
