@@ -1,6 +1,6 @@
 import os
-from ..src.index import Index
-from ..src.abstract import Abstract
+from ..indexing.index import Index
+from ..indexing.abstract import Abstract
 
 def test_index_abstract(tmp_path):
     db_path = os.path.join(tmp_path, 'db.db')

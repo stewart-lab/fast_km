@@ -2,10 +2,10 @@ import os
 import pytest
 import gzip
 import shutil
-from ..src.index import Index
-from ..src.abstract import Abstract
-from ..src import index_abstracts as indexer
-from ..src import km_util as util
+from ..indexing.index import Index
+from ..indexing.abstract import Abstract
+from ..indexing import index_abstracts as indexer
+from ..indexing import km_util as util
 
 @pytest.fixture
 def data_dir():

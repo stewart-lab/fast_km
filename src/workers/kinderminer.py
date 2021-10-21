@@ -1,7 +1,7 @@
 import scipy.stats
 import time
 import math
-from .index import Index
+from indexing.index import Index
 
 sided = 'greater'
 

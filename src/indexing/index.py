@@ -2,9 +2,9 @@ import math
 import os
 import pickle
 #from multiprocessing import Lock
-from project.src import km_util as util
-from project.src.token_trie import TokenTrie
-from project.src.abstract import Abstract
+import indexing.km_util as util
+from indexing.token_trie import TokenTrie
+from indexing.abstract import Abstract
 
 class Index():
     def __init__(self, path_to_db: str):

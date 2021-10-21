@@ -3,9 +3,9 @@ import glob
 import gzip
 from typing import Iterable
 import xml.etree.ElementTree as ET
-from . import km_util as util
-from .index import Index
-from .abstract import Abstract
+import indexing.km_util as util
+from indexing.index import Index
+from indexing.abstract import Abstract
 
 def get_index_dir(abstracts_dir: str) -> str:
     return os.path.join(abstracts_dir, 'Index')
@@ -98,6 +98,9 @@ def index_abstracts(abstracts_dir: str, n_per_cache_dump = 10) -> Index:
 
         if i % n_per_cache_dump == 0:
             the_index.dump_index_to_trie()
+
+            # DEBUG
+            break
 
     the_index.finish_building_index()
     print('Done building index')

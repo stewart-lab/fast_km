@@ -1,23 +1,25 @@
 version: "3.8"
 services:
 
-  web:
+  server:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: ./src/server/Dockerfile
+    volumes:
+        - ${PUBMED_DIR}:/mnt/pubmed
     ports:
       - "5000:5000"
-    volumes:
-      - /Users/rmillikin/PubmedAbstracts:/mnt/pubmed
     depends_on:
       - redis
 
-#  workers:
-#    build:
-#      context: .
-#      dockerfile: yeah
-#      depends_on:
-#        - redis
+  workers:
+    build:
+      context: .
+      dockerfile: ./src/workers/Dockerfile
+    volumes:
+      - ${PUBMED_DIR}:/mnt/pubmed # edit .env file to change pubmed dir
+    depends_on:
+      - redis
 
   redis:
     image: redis

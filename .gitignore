@@ -6,4 +6,6 @@
 .venv
 project/tests/htmlcov
 **.coverage
+**.coveragerc
 **cov.xml
+/PubmedAbstracts
