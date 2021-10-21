@@ -99,9 +99,6 @@ def index_abstracts(abstracts_dir: str, n_per_cache_dump = 10) -> Index:
         if i % n_per_cache_dump == 0:
             the_index.dump_index_to_trie()
 
-            # DEBUG
-            break
-
     the_index.finish_building_index()
     print('Done building index')
     return the_index
