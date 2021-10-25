@@ -1,18 +1,24 @@
-from redis import Redis
-from rq import Worker, Queue, Connection
-from indexing.index import Index
+from rq import Worker
 import workers.loaded_index as li
+from workers.shared_memory_access import SMA
 
-_r = Redis(host='redis', port=6379)
-_q = Queue(connection=_r)
+from multiprocessing.managers import SharedMemoryManager
 
-def start_worker():
-    with Connection(connection=_r):
-        w = KmWorker(queues=_q)
-        w.work()
+shared_memory_name = "sharedmemorytest"
+
+def _create_shared_memory():
+    manager = SharedMemoryManager()
+    ns = manager.name
+
+
+    sma = SMA(shared_memory_name)
+    return sma
+
+def clean_up_memory(smd: SMA):
+    smd.mem.close()
+    smd.mem.unlink()
 
 class KmWorker(Worker):
     def __init__(self, queues=None, *args, **kwargs):
-        li.the_index = Index("/mnt/pubmed/Index/db.db")
-
         super().__init__(queues, *args, **kwargs)
+        li.shared_mem = SMA(shared_memory_name, create=False)

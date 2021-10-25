@@ -1,12 +1,11 @@
 version: "3.8"
 services:
-
   server:
     build:
       context: .
       dockerfile: ./src/server/Dockerfile
     volumes:
-        - ${PUBMED_DIR}:/mnt/pubmed
+        - ${PUBMED_DIR}:/mnt/pubmed # edit .env file to change pubmed dir
     ports:
       - "5000:5000"
     depends_on:
@@ -17,7 +16,7 @@ services:
       context: .
       dockerfile: ./src/workers/Dockerfile
     volumes:
-      - ${PUBMED_DIR}:/mnt/pubmed # edit .env file to change pubmed dir
+      - ${PUBMED_DIR}:/mnt/pubmed
     depends_on:
       - redis
 
