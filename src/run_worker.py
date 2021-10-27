@@ -1,4 +1,3 @@
-import multiprocessing
 from redis import Redis
 from rq import Worker, Queue, Connection
 import time
@@ -6,21 +5,6 @@ import os
 import workers.km_worker as worker
 import indexing.download_abstracts as downloader
 import indexing.index_abstracts as indexer
-import workers.loaded_index as li
-import workers.shared_memory_access as sma
-from workers.work import debug_mem_work
-
-def populate_index():
-    #li.pubmed_path = '/mnt/pubmed'
-    li.pubmed_path = '/Users/rmillikin/PubmedAbstracts'
-
-def start_workers():
-    n_workers = 2
-    jobs = []
-    for i in range(0, n_workers):
-        p = multiprocessing.Process(target=start_worker)
-        jobs.append(p)
-        p.start()
 
 def start_worker():
     _r = Redis(host='redis', port=6379)
@@ -30,25 +14,32 @@ def start_worker():
         w = worker.KmWorker(queues=_q)
         w.work()
 
+#def main():
+#    _r = Redis(host='redis', port=6379)
+#    _q = Queue(connection=_r)
+
+
+
+from indexing.index import Index
+import workers.shared_memory_index as smi
 def main():
-    #populate_index()
+    test_index = Index('/Users/rmillikin/temp/db.db')
+    test_index.place_token('test', 10, 100, 2020)
+    test_index.finish_building_index()
 
-    print("creating shared memory")
-    li.shared_mem = worker._create_shared_memory()
+    flat_path = '/Users/rmillikin/temp/bin.txt'
+    txt_path = '/Users/rmillikin/temp/text.txt'
+    #smi.save_trie_to_flat_file(test_index._trie.trie, flat_path, txt_path)
 
-    print("starting workers")
-    start_workers()
+    test_shm_ind = smi.SharedMemoryIndex(txt_path, flat_path, True)
+    test_shm_ind_ok = smi.SharedMemoryIndex(txt_path, flat_path, False)
+    dict = test_shm_ind_ok.query('test')
+    yeah = 0
 
-    print("adding jobs")
-    _r = Redis(host='redis', port=6379)
-    _q = Queue(connection=_r)
-    job1 = _q.enqueue(debug_mem_work)
-    job2 = _q.enqueue(debug_mem_work)
-
-    print(str(os.getpid()) + "; shared memory sleeping")
-    time.sleep(20)
-
-    worker.clean_up_memory(li.shared_mem)
+    for item in test_shm_ind._trie:
+        val = test_shm_ind._trie[item]
+        val.close()
+        val.unlink()
 
 if __name__ == '__main__':
     main()

@@ -1,4 +1,6 @@
 import os
+
+from workers.shared_memory_access import SMA
 from ..indexing.index import Index
 from ..indexing.abstract import Abstract
 
