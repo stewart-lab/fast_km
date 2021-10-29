@@ -1,45 +1,34 @@
-from redis import Redis
-from rq import Worker, Queue, Connection
-import time
+import multiprocessing
 import os
-import workers.km_worker as worker
+from workers.km_worker import start_worker
 import indexing.download_abstracts as downloader
 import indexing.index_abstracts as indexer
-
-def start_worker():
-    _r = Redis(host='redis', port=6379)
-    _q = Queue(connection=_r)
-
-    with Connection(connection=_r):
-        w = worker.KmWorker(queues=_q)
-        w.work()
-
-#def main():
-#    _r = Redis(host='redis', port=6379)
-#    _q = Queue(connection=_r)
-
-
-
+import workers.loaded_index as li
 from indexing.index import Index
-import workers.shared_memory_index as smi
+import workers.disk_index as di
+
+n_workers = 3
+rebuild_index = False
+
+def start_workers(do_multiprocessing = True):
+    if do_multiprocessing:
+        jobs = []
+        for i in range(0, n_workers):
+            p = multiprocessing.Process(target=start_worker)
+            jobs.append(p)
+            p.start()
+    else:
+        start_worker()
+
 def main():
-    test_index = Index('/Users/rmillikin/temp/db.db')
-    test_index.place_token('test', 10, 100, 2020)
-    test_index.finish_building_index()
+    build_index = rebuild_index or (not os.path.exists(li.flat_binary_path())) or (not os.path.exists(li.flat_text_path()))
 
-    flat_path = '/Users/rmillikin/temp/bin.txt'
-    txt_path = '/Users/rmillikin/temp/text.txt'
-    #smi.save_trie_to_flat_file(test_index._trie.trie, flat_path, txt_path)
+    if build_index:
+        #downloader.bulk_download()
+        the_index = indexer.index_abstracts(li.pubmed_path)
+        di.write_byte_info(li.flat_binary_path(), li.flat_text_path(), the_index._trie.trie)
 
-    test_shm_ind = smi.SharedMemoryIndex(txt_path, flat_path, True)
-    test_shm_ind_ok = smi.SharedMemoryIndex(txt_path, flat_path, False)
-    dict = test_shm_ind_ok.query('test')
-    yeah = 0
-
-    for item in test_shm_ind._trie:
-        val = test_shm_ind._trie[item]
-        val.close()
-        val.unlink()
+    start_workers()
 
 if __name__ == '__main__':
     main()
