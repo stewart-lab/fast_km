@@ -12,4 +12,7 @@ def flat_binary_path():
 def flat_text_path():
     return os.path.join(pubmed_path, 'Index', 'keys.txt')
 
+def flat_pub_years_path():
+    return os.path.join(pubmed_path, 'Index', 'pub_years.txt')
+
 the_index = None

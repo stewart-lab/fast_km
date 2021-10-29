@@ -1,7 +1,7 @@
 import scipy.stats
 import time
 import math
-from indexing.index import Index
+from indexing.disk_index import DiskIndex
 
 sided = 'greater'
 
@@ -23,9 +23,8 @@ def fisher_exact(table) -> float:
 def get_sort_ratio(table) -> float:
     return table[0][0] / (table[0][0] + table[1][0])
 
-def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.inf):
+def kinderminer_search(a_term: str, b_term: str, idx: DiskIndex, censor_year = math.inf):
     """"""
-    
     start_time = time.perf_counter()
 
     # query the index

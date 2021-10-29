@@ -2,7 +2,7 @@ import os
 import pytest
 import gzip
 import shutil
-from ..indexing.index import Index
+from ..indexing.index import Indexer
 from ..indexing.abstract import Abstract
 from ..indexing import index_abstracts as indexer
 from ..indexing import km_util as util
