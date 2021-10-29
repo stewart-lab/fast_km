@@ -11,7 +11,11 @@ def km_work(json):
     for item in json:
         a_term = item['a_term']
         b_term = item['b_term']
-        censor_year = item['censor_year']
+
+        if 'censor_year' in item:
+            censor_year = int(item['censor_year'])
+        else:
+            censor_year = math.inf
 
         if censor_year is None or censor_year > 2100:
             censor_year = math.inf

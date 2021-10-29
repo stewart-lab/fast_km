@@ -46,7 +46,7 @@ class DiskIndex():
         censored_set = set()
 
         for pmid in pmids:
-            if self._publication_years(pmid) <= censor_year:
+            if self._publication_years[pmid] <= censor_year:
                 censored_set.add(pmid)
 
         return censored_set
@@ -54,9 +54,6 @@ class DiskIndex():
     def n_articles(self, censor_year = math.inf) -> int:
         """Returns the number of indexed abstracts, given an optional 
         censor year."""
-        if type(censor_year) is not int:
-            raise TypeError('Censor year must be an integer')
-
         # year <0 and >2100 are excluded to prevent abuse...
         if censor_year == math.inf or censor_year > 2100:
             return len(self._publication_years)

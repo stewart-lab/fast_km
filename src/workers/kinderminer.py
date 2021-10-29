@@ -21,7 +21,11 @@ def fisher_exact(table) -> float:
     return scipy.stats.fisher_exact(table, sided)[1]
 
 def get_sort_ratio(table) -> float:
-    return table[0][0] / (table[0][0] + table[1][0])
+    denom = (table[0][0] + table[1][0])
+    if denom == 0:
+        return 0 # TODO?
+
+    return table[0][0] / denom
 
 def kinderminer_search(a_term: str, b_term: str, idx: DiskIndex, censor_year = math.inf):
     """"""

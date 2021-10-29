@@ -1,5 +1,6 @@
 import multiprocessing
 import os
+import time
 from workers.km_worker import start_worker
 import indexing.download_abstracts as downloader
 import indexing.index_abstracts as indexer
@@ -21,7 +22,9 @@ def start_workers(do_multiprocessing = True):
         start_worker()
 
 def main():
-    prod = False
+    print('workers waiting 10 sec for redis to set up...')
+    time.sleep(10)
+    prod = True
 
     if not prod:
         li.pubmed_path = '/Users/rmillikin/PubmedAbstracts'
