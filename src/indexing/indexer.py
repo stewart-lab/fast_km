@@ -77,8 +77,13 @@ class Indexer():
         if not os.path.exists(dir):
             os.mkdir(dir)
 
-        with open(self.path_to_trie, 'wb') as handle:
+        temp_path = os.path.join(dir, 'db.temp')
+        with open(temp_path, 'wb') as handle:
             pickle.dump(self._trie, handle)
+
+        # delete old index and rename new index
+        os.remove(self.path_to_trie)
+        os.rename(temp_path, self.path_to_trie)
 
     def _parse_xml(self, xml_content: str) -> 'list[Abstract]':
         """"""
