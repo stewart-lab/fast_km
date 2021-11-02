@@ -24,19 +24,16 @@ def start_workers(do_multiprocessing = True):
 def main():
     print('workers waiting 10 sec for redis to set up...')
     time.sleep(10)
-    prod = True
-
-    if not prod:
-        li.pubmed_path = '/Users/rmillikin/PubmedAbstracts'
+    li.pubmed_path = '/mnt/pubmed'
 
     build_index = rebuild_index or (not os.path.exists(li.flat_binary_path())) or (not os.path.exists(li.flat_text_path()))
 
     if build_index:
         #downloader.bulk_download()
-        the_indexer = indexer.index_abstracts(li.pubmed_path, 1)
+        the_indexer = indexer.index_abstracts(li.pubmed_path, 10)
         di.write_byte_info(li.flat_binary_path(), li.flat_text_path(), li.flat_pub_years_path(), the_indexer)
 
-    start_workers(prod)
+    start_workers()
 
 if __name__ == '__main__':
     main()

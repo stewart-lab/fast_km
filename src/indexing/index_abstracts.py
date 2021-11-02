@@ -43,7 +43,7 @@ def index_abstracts(abstracts_dir: str, n_per_cache_dump = 10) -> Indexer:
             the_indexer.dump_index_to_trie()
 
             # DEBUG
-            break
+            #break
 
     the_indexer.finish_building_index()
     print('Done building index')
