@@ -4,19 +4,8 @@ services:
     build:
       context: .
       dockerfile: ./src/server/Dockerfile
-    ports:
-      - "5000:5000"
-    depends_on:
-      - redis
 
   workers:
     build:
       context: .
       dockerfile: ./src/workers/Dockerfile
-    volumes:
-      - ${PUBMED_DIR}:/mnt/pubmed # edit .env file to change pubmed dir
-    depends_on:
-      - redis
-
-  redis:
-    image: redis
