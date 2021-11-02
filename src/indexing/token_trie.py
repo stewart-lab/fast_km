@@ -5,28 +5,18 @@ from io import BytesIO
 class TokenTrie():
     def __init__(self):
         self.pub_years = dict()
-        self.indexed_abstracts = set()
+        self.indexed_abstract_files = set()
         self.trie = pygtrie.StringTrie()
 
-    def tokens(self):
-        return self.trie.keys()
-
-    def get_indexed_abstracts_files(self):
-        return self.indexed_abstracts
-
-    def get_pub_years(self):
-        return self.pub_years
-    
     def query(self, query: str) -> dict:
         if query in self.trie:
             return pickle.loads(self.trie[query])
         return dict()
 
-    def serialize_index(self, ngrams_with_pmids: dict, pub_years: dict, indexed_filenames: list) -> None:
+    def serialize_index(self, ngrams_with_pmids: dict, pub_years: dict) -> None:
         # save the index cache to the db
         self._pickle_tokens(ngrams_with_pmids)
         self._save_pub_years(pub_years)
-        self._save_indexed_filenames(indexed_filenames)
 
     def combine_serialized_sets(self):
         for token in self.trie:
@@ -57,7 +47,3 @@ class TokenTrie():
     def _save_pub_years(self, pub_years) -> None:
         for pmid in pub_years:
             self.pub_years[pmid] = pub_years[pmid]
-
-    def _save_indexed_filenames(self, filenames) -> None:
-        for file in filenames:
-            self.indexed_abstracts.add(file)

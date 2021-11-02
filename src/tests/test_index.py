@@ -1,13 +1,15 @@
 import os
-from ..src.index import Index
-from ..src.abstract import Abstract
+
+from workers.shared_memory_access import SMA
+from ..indexing.index import Indexer
+from ..indexing.abstract import Abstract
 
 def test_index_abstract(tmp_path):
     db_path = os.path.join(tmp_path, 'db.db')
     exists = os.path.exists(db_path)
     assert not exists
 
-    the_index = Index(db_path)
+    the_index = Indexer(db_path)
     abs1 = Abstract(1000, 2020, "A Really Cool Pubmed Abstract",
         "The quick brown fox jumped over the lazy dog.")
 
@@ -23,7 +25,7 @@ def test_index_abstract(tmp_path):
     the_index.dump_index_to_trie()
     the_index.index_abstract(abs2)
     the_index.finish_building_index()
-    the_index = Index(db_path)
+    the_index = Indexer(db_path)
 
     query = the_index.query_index("the")
     assert query == set([abs1.pmid, abs2.pmid])

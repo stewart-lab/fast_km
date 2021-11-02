@@ -17,8 +17,9 @@ def report_progress(completed: float, total: float) -> None:
         round(progress * 100),
         int(completed),
         int(total))
-    sys.stdout.write(text)
-    sys.stdout.flush()
+    #sys.stdout.write(text)
+    #sys.stdout.flush()
+    print(text)
 
     if completed == total:
         print("\n")

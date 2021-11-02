@@ -1,5 +1,5 @@
 import pytest
-from ..src import kinderminer as km
+from ..workers import kinderminer as km
 
 def test_fisher_exact_test():
     # example shown in figure 1 of:

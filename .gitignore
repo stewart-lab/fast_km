@@ -7,3 +7,4 @@
 project/tests/htmlcov
 **.coverage
 **cov.xml
+/PubmedAbstracts
