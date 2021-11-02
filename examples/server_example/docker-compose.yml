@@ -1,0 +1,18 @@
+version: "3.3"
+services:
+  server:
+    image: rmillikin/fast_km-server:dev
+    ports:
+      - "5000:5000"
+    depends_on:
+      - redis
+
+  workers:
+    image: rmillikin/fast_km-workers:dev
+    volumes:
+      - ${PUBMED_DIR}:/mnt/pubmed  # edit .env file to change pubmed dir
+    depends_on:
+      - redis
+
+  redis:
+    image: redis
