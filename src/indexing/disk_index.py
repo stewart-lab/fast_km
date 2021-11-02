@@ -2,7 +2,6 @@ import mmap
 import pygtrie
 import pickle
 import math
-import gc
 import indexing.km_util as util
 from indexing.indexer import Indexer
 

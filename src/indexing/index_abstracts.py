@@ -1,10 +1,8 @@
 import os
 import glob
-import gzip
 from typing import Iterable
 import indexing.km_util as util
 from indexing.indexer import Indexer
-from indexing.abstract import Abstract
 
 def get_index_dir(abstracts_dir: str) -> str:
     return os.path.join(abstracts_dir, 'Index')
