@@ -4,7 +4,7 @@ import time
 # create the KM query details
 the_json = [
     { "a_term": "cancer", "b_term": "tumor" }, 
-    { "a_term": "cancer", "b_term": "" }
+    { "a_term": "cancer", "b_term": "malignant" }
 ]
 
 #with open('/path/to/my/gene/names/genes.txt', 'r') as file:
