@@ -12,7 +12,7 @@ services:
         memory: '12gb'
 
   workers:
-    image: rmillikin/fast_km-workers:dev
+    image: rmillikin/fast_km-worker:dev
     volumes:
       - ${PUBMED_DIR}:/mnt/pubmed  # edit .env file to change pubmed dir
     depends_on:
