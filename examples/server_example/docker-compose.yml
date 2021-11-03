@@ -13,6 +13,7 @@ services:
 
   workers:
     image: rmillikin/fast_km-worker:dev
+    command: python -u src/run_worker.py --workers 1
     volumes:
       - ${PUBMED_DIR}:/mnt/pubmed  # edit .env file to change pubmed dir
     depends_on:
