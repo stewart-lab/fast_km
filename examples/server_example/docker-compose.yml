@@ -6,6 +6,10 @@ services:
       - "5000:5000"
     depends_on:
       - redis
+    resources:
+      limits:
+        cpus: '3.0'
+        memory: '12gb'
 
   workers:
     image: rmillikin/fast_km-workers:dev
@@ -13,6 +17,13 @@ services:
       - ${PUBMED_DIR}:/mnt/pubmed  # edit .env file to change pubmed dir
     depends_on:
       - redis
+    resources:
+      limits:
+        cpus: '10.0'
+        memory: '128gb'
 
   redis:
     image: redis
+    resources:
+      limits:
+        memory: '1gb'

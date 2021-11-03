@@ -4,8 +4,10 @@ services:
     build:
       context: .
       dockerfile: ./src/server/Dockerfile
+    image: fast_km-server:build
 
   workers:
     build:
       context: .
       dockerfile: ./src/workers/Dockerfile
+    image: fast_km-worker:build
