@@ -33,6 +33,8 @@ def km_work(json):
         res_pvalue = res[4]
         res_sort_ratio = res[5]
         res_time = res[6]
+        res_a_and_b = res[7]
+        res_n_articles = res[8]
 
         return_val.append(
             {
@@ -42,7 +44,9 @@ def km_work(json):
                 'len_b_term_set' : str(res_len_bterm_set),
                 'p-value': str(res_pvalue),
                 'sort_ratio': str(res_sort_ratio),
-                'query_time': str(res_time)
+                'query_time': str(res_time),
+                'n_a_and_b': str(res_a_and_b),
+                'n_articles': str(res_n_articles)
             })
 
     return return_val

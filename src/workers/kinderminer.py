@@ -44,10 +44,13 @@ def kinderminer_search(a_term: str, b_term: str, idx: DiskIndex, censor_year = m
     table = get_contingency_table(a_term_set, b_term_set, 
         idx.n_articles(censor_year))
 
+    n_a_and_b = table[0][0]
+    n_articles = idx.n_articles(censor_year)
+
     # perform fisher's exact test
     pvalue = fisher_exact(table)
     sort_ratio = get_sort_ratio(table)
 
     run_time = time.perf_counter() - start_time
 
-    return a_term, b_term, len(a_term_set), len(b_term_set), pvalue, sort_ratio, run_time
+    return a_term, b_term, len(a_term_set), len(b_term_set), pvalue, sort_ratio, run_time, n_a_and_b, n_articles

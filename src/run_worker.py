@@ -17,6 +17,9 @@ args = parser.parse_args()
 def start_workers(do_multiprocessing = True):
     n_workers = args.workers
 
+    if type(n_workers) is str:
+        n_workers = int(n_workers)
+
     print('starting ' + str(n_workers) + ' workers...')
 
     if do_multiprocessing:

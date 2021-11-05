@@ -7,4 +7,6 @@
 project/tests/htmlcov
 **.coverage
 **cov.xml
-/PubmedAbstracts
+./pubmed
+./.env
+*Icon*
