@@ -30,18 +30,17 @@ def index_abstracts(abstracts_dir: str, n_per_cache_dump = 10) -> Indexer:
     already_indexed_files = the_indexer.list_indexed_files()
     files_to_index = get_files_to_index(abstracts_dir, already_indexed_files)
 
+    if not files_to_index:
+        return the_indexer
+
     util.report_progress(0, len(files_to_index))
 
     for i, gzip_file in enumerate(files_to_index):
         the_indexer.index_xml_file(gzip_file)
-        i = i + 1
-        util.report_progress(i, len(files_to_index))
+        util.report_progress(i + 1, len(files_to_index))
 
         if i % n_per_cache_dump == 0:
             the_indexer.dump_index_to_trie()
-
-            # DEBUG
-            #break
 
     the_indexer.finish_building_index()
     print('Done building index')
