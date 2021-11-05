@@ -1,0 +1,21 @@
+name: shell_push
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download build script
+      run: wget https://raw.githubusercontent.com/stewart-lab/fast_km/master/actions/build_workflow.sh
+      
+    - name: Run build script
+      run: chmod +x ./build_workflow.sh
+      run:  ./build_workflow.sh
+      
+    - name: Download deploy script
+      run: wget https://raw.githubusercontent.com/stewart-lab/fast_km/master/actions/deploy_workflow.sh
+      
+    - name: Run deploy script
+      run: chmod +x ./deploy_workflow.sh
+      run:  ./deploy_workflow.sh
