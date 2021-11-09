@@ -2,6 +2,7 @@ import mmap
 import pygtrie
 import pickle
 import math
+import gc
 import indexing.km_util as util
 from indexing.indexer import Indexer
 
@@ -167,7 +168,12 @@ class DiskIndex():
             self.connection.seek(byte_offset)
             stored_bytes = self.connection.read(byte_len)
 
+            # disabling garbage collection speeds up the 
+            # deserialization process by 2-3x
+            gc.disable()
             deserialized_dict = pickle.loads(stored_bytes)
+            gc.enable()
+
             self._token_cache[token] = deserialized_dict
 
         return self._token_cache[token]
