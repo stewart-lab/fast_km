@@ -6,7 +6,7 @@ import indexing.km_util as util
 from indexing.token_trie import TokenTrie
 from indexing.abstract import Abstract
 
-class Indexer(): 
+class Indexer():
     def __init__(self, path_to_trie: str):
         self._tokens_with_pmids = dict()
         self._publication_years = dict()
