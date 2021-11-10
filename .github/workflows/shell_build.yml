@@ -16,7 +16,7 @@ jobs:
       run: chmod +x ./build_workflow.sh
       
     - name: Log in to Dockerhub
-      run: docker login -u ${{HUB_ACCOUNT}} -p ${{HUB_TOKEN}}
+      run: docker login -u ${{secret.HUB_ACCOUNT}} -p ${{secret.HUB_TOKEN}}
       
     - name: Run build script
       run: ./build_workflow.sh
