@@ -4,15 +4,11 @@ on: [pull_request]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v2
     - name: Download build script
-      run: |
-        wget https://raw.githubusercontent.com/stewart-lab/fast_km/master/build-actions/build_workflow.sh
+    - run: wget https://raw.githubusercontent.com/stewart-lab/fast_km/master/actions/build_workflow.sh
+    
     - name: Run build script
-      run: |
-        chmod +x ./build_workflow.sh
-        ./build_workflow.sh
+    - run: chmod +x ./build_workflow.sh
+    - run: ./build_workflow.sh
