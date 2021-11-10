@@ -1,3 +1,4 @@
+echo "ls"
 ls
 
 # build docker image
