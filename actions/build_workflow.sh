@@ -1,5 +1,5 @@
 echo "ls"
-ls
+ls -a
 
 # build docker image
 echo -e "\e[1;97;40m Building Docker Images \e[0m"
