@@ -7,8 +7,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Download build script
-    - run: wget https://raw.githubusercontent.com/stewart-lab/fast_km/master/actions/build_workflow.sh
+      run: wget https://raw.githubusercontent.com/stewart-lab/fast_km/master/actions/build_workflow.sh
     
+    - name: Change build script permissions so that it is executable
+      run: chmod +x ./build_workflow.sh
+      
     - name: Run build script
-    - run: chmod +x ./build_workflow.sh
-    - run: ./build_workflow.sh
+      run: ./build_workflow.sh
