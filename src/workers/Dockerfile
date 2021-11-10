@@ -2,7 +2,7 @@
 FROM python:3.8.9-slim
 
 ## copy source code into Docker image
-COPY ./.. /fast-km/
+COPY . /fast-km/
 
 WORKDIR /fast-km/
 
