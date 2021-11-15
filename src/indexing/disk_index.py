@@ -1,5 +1,4 @@
 import mmap
-import pygtrie
 import pickle
 import math
 import gc
@@ -18,7 +17,7 @@ class DiskIndex():
         self._bin_path = bin_path
         self._txt_path = txt_path
         self._pub_year_path = pub_year_path
-        self._offset_trie = pygtrie.StringTrie()
+        self._offset_trie = dict()
         self._publication_years = dict()
         self._init_byte_info()
         self._open_connection()
@@ -71,6 +70,13 @@ class DiskIndex():
 
             self._n_articles_by_pub_year[censor_year] = n_articles_censored
             return n_articles_censored
+
+    def decache_token(self, token: str):
+        ltoken = token.lower()
+        if ltoken in self._token_cache:
+            del self._token_cache[ltoken]
+        if ltoken in self._query_cache:
+            del self._query_cache[ltoken]
 
     def _open_connection(self) -> None:
         self.file_obj = open(self._bin_path, mode='rb')
