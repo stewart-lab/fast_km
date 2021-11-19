@@ -4,3 +4,8 @@ class Abstract():
         self.pub_year = year
         self.title = title
         self.text = text
+
+        if not self.title or str.isspace(self.title):
+            self.title = ' '
+        if not self.text or str.isspace(self.text):
+            self.text = ' '

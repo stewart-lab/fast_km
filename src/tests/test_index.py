@@ -1,15 +1,14 @@
 import os
-
-from workers.shared_memory_access import SMA
-from ..indexing.index import Indexer
-from ..indexing.abstract import Abstract
+from indexing.abstract_catalog import AbstractCatalog
+from indexing.index import Index
+from indexing.abstract import Abstract
+from indexing.index_builder import IndexBuilder
+import indexing.km_util as util
 
 def test_index_abstract(tmp_path):
-    db_path = os.path.join(tmp_path, 'db.db')
-    exists = os.path.exists(db_path)
-    assert not exists
+    assert not os.path.exists(util.get_index_dir(tmp_path))
 
-    the_index = Indexer(db_path)
+    cataloger = AbstractCatalog(tmp_path)
     abs1 = Abstract(1000, 2020, "A Really Cool Pubmed Abstract",
         "The quick brown fox jumped over the lazy dog.")
 
@@ -21,11 +20,22 @@ def test_index_abstract(tmp_path):
     abs2 = Abstract(1001, 2021, "A Cool Title",
         "Some of the words are are repeated but some are-are-are not.")
 
-    the_index.index_abstract(abs1)
-    the_index.dump_index_to_trie()
-    the_index.index_abstract(abs2)
-    the_index.finish_building_index()
-    the_index = Indexer(db_path)
+    cataloger.add_or_update_abstract(abs1, 'fake_file.gzip')
+    cataloger.add_or_update_abstract(abs2, 'fake_file.gzip')
+    cataloger.write_catalog_to_disk(util.get_abstract_catalog(tmp_path))
+
+    indexer = IndexBuilder(tmp_path)
+    hot_storage = dict()
+    cold_storage = dict()
+    indexer._index_abstract(abs1, hot_storage)
+    indexer._serialize_hot_to_cold_storage(hot_storage, cold_storage)
+    indexer._write_index_to_disk(cold_storage)
+
+    indexer._index_abstract(abs2, hot_storage)
+    indexer._serialize_hot_to_cold_storage(hot_storage, cold_storage, True)
+    indexer._write_index_to_disk(cold_storage)
+
+    the_index = Index(tmp_path)
 
     query = the_index.query_index("the")
     assert query == set([abs1.pmid, abs2.pmid])
@@ -42,8 +52,8 @@ def test_index_abstract(tmp_path):
     query = the_index.query_index("brown")
     assert query == set([abs1.pmid])
 
-    assert the_index.get_publication_year(abs1.pmid) == abs1.pub_year
-    assert the_index.get_publication_year(abs2.pmid) == abs2.pub_year
+    assert the_index._publication_years[abs1.pmid] == abs1.pub_year
+    assert the_index._publication_years[abs2.pmid] == abs2.pub_year
 
     query = the_index.query_index("test_test")
     assert len(query) == 0

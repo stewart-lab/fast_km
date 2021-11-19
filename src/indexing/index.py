@@ -3,20 +3,21 @@ import pickle
 import math
 import gc
 import indexing.km_util as util
-from indexing.indexer import Indexer
+from indexing.abstract_catalog import AbstractCatalog
 
 delim = '\t'
 
-class DiskIndex():
-    def __init__(self, bin_path: str, txt_path: str, pub_year_path: str):
+class Index():
+    def __init__(self, pubmed_abstract_dir: str):
         # caches
         self._query_cache = dict()
         self._token_cache = dict()
         self._n_articles_by_pub_year = dict()
 
-        self._bin_path = bin_path
-        self._txt_path = txt_path
-        self._pub_year_path = pub_year_path
+        self._pubmed_dir = pubmed_abstract_dir
+        self._bin_path = util.get_index_file(pubmed_abstract_dir)
+        self._txt_path = util.get_offset_file(pubmed_abstract_dir)
+        self._abstract_catalog = util.get_abstract_catalog(pubmed_abstract_dir)
         self._offset_trie = dict()
         self._publication_years = dict()
         self._init_byte_info()
@@ -92,12 +93,10 @@ class DiskIndex():
 
                 self._offset_trie[key] = (byte_offset, byte_len)
 
-        with open(self._pub_year_path, 'r') as t:
-            for index, line in enumerate(t):
-                split = line.split(sep=delim)
-                pmid = int(split[0].strip())
-                year = int(split[1].strip())
-                self._publication_years[pmid] = year
+        catalog = AbstractCatalog(self._pubmed_dir)
+        cat_path = util.get_abstract_catalog(self._pubmed_dir)
+        for abs in catalog.stream_existing_catalog(cat_path):
+            self._publication_years[abs.pmid] = abs.pub_year
 
     def _query_disk(self, tokens: 'list[str]') -> 'set[int]':
         result = set()
@@ -167,12 +166,7 @@ class DiskIndex():
         if token not in self._offset_trie:
             self._token_cache[token] = dict()
         elif token not in self._token_cache:
-            byte_info = self._offset_trie[token]
-            byte_offset = byte_info[0]
-            byte_len = byte_info[1]
-
-            self.connection.seek(byte_offset)
-            stored_bytes = self.connection.read(byte_len)
+            stored_bytes = self._read_bytes_from_disk(token)
 
             # disabling garbage collection speeds up the 
             # deserialization process by 2-3x
@@ -184,27 +178,11 @@ class DiskIndex():
 
         return self._token_cache[token]
 
-def write_byte_info(path_bin: str, path_txt: str, pub_year_txt: str, the_index: Indexer):
-    n_bytes = 0
+    def _read_bytes_from_disk(self, token: str) -> bytes:
+        byte_info = self._offset_trie[token]
+        byte_offset = byte_info[0]
+        byte_len = byte_info[1]
 
-    with open(path_bin, 'wb') as b:
-        with open(path_txt, 'w') as t:
-            for key in the_index._trie.trie.keys():
-                value = the_index._trie.trie[key]
-
-                t.write(key)
-                t.write(delim)
-                t.write(str(n_bytes))
-                t.write(delim)
-                t.write(str(len(value)))
-                n_bytes += len(value)
-                t.write('\n')
-
-                b.write(value)
-
-    with open(pub_year_txt, 'w') as t:
-        for pmid in the_index._trie.pub_years:
-            t.write(str(pmid))
-            t.write(delim)
-            t.write(str(the_index._trie.pub_years[pmid]))
-            t.write('\n')
+        self.connection.seek(byte_offset)
+        stored_bytes = self.connection.read(byte_len)
+        return stored_bytes

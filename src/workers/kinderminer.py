@@ -1,7 +1,7 @@
 import scipy.stats
 import time
 import math
-from indexing.disk_index import DiskIndex
+from indexing.index import Index
 
 sided = 'greater'
 
@@ -27,7 +27,7 @@ def get_sort_ratio(table) -> float:
 
     return table[0][0] / denom
 
-def kinderminer_search(a_term: str, b_term: str, idx: DiskIndex, censor_year = math.inf):
+def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.inf):
     """"""
     start_time = time.perf_counter()
 
