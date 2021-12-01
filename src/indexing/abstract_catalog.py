@@ -2,7 +2,6 @@ import pickle
 import gzip
 import os
 import glob
-import math
 import xml.etree.ElementTree as ET
 import indexing.km_util as util
 from indexing.abstract import Abstract
@@ -12,11 +11,12 @@ delim = '\t'
 class AbstractCatalog():
     def __init__(self, pubmed_path) -> None:
         self.catalog = dict()
-        self.abstract_files = set()
+        self.abstract_files = list()
         self.path_to_pubmed_abstracts = pubmed_path
 
-    def catalog_abstracts(self, dump_rate = 300000):
+    def catalog_abstracts(self, dump_rate = 150):
         abstract_files_to_catalog = self._get_files_to_catalog()
+        abstract_files_to_catalog = sorted(abstract_files_to_catalog)
 
         if not abstract_files_to_catalog:
             return
@@ -24,26 +24,25 @@ class AbstractCatalog():
         path = util.get_abstract_catalog(self.path_to_pubmed_abstracts)
         self.load_existing_catalog(path)
 
-        # TODO: order XML files by name, descending order (newest files last)
+        util.report_progress(0, len(abstract_files_to_catalog))
 
-        a = 0
         for i, gzip_file in enumerate(abstract_files_to_catalog):
             with gzip.open(gzip_file, 'rb') as xml_file:
                 abstracts = _parse_xml(xml_file.read())
                 filename = os.path.basename(gzip_file)
 
                 for abstract in abstracts:
-                    a += 1
-                    self.add_or_update_abstract(abstract, filename)
+                    self.add_or_update_abstract(abstract)
 
+                self.abstract_files.append(filename)
                 util.report_progress(i + 1, len(abstract_files_to_catalog))
 
-                if a % dump_rate == 0:
+                if i % dump_rate == 0:
                     self.write_catalog_to_disk(path)
                 
         self.write_catalog_to_disk(path)
 
-    def add_or_update_abstract(self, abstract: Abstract, file: str) -> None:
+    def add_or_update_abstract(self, abstract: Abstract) -> None:
         if abstract.pmid in self.catalog:
             # if PMID is already in catalog, update it w/ new info
 
@@ -68,7 +67,6 @@ class AbstractCatalog():
             # create the merged abstract object
             abstract = Abstract(abstract.pmid, year, title, text)
 
-        self.abstract_files.add(file)
         self.catalog[abstract.pmid] = pickle.dumps(abstract)
 
     def write_catalog_to_disk(self, path: str) -> None:
@@ -81,8 +79,10 @@ class AbstractCatalog():
             for pmid in self.catalog:
                 abs = self.catalog[pmid]
                 abs = pickle.loads(abs)
-                line = str(abs.pmid) + delim + str(abs.pub_year) + delim + abs.title + delim + abs.text + '\n'
+                line = str(abs) + '\n'
                 gzip_file.write(line)
+
+        util.write_all_lines(util.get_cataloged_files(self.path_to_pubmed_abstracts), self.abstract_files)
 
     def load_existing_catalog(self, path: str) -> None:
         '''Used to update an existing catalog'''
@@ -102,13 +102,14 @@ class AbstractCatalog():
 
     def _parse_abstract(self, line: str):
         split = line.strip('\n').split('\t')
-        try:
-            abs = Abstract(int(split[0]), int(split[1]), split[2], split[3])
-        except:
-            yo = 0
+        abs = Abstract(int(split[0]), int(split[1]), split[2], split[3])
         return abs
 
     def _get_files_to_catalog(self) -> 'list[str]':
+        cataloged_files_path = util.get_cataloged_files(self.path_to_pubmed_abstracts)
+        if os.path.exists(cataloged_files_path):
+            self.abstract_files = util.read_all_lines(cataloged_files_path)
+
         all_abstracts_files = glob.glob(os.path.join(self.path_to_pubmed_abstracts, "*.xml.gz"))
         not_indexed_yet = []
 

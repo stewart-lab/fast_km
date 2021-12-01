@@ -62,5 +62,5 @@ def get_index_file(abstracts_dir: str) -> str:
 def get_offset_file(abstracts_dir: str) -> str:
     return os.path.join(get_index_dir(abstracts_dir), 'index_offsets.txt')
 
-def get_pmid_years_file(abstracts_dir: str) -> str:
-    return os.path.join(get_index_dir(abstracts_dir), 'pmid_years.txt')
+def get_cataloged_files(abstracts_dir: str) -> str:
+    return os.path.join(get_index_dir(abstracts_dir), 'cataloged.txt')

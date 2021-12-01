@@ -14,7 +14,7 @@ class IndexBuilder():
     def build_index(self, dump_rate = 300000):
         # catalog abstracts
         abstract_catalog = AbstractCatalog(self.path_to_pubmed_abstracts)
-        abstract_catalog.catalog_abstracts(dump_rate)
+        abstract_catalog.catalog_abstracts()
         abstract_catalog.catalog.clear() # saves RAM
 
         # delete the old index. MUST do this because if indexing is
@@ -31,12 +31,12 @@ class IndexBuilder():
         catalog_path = util.get_abstract_catalog(self.path_to_pubmed_abstracts)
         cold_storage = dict()
         hot_storage = dict()
+        
         for i, abstract in enumerate(abstract_catalog.stream_existing_catalog(catalog_path)):
             self._index_abstract(abstract, hot_storage)
 
             if i % dump_rate == 0:
                 self._serialize_hot_to_cold_storage(hot_storage, cold_storage)
-                self._write_index_to_disk(cold_storage)
 
                 # sort of difficult to report progress because we don't know
                 # the total number of abstracts
@@ -51,9 +51,10 @@ class IndexBuilder():
         for i, token in enumerate(tokens):
             self._place_token(token, i, abstract.pmid, hot_storage)
 
-        tokens = util.get_tokens(abstract.text)
-        if str.isspace(abstract.title):
+        if not tokens:
             i = 0
+
+        tokens = util.get_tokens(abstract.text)
         for j, token in enumerate(tokens):
             self._place_token(token, i + j + 2, abstract.pmid, hot_storage)
 
@@ -75,7 +76,7 @@ class IndexBuilder():
     def _serialize_hot_to_cold_storage(self, hot_storage: dict, cold_storage: dict, consolidate_cold_storage = False):
         # this is sketchy... if the quickle protocol changes its delimiter
         # then the following line will need to be changed to build the index
-        byte_delim = b'//'
+        byte_delim = b'././.'
 
         # append serialized hot storage to cold storage
         for token in hot_storage:
