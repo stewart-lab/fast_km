@@ -20,8 +20,8 @@ def test_index_abstract(tmp_path):
     abs2 = Abstract(1001, 2021, "A Cool Title",
         "Some of the words are are repeated but some are-are-are not.")
 
-    cataloger.add_or_update_abstract(abs1, 'fake_file.gzip')
-    cataloger.add_or_update_abstract(abs2, 'fake_file.gzip')
+    cataloger.add_or_update_abstract(abs1)
+    cataloger.add_or_update_abstract(abs2)
     cataloger.write_catalog_to_disk(util.get_abstract_catalog(tmp_path))
 
     indexer = IndexBuilder(tmp_path)

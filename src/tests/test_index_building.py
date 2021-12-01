@@ -34,7 +34,7 @@ def test_get_files_to_index(data_dir):
     # pretend we've already indexed the pubmed21n1432.xml.gz file
     # should have 0 files remaining to index (no other .xml.gz files in dir)
     test_xml_file = "pubmed21n1432.xml.gz"
-    indexer.abstract_files.add(test_xml_file)
+    indexer.abstract_files.append(test_xml_file)
     files_to_index = indexer._get_files_to_catalog()
     assert len(files_to_index) == 0
 
@@ -86,8 +86,8 @@ def test_abstract_cataloging(tmp_path):
 
     abs = Abstract(1000, 1993, "This is a cool title", "Interesting text")
     abs2 = Abstract(1001, 1994, "An interesting title", "Cool text")
-    cataloger.add_or_update_abstract(abs, 'fake_file.xml.gz')
-    cataloger.add_or_update_abstract(abs2, 'fake_file.xml.gz')
+    cataloger.add_or_update_abstract(abs)
+    cataloger.add_or_update_abstract(abs2)
 
     path = os.path.join(tmp_path, 'abstract_catalog.txt.gzip')
     cataloger.write_catalog_to_disk(path)
