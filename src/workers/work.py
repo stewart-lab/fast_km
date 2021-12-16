@@ -26,28 +26,7 @@ def km_work(json: list):
             raise TypeError('Must supply a_term and b_term')
 
         res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year)
-        res_aterm = res[0]
-        res_bterm = res[1]
-        res_len_aterm_set = res[2]
-        res_len_bterm_set = res[3]
-        res_pvalue = res[4]
-        res_sort_ratio = res[5]
-        res_time = res[6]
-        res_a_and_b = res[7]
-        res_n_articles = res[8]
-
-        return_val.append(
-            {
-                'a_term' : res_aterm,
-                'b_term' : res_bterm,
-                'len_a_term_set' : str(res_len_aterm_set),
-                'len_b_term_set' : str(res_len_bterm_set),
-                'p-value': str(res_pvalue),
-                'sort_ratio': str(res_sort_ratio),
-                'query_time': str(res_time),
-                'n_a_and_b': str(res_a_and_b),
-                'n_articles': str(res_n_articles)
-            })
+        return_val.append(res)
 
     return return_val
 
@@ -57,33 +36,39 @@ def skim_work(json: dict):
     a_terms = json['a_terms']
     b_terms = json['b_terms']
     c_terms = json['c_terms']
-    top_n = 50
+    top_n = json['top_n']
+    censor_year = json['censor_year']
 
-    significant_ab_queries = []
+    if type(top_n) is str:
+        top_n = int(top_n)
+    if type(censor_year) is str:
+        censor_year = int(censor_year)
+
+    ab_results = []
     for a_term in a_terms:
         for b_term in b_terms:
-            res = km.kinderminer_search(a_term, b_term, li.the_index, math.inf)
-            pvalue = res[4]
-            sort_ratio = res[5]
-
-            if pvalue < 1e10-5:
-                pred_score = -math.log10(max(pvalue, 10e-30)) + math.log10(sort_ratio)
-                significant_ab_queries.append((a_term, b_term, pred_score))
+            res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year)
+            ab_results.append(res)
 
     # sort by prediction score, descending
-    significant_ab_queries.sort(key=lambda query: query[2], reverse=True)
+    ab_results.sort(key=lambda res: 
+        km.get_prediction_score(res['pvalue'], res['sort_ratio']), 
+        reverse=True)
 
-    for ab in significant_ab_queries[:top_n]:
-        b_term = ab[1]
+    # take top N per a-b pair and run b-terms against c-terms
+    for res in ab_results[:top_n]:
+        b_term = res['b_term']
+
         for c_term in c_terms:
-            res = km.kinderminer_search(b_term, c_term, li.the_index, math.inf)
+            res = km.kinderminer_search(b_term, c_term, li.the_index, censor_year)
+
             return_val.append(
                 {
-                    'a_term': ab[0],
-                    'b_term': ab[1],
+                    'a_term': res['a_term'],
+                    'b_term': res['b_term'],
                     'c_term': c_term,
-                    'bc_p-value': res[4],
-                    'ab_pred_score': ab[2]
+                    'bc_p-value': res['pvalue'],
+                    'ab_pred_score': km.get_prediction_score(res['pvalue'], res['sort_ratio'])
                 })
 
     return return_val

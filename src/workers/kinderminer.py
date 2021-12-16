@@ -27,9 +27,10 @@ def get_sort_ratio(table) -> float:
 
     return table[0][0] / denom
 
-def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.inf):
+def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.inf) -> dict:
     """"""
     start_time = time.perf_counter()
+    result = dict()
 
     # query the index
     a_term_set = idx.query_index(a_term)
@@ -53,4 +54,34 @@ def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.
 
     run_time = time.perf_counter() - start_time
 
-    return a_term, b_term, len(a_term_set), len(b_term_set), pvalue, sort_ratio, run_time, n_a_and_b, n_articles
+    result['a_term'] = a_term
+    result['b_term'] = b_term
+    result['len(a_term_set)'] = len(a_term_set)
+    result['len(b_term_set)'] = len(b_term_set)
+    result['pvalue'] = pvalue
+    result['sort_ratio'] = sort_ratio
+    result['run_time'] = run_time
+    result['len(a_b_intersect)'] = n_a_and_b
+    result['n_articles'] = n_articles
+
+    return result
+
+def get_prediction_score(pvalue: float, sort_ratio: float):
+    max_score = 323.0
+    multiplier_for_ratio = 2500
+
+    # calculate log p-value
+    if pvalue == 0.0:
+        log_pvalue = max_score
+    else:
+        log_pvalue = -math.log10(pvalue)
+
+    # calculate log sort ratio
+    if sort_ratio == 1:
+        log_sort_ratio = max_score
+    else:
+        log_sort_ratio = -math.log10(float(1 - sort_ratio)) * multiplier_for_ratio
+        log_sort_ratio = min(max_score, log_sort_ratio)
+
+    # prediction score = log pvalue + log sort ratio
+    return log_pvalue + log_sort_ratio
