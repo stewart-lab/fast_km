@@ -56,19 +56,19 @@ def skim_work(json: dict):
         reverse=True)
 
     # take top N per a-b pair and run b-terms against c-terms
-    for res in ab_results[:top_n]:
-        b_term = res['b_term']
+    for ab in ab_results[:top_n]:
+        b_term = ab['b_term']
 
         for c_term in c_terms:
-            res = km.kinderminer_search(b_term, c_term, li.the_index, censor_year)
+            bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year)
 
             return_val.append(
                 {
-                    'a_term': res['a_term'],
-                    'b_term': res['b_term'],
+                    'a_term': ab['a_term'],
+                    'b_term': ab['b_term'],
                     'c_term': c_term,
-                    'bc_p-value': res['pvalue'],
-                    'ab_pred_score': km.get_prediction_score(res['pvalue'], res['sort_ratio'])
+                    'bc_p-value': bc['pvalue'],
+                    'ab_pred_score': km.get_prediction_score(ab['pvalue'], ab['sort_ratio'])
                 })
 
     return return_val
