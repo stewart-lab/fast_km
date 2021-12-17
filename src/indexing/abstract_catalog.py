@@ -177,4 +177,7 @@ def _parse_xml(xml_content: str) -> 'list[Abstract]':
             abstract = Abstract(int(pmid), year, title, abstract_text)
             abstracts.append(abstract)
 
+            if str.isspace(abstract.text) and str.isspace(abstract.title):
+                continue
+
     return abstracts
