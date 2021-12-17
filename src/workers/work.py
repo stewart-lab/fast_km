@@ -73,5 +73,21 @@ def skim_work(json: dict):
 
     return return_val
 
-def triple_miner_work(json):
-    pass
+def triple_miner_work(json: list):
+    km_set = []
+
+    for query in json:
+        a_term = query['a_term']
+        b_term = query['b_term']
+        c_term = query['c_term']
+
+        km_query = dict()
+        km_query['a_term'] = a_term + '&&' + b_term
+        km_query['b_term'] = c_term
+
+        if 'censor_year in query':
+            km_query['censor_year'] = query['censor_year']
+
+        km_set.append(km_query)
+
+    return km_work(km_set)

@@ -28,7 +28,7 @@ class Index():
         self.file_obj.close()
 
     def query_index(self, query: str) -> 'set[int]':
-        query = query.lower()
+        query = query.lower().strip()
 
         if query in self._query_cache:
             return self._query_cache[query]
@@ -37,6 +37,8 @@ class Index():
 
         if len(tokens) > 10:
             raise ValueError("Query must have <=10 words")
+        if not tokens:
+            return set()
 
         result = self._query_disk(tokens)
         self._query_cache[query] = result

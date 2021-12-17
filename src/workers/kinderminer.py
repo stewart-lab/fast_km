@@ -3,17 +3,19 @@ import time
 import math
 from indexing.index import Index
 
+logical_or = '||'
+logical_and = '&&'
 sided = 'greater'
 
 def get_contingency_table(a_term_set: set, b_term_set: set, total_n: int):
     """Populates the table for the Fisher's exact test"""
     a_and_b = len(a_term_set & b_term_set)
-    not_a_b = len(b_term_set) - a_and_b
+    b_not_a = len(b_term_set) - a_and_b
     a_not_b = len(a_term_set) - a_and_b
-    not_a_term_not_b_term = total_n - a_and_b - not_a_b - a_not_b
+    not_a_not_b = total_n - a_and_b - b_not_a - a_not_b
 
     table = [[a_and_b, a_not_b],
-            [not_a_b, not_a_term_not_b_term]]
+            [b_not_a, not_a_not_b]]
 
     return table
 
@@ -32,9 +34,9 @@ def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.
     start_time = time.perf_counter()
     result = dict()
 
-    # query the index
-    a_term_set = idx.query_index(a_term)
-    b_term_set = idx.query_index(b_term)
+    # query the index (handling synonyms if appropriate)
+    a_term_set = _construct_abstract_set(a_term, idx)
+    b_term_set = _construct_abstract_set(b_term, idx)
 
     # censor by year if applicable
     if censor_year is not math.inf:
@@ -85,3 +87,21 @@ def get_prediction_score(pvalue: float, sort_ratio: float):
 
     # prediction score = log pvalue + log sort ratio
     return log_pvalue + log_sort_ratio
+
+def _construct_abstract_set(term: str, idx: Index) -> set:
+    # TODO: support parenthesis for allowing OR and AND at the same time?
+    # e.g., "(cancer||carcinoma) && BRCA1"
+    if logical_or in term:
+        terms = term.split(logical_or)
+        pmid_set = set()
+        for synonym in terms:
+            pmid_set = pmid_set.update(idx.query_index(synonym))
+    elif logical_and in term:
+        terms = term.split(logical_and)
+        starting_set = idx.query_index(terms[0])
+        for t in terms[1:]:
+            starting_set.intersection_update(idx.query_index(t))
+    else:
+        pmid_set = idx.query_index(term)
+
+    return pmid_set
