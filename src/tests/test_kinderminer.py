@@ -1,5 +1,11 @@
 import pytest
+import os
+import shutil
+from indexing.index import Index
+from indexing.index_builder import IndexBuilder
 from workers import kinderminer as km
+from indexing import km_util as util
+from .test_index_building import data_dir
 
 def test_fisher_exact_test():
     # example shown in figure 1 of:
@@ -16,3 +22,31 @@ def test_fisher_exact_test():
 
     sort_ratio = km.get_sort_ratio(table)
     assert sort_ratio == pytest.approx(15 / 59)
+
+def test_kinderminer(data_dir):
+    index_dir = util.get_index_dir(data_dir)
+
+    # delete the index if it exists already
+    if os.path.exists(index_dir):
+        shutil.rmtree(index_dir)
+    assert not os.path.exists(index_dir)
+
+    # build the index
+    indexer = IndexBuilder(data_dir)
+    indexer.build_index()
+    
+    # run kinderminer query
+    idx = Index(data_dir)
+    km_result = km.kinderminer_search('cancer', 'brca1', idx)
+    km_or_result = km.kinderminer_search('cancer||carcinoma', 'brca1', idx)
+    km_and_result = km.kinderminer_search('cancer&&carcinoma', 'brca1', idx)
+
+    # assertions
+    assert km_or_result['len(a_term_set)'] > km_result['len(a_term_set)']
+    assert km_and_result['len(a_term_set)'] < km_result['len(a_term_set)']
+
+    assert km_or_result['len(b_term_set)'] == km_result['len(b_term_set)']
+    assert km_and_result['len(b_term_set)'] == km_result['len(b_term_set)']
+
+    # delete the index when the test is done
+    shutil.rmtree(index_dir)

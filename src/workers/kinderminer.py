@@ -95,12 +95,12 @@ def _construct_abstract_set(term: str, idx: Index) -> set:
         terms = term.split(logical_or)
         pmid_set = set()
         for synonym in terms:
-            pmid_set = pmid_set.update(idx.query_index(synonym))
+            pmid_set.update(idx.query_index(synonym))
     elif logical_and in term:
         terms = term.split(logical_and)
-        starting_set = idx.query_index(terms[0])
+        pmid_set = idx.query_index(terms[0])
         for t in terms[1:]:
-            starting_set.intersection_update(idx.query_index(t))
+            pmid_set.intersection_update(idx.query_index(t))
     else:
         pmid_set = idx.query_index(term)
 
