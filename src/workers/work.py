@@ -25,7 +25,11 @@ def km_work(json: list):
         if a_term is None or b_term is None:
             raise TypeError('Must supply a_term and b_term')
 
-        res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year)
+        return_pmids = False
+        if 'return_pmids' in item:
+            return_pmids = bool(item['return_pmids'])
+
+        res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids)
         return_val.append(res)
 
     return return_val
@@ -39,6 +43,10 @@ def skim_work(json: dict):
     top_n = json['top_n']
     censor_year = json['censor_year']
 
+    return_pmids = False
+    if 'return_pmids' in json:
+        return_pmids = bool(json['return_pmids'])
+
     if type(top_n) is str:
         top_n = int(top_n)
     if type(censor_year) is str:
@@ -47,7 +55,7 @@ def skim_work(json: dict):
     ab_results = []
     for a_term in a_terms:
         for b_term in b_terms:
-            res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year)
+            res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids)
             ab_results.append(res)
 
     # sort by prediction score, descending
@@ -60,16 +68,21 @@ def skim_work(json: dict):
         b_term = ab['b_term']
 
         for c_term in c_terms:
-            bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year)
+            bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year, return_pmids)
 
-            return_val.append(
-                {
+            abc_result = {
                     'a_term': ab['a_term'],
                     'b_term': ab['b_term'],
                     'c_term': c_term,
                     'bc_p-value': bc['pvalue'],
                     'ab_pred_score': km.get_prediction_score(ab['pvalue'], ab['sort_ratio'])
-                })
+                }
+
+            if return_pmids:
+                abc_result['ab_pmid_intersection'] = ab['pmid_intersection']
+                abc_result['bc_pmid_intersection'] = bc['pmid_intersection']
+
+            return_val.append(abc_result)
 
     return return_val
 
@@ -85,7 +98,7 @@ def triple_miner_work(json: list):
         km_query['a_term'] = a_term + '&&' + b_term
         km_query['b_term'] = c_term
 
-        if 'censor_year in query':
+        if 'censor_year' in query:
             km_query['censor_year'] = query['censor_year']
 
         km_set.append(km_query)

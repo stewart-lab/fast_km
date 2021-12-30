@@ -37,7 +37,10 @@ def test_kinderminer(data_dir):
     
     # run kinderminer query
     idx = Index(data_dir)
-    km_result = km.kinderminer_search('cancer', 'brca1', idx)
+    km_result = km.kinderminer_search('cancer', 'brca1', idx, return_pmids=True)
+
+    assert km_result['pmid_intersection'] == {34580114}
+
     km_or_result = km.kinderminer_search('cancer||carcinoma', 'brca1', idx)
     km_and_result = km.kinderminer_search('cancer&&carcinoma', 'brca1', idx)
 
