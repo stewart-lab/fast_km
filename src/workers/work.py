@@ -30,6 +30,10 @@ def km_work(json: list):
             return_pmids = bool(item['return_pmids'])
 
         res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids)
+
+        if 'pmid_intersection' in res:
+            res['pmid_intersection'] = str(res['pmid_intersection'])
+
         return_val.append(res)
 
     return return_val
@@ -79,8 +83,8 @@ def skim_work(json: dict):
                 }
 
             if return_pmids:
-                abc_result['ab_pmid_intersection'] = ab['pmid_intersection']
-                abc_result['bc_pmid_intersection'] = bc['pmid_intersection']
+                abc_result['ab_pmid_intersection'] = str(ab['pmid_intersection'])
+                abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
 
             return_val.append(abc_result)
 
