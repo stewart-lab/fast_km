@@ -92,7 +92,8 @@ def skim_work(json: dict):
                         'b_count': ab['len(b_term_set)'],
                         'c_count': bc['len(b_term_set)'],
                         'ab_count': ab['len(a_b_intersect)'],
-                        'bc_count': bc['len(a_b_intersect)']
+                        'bc_count': bc['len(a_b_intersect)'],
+                        'total_count': bc['n_articles']
                     }
 
                 if return_pmids:
