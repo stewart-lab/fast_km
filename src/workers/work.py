@@ -56,37 +56,38 @@ def skim_work(json: dict):
     if type(censor_year) is str:
         censor_year = int(censor_year)
 
-    ab_results = []
     for a_term in a_terms:
+        ab_results = []
+
         for b_term in b_terms:
             res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids)
             ab_results.append(res)
 
-    # sort by prediction score, descending
-    ab_results.sort(key=lambda res: 
-        km.get_prediction_score(res['pvalue'], res['sort_ratio']), 
-        reverse=True)
+        # sort by prediction score, descending
+        ab_results.sort(key=lambda res: 
+            km.get_prediction_score(res['pvalue'], res['sort_ratio']), 
+            reverse=True)
 
-    # take top N per a-b pair and run b-terms against c-terms
-    for ab in ab_results[:top_n]:
-        b_term = ab['b_term']
+        # take top N per a-b pair and run b-terms against c-terms
+        for ab in ab_results[:top_n]:
+            b_term = ab['b_term']
 
-        for c_term in c_terms:
-            bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year, return_pmids)
+            for c_term in c_terms:
+                bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year, return_pmids)
 
-            abc_result = {
-                    'a_term': ab['a_term'],
-                    'b_term': ab['b_term'],
-                    'c_term': c_term,
-                    'bc_p-value': bc['pvalue'],
-                    'ab_pred_score': km.get_prediction_score(ab['pvalue'], ab['sort_ratio'])
-                }
+                abc_result = {
+                        'a_term': ab['a_term'],
+                        'b_term': ab['b_term'],
+                        'c_term': c_term,
+                        'bc_p-value': bc['pvalue'],
+                        'ab_pred_score': km.get_prediction_score(ab['pvalue'], ab['sort_ratio'])
+                    }
 
-            if return_pmids:
-                abc_result['ab_pmid_intersection'] = str(ab['pmid_intersection'])
-                abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
+                if return_pmids:
+                    abc_result['ab_pmid_intersection'] = str(ab['pmid_intersection'])
+                    abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
 
-            return_val.append(abc_result)
+                return_val.append(abc_result)
 
     return return_val
 
