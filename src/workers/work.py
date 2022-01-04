@@ -79,8 +79,20 @@ def skim_work(json: dict):
                         'a_term': ab['a_term'],
                         'b_term': ab['b_term'],
                         'c_term': c_term,
-                        'bc_p-value': bc['pvalue'],
-                        'ab_pred_score': km.get_prediction_score(ab['pvalue'], ab['sort_ratio'])
+
+                        'ab_pvalue': ab['pvalue'],
+                        'ab_sort_ratio': ab['sort_ratio'],
+                        'ab_pred_score': km.get_prediction_score(ab['pvalue'], ab['sort_ratio']),
+                        
+                        'bc_pvalue': bc['pvalue'],
+                        'bc_sort_ratio': bc['sort_ratio'],
+                        'bc_pred_score': km.get_prediction_score(bc['pvalue'], bc['sort_ratio']),
+
+                        'a_count': ab['len(a_term_set)'],
+                        'b_count': ab['len(b_term_set)'],
+                        'c_count': bc['len(b_term_set)'],
+                        'ab_count': ab['len(a_b_intersect)'],
+                        'bc_count': bc['len(a_b_intersect)']
                     }
 
                 if return_pmids:
