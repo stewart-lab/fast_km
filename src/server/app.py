@@ -34,7 +34,7 @@ def _post_generic(work, request):
         return 'Content type must be application/json', 400
 
     json_data = request.get_json(request.data)
-    job = _q.enqueue(work, json_data)
+    job = _q.enqueue(work, json_data, job_timeout = 43200)
 
     job_data = dict()
     job_data['id'] = job.id

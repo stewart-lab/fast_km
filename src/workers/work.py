@@ -46,6 +46,7 @@ def skim_work(json: dict):
     c_terms = json['c_terms']
     top_n = json['top_n']
     censor_year = json['censor_year']
+    ab_fet_min = 1e-5
 
     return_pmids = False
     if 'return_pmids' in json:
@@ -71,6 +72,10 @@ def skim_work(json: dict):
         # take top N per a-b pair and run b-terms against c-terms
         for ab in ab_results[:top_n]:
             b_term = ab['b_term']
+
+            pvalue = ab['pvalue']
+            if pvalue > ab_fet_min:
+                continue
 
             for c_term in c_terms:
                 bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year, return_pmids)
