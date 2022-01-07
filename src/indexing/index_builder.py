@@ -84,7 +84,6 @@ class IndexBuilder():
             
             if token in cold_storage:
                 cold_storage[token] = cold_storage[token] + byte_delim + serialized
-                yea = 0
             else:
                 cold_storage[token] = serialized
 

@@ -1,4 +1,5 @@
 import math
+from rq import get_current_job
 import workers.loaded_index as li
 import workers.kinderminer as km
 
@@ -40,6 +41,7 @@ def km_work(json: list):
 
 def skim_work(json: dict):
     return_val = []
+    progress = 0.0
 
     a_terms = json['a_terms']
     b_terms = json['b_terms']
@@ -62,20 +64,20 @@ def skim_work(json: dict):
 
         for b_term in b_terms:
             res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids)
-            ab_results.append(res)
+
+            if res['pvalue'] <= ab_fet_min:
+                ab_results.append(res)
 
         # sort by prediction score, descending
         ab_results.sort(key=lambda res: 
             km.get_prediction_score(res['pvalue'], res['sort_ratio']), 
             reverse=True)
 
-        # take top N per a-b pair and run b-terms against c-terms
-        for ab in ab_results[:top_n]:
-            b_term = ab['b_term']
+        ab_results = ab_results[:top_n]
 
-            pvalue = ab['pvalue']
-            if pvalue > ab_fet_min:
-                continue
+        # take top N per a-b pair and run b-terms against c-terms
+        for i, ab in enumerate(ab_results):
+            b_term = ab['b_term']
 
             for c_term in c_terms:
                 bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year, return_pmids)
@@ -107,6 +109,9 @@ def skim_work(json: dict):
 
                 return_val.append(abc_result)
 
+            progress = (i + 1) / float(len(ab_results))
+            _update_job_status('progress', progress)
+
     return return_val
 
 def triple_miner_work(json: list):
@@ -127,3 +132,12 @@ def triple_miner_work(json: list):
         km_set.append(km_query)
 
     return km_work(km_set)
+
+def _update_job_status(key, value):
+    job = get_current_job()
+
+    if job is None:
+        print('error: tried to update job status, but could not find job')
+    
+    print('updating job: ' + job.id)
+    job.meta[key] = value
