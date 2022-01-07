@@ -47,8 +47,13 @@ def skim_work(json: dict):
     b_terms = json['b_terms']
     c_terms = json['c_terms']
     top_n = json['top_n']
-    censor_year = json['censor_year']
+    #censor_year = json['censor_year']
     ab_fet_min = 1e-5
+
+    if 'censor_year' in json:
+        censor_year = json['censor_year']
+    else:
+        censor_year = math.inf
 
     return_pmids = False
     if 'return_pmids' in json:
