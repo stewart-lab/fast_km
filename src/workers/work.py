@@ -41,14 +41,12 @@ def km_work(json: list):
 
 def skim_work(json: dict):
     return_val = []
-    progress = 0.0
 
     a_terms = json['a_terms']
     b_terms = json['b_terms']
     c_terms = json['c_terms']
     top_n = json['top_n']
-    #censor_year = json['censor_year']
-    ab_fet_min = 1e-5
+    ab_fet_threshold = json['ab_fet_threshold']
 
     if 'censor_year' in json:
         censor_year = json['censor_year']
@@ -70,7 +68,7 @@ def skim_work(json: dict):
         for b_term in b_terms:
             res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids)
 
-            if res['pvalue'] <= ab_fet_min:
+            if res['pvalue'] <= ab_fet_threshold:
                 ab_results.append(res)
 
         # sort by prediction score, descending
@@ -81,10 +79,9 @@ def skim_work(json: dict):
         ab_results = ab_results[:top_n]
 
         # take top N per a-b pair and run b-terms against c-terms
-        for i, ab in enumerate(ab_results):
-            b_term = ab['b_term']
-
-            for c_term in c_terms:
+        for i, c_term in enumerate(c_terms):
+            for ab in ab_results:
+                b_term = ab['b_term']
                 bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year, return_pmids)
 
                 abc_result = {
@@ -113,9 +110,7 @@ def skim_work(json: dict):
                     abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
 
                 return_val.append(abc_result)
-
-            progress = (i + 1) / float(len(ab_results))
-            _update_job_status('progress', progress)
+                _update_job_status('progress', i + 1)
 
     return return_val
 
@@ -144,5 +139,4 @@ def _update_job_status(key, value):
     if job is None:
         print('error: tried to update job status, but could not find job')
     
-    print('updating job: ' + job.id)
     job.meta[key] = value
