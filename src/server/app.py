@@ -51,9 +51,10 @@ def _get_generic(request):
     job_data = dict()
     job_data['id'] = id
     job_data['status'] = job.get_status()
-
-    if 'progress' in job.meta:
-        job_data['progress'] = job.meta['progress']
+    meta = job.get_meta()
+    
+    if 'progress' in meta:
+        job_data['progress'] = meta['progress']
     
     if job.result is not None:
         job_data['result'] = job.result

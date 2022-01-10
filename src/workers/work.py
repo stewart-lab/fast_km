@@ -140,3 +140,4 @@ def _update_job_status(key, value):
         print('error: tried to update job status, but could not find job')
     
     job.meta[key] = value
+    job.save_meta()
