@@ -41,8 +41,8 @@ def test_kinderminer(data_dir):
 
     assert km_result['pmid_intersection'] == {34580114}
 
-    km_or_result = km.kinderminer_search('cancer||carcinoma', 'brca1', idx)
-    km_and_result = km.kinderminer_search('cancer&&carcinoma', 'brca1', idx)
+    km_or_result = km.kinderminer_search('cancer/carcinoma', 'brca1', idx)
+    km_and_result = km.kinderminer_search('cancer&carcinoma', 'brca1', idx)
 
     # assertions
     assert km_or_result['len(a_term_set)'] > km_result['len(a_term_set)']

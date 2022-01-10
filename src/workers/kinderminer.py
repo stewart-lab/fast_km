@@ -3,9 +3,9 @@ import time
 import math
 from indexing.index import Index
 
-logical_or = '||'
-logical_and = '&&'
-sided = 'greater'
+logical_or = '/' # supports '/' to mean 'or'
+logical_and = '&' # supports '&' to mean 'and'
+fet_sided = 'greater'
 
 def get_contingency_table(a_term_set: set, b_term_set: set, total_n: int):
     """Populates the table for the Fisher's exact test"""
@@ -20,7 +20,7 @@ def get_contingency_table(a_term_set: set, b_term_set: set, total_n: int):
     return table
 
 def fisher_exact(table) -> float:
-    return scipy.stats.fisher_exact(table, sided)[1]
+    return scipy.stats.fisher_exact(table, fet_sided)[1]
 
 def get_sort_ratio(table) -> float:
     denom = (table[0][0] + table[1][0])
@@ -73,7 +73,7 @@ def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.
 
 def _construct_abstract_set(term: str, idx: Index) -> set:
     # TODO: support parenthesis for allowing OR and AND at the same time?
-    # e.g., "(cancer||carcinoma) && BRCA1"
+    # e.g., "(cancer/carcinoma) & BRCA1"
     if logical_or in term:
         terms = term.split(logical_or)
         pmid_set = set()
