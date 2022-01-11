@@ -33,8 +33,11 @@ def _post_generic(work, request):
     if request.content_type != 'application/json':
         return 'Content type must be application/json', 400
 
+    # NOTE: this is the max amount of time a job is allowed to take (12 hrs)
+    job_timeout = 43200
+
     json_data = request.get_json(request.data)
-    job = _q.enqueue(work, json_data, job_timeout = 43200)
+    job = _q.enqueue(work, json_data, job_timeout = job_timeout)
 
     job_data = dict()
     job_data['id'] = job.id
@@ -52,7 +55,7 @@ def _get_generic(request):
     job_data['id'] = id
     job_data['status'] = job.get_status()
     meta = job.get_meta()
-    
+
     if 'progress' in meta:
         job_data['progress'] = meta['progress']
     
