@@ -5,7 +5,7 @@
 ### POST:
 Post a SKiM job to the job queue. Must be in json format. Returns the job ID.
 Parameters:
-A list of dictionaries, each with the key:
+A dictionaries with the keys:
 - "a_terms": list of strings
 - "b_terms": list of strings
 - "c_terms": list of strings
@@ -17,10 +17,7 @@ A list of dictionaries, each with the key:
 Example:
 ```py
 import requests
-post_json = [
-    { "a_term": "cancer", "b_term": "tumor" }, 
-    { "a_term": "cancer", "b_term": "malignant" }
-]
+post_json = { "a_terms": ["cancer"], "b_terms": ["tumor"], "c_terms": ["skin"], "top_n": 50, "ab_fet_threshold": 0.01 }
 response = requests.post('http://localhost:5000/skim/api/jobs', json=post_json).json()
 job_id = response['id']
 ```
