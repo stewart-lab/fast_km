@@ -1,7 +1,7 @@
 import ftplib
 import os
 import os.path as path
-from . import km_util as util
+import indexing.km_util as util
 
 def connect_to_ftp_server(ftp_address: str, ftp_dir: str):
     """Connects to an FTP server given an FTP address and directory"""

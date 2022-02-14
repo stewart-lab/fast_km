@@ -1,6 +1,6 @@
 import os
-from ..src import download_abstracts as dl
-from ..src import km_util as util
+from indexing import download_abstracts as dl
+from indexing import km_util as util
 
 def test_download_file(tmp_path):
     local_dir = os.path.join(tmp_path, 'Download')

@@ -1,4 +1,3 @@
-import sys
 import os
 import re
 import nltk
@@ -17,8 +16,9 @@ def report_progress(completed: float, total: float) -> None:
         round(progress * 100),
         int(completed),
         int(total))
-    sys.stdout.write(text)
-    sys.stdout.flush()
+    #sys.stdout.write(text)
+    #sys.stdout.flush()
+    print(text)
 
     if completed == total:
         print("\n")
@@ -45,13 +45,22 @@ def write_all_lines(path: str, items: 'list[str]') -> None:
             f.write(str(item))
             f.write('\n')
 
-def _get_sanitized_text(text: str, regex: str):
-    sanitized_text = re.sub(regex, '', text)
-    return sanitized_text
-
 def get_tokens(text: str) -> 'list[str]':
-    #sanitized_text = _get_sanitized_text(text, r'[^\w\s]').lower()
-    #tokens = tokenizer.tokenize(sanitized_text)
     l_text = text.lower()
     tokens = tokenizer.tokenize(l_text)
     return tokens
+
+def get_index_dir(abstracts_dir: str) -> str:
+    return os.path.join(abstracts_dir, 'Index')
+
+def get_abstract_catalog(abstracts_dir: str) -> str:
+    return os.path.join(get_index_dir(abstracts_dir), 'abstracts.txt.gzip')
+
+def get_index_file(abstracts_dir: str) -> str:
+    return os.path.join(get_index_dir(abstracts_dir), 'index.bin')
+
+def get_offset_file(abstracts_dir: str) -> str:
+    return os.path.join(get_index_dir(abstracts_dir), 'index_offsets.txt')
+
+def get_cataloged_files(abstracts_dir: str) -> str:
+    return os.path.join(get_index_dir(abstracts_dir), 'cataloged.txt')

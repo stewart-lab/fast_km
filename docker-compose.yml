@@ -1,0 +1,34 @@
+version: "3.3"
+services:
+  server:
+    build:
+      context: .
+      dockerfile: ./src/server/Dockerfile
+    image: fast_km-server:build
+    ports:
+      - "5000:5000"
+    depends_on:
+      - redis
+    networks:
+      - fast_km-network
+
+  workers:
+    build:
+      context: .
+      dockerfile: ./src/workers/Dockerfile
+    image: fast_km-worker:build
+    command: --workers 1
+    volumes:
+      - ${PUBMED_DIR}:/mnt/pubmed  # edit .env file to change pubmed dir
+    depends_on:
+      - redis
+    networks:
+      - fast_km-network
+
+  redis:
+    image: redis
+    networks:
+      - fast_km-network
+
+networks:
+  fast_km-network:

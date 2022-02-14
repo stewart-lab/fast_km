@@ -1,5 +1,5 @@
 [run]
-omit = project/tests/*,*__init__*
+omit = */tests/*,*__init__*
 
 [report]
-omit = project/tests/*,*__init__*
+omit = */tests/*,*__init__*

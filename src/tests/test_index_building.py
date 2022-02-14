@@ -2,19 +2,17 @@ import os
 import pytest
 import gzip
 import shutil
-from ..src.index import Index
-from ..src.abstract import Abstract
-from ..src import index_abstracts as indexer
-from ..src import km_util as util
+import indexing
+from indexing.abstract_catalog import _parse_xml
+from indexing.index import Index
+from indexing.abstract import Abstract
+from indexing.index_builder import IndexBuilder
+from indexing.abstract_catalog import AbstractCatalog
+from indexing import km_util as util
 
 @pytest.fixture
 def data_dir():
-    return os.path.join(os.getcwd(), "project", "tests", "test_data", "indexer")
-
-def test_text_sanitization():
-    text = "The qui-ck brown fox [jumped ]over the la'zy dog."
-    sanitized = util._get_sanitized_text(text, r'[^\w\s]')
-    assert sanitized == "The quick brown fox jumped over the lazy dog"
+    return os.path.join(os.getcwd(), "src", "tests", "test_data", "indexer")
 
 def test_tokenization():
     text = "The quick brown fox jumped over the lazy dog."
@@ -29,24 +27,24 @@ def test_tokenization():
 def test_get_files_to_index(data_dir):
     # pretend we have not indexed any files yet
     # should have 1 file remaining to index
-    files_to_index = indexer.get_files_to_index(data_dir, [])
+    indexer = AbstractCatalog(data_dir)
+    files_to_index = indexer._get_files_to_catalog()
     assert len(files_to_index) == 1
 
     # pretend we've already indexed the pubmed21n1432.xml.gz file
     # should have 0 files remaining to index (no other .xml.gz files in dir)
     test_xml_file = "pubmed21n1432.xml.gz"
-    files_to_index = indexer.get_files_to_index(data_dir, [test_xml_file])
+    indexer.abstract_files.append(test_xml_file)
+    files_to_index = indexer._get_files_to_catalog()
     assert len(files_to_index) == 0
 
 def test_parse_xml(data_dir):
     test_xml_file = os.path.join(data_dir, "pubmed21n1432.xml.gz")
     assert os.path.exists(test_xml_file)
 
-    abstracts = []
     with gzip.open(test_xml_file, 'rb') as file:
         content = file.read()
-        abstracts = indexer.parse_xml(content)
-
+        abstracts = _parse_xml(content)
     assert len(abstracts) > 2800
 
     # test for proper italics tags removal
@@ -59,7 +57,7 @@ def test_parse_xml(data_dir):
     assert abs_test.text.endswith("family members at the end-of-life.")
 
 def test_indexer(data_dir):
-    index_dir = indexer.get_index_dir(data_dir)
+    index_dir = util.get_index_dir(data_dir)
 
     # delete the index if it exists already
     if os.path.exists(index_dir):
@@ -67,9 +65,11 @@ def test_indexer(data_dir):
     assert not os.path.exists(index_dir)
 
     # build the index
-    index = indexer.index_abstracts(data_dir, 1)
-
+    indexer = IndexBuilder(data_dir)
+    indexer.build_index()
+    
     # query the index
+    index = Index(data_dir)
     query = index.query_index("polysaccharide")
     query = query | index.query_index("polysaccharides")
     query = query | index.query_index("lipopolysaccharides")
@@ -77,6 +77,44 @@ def test_indexer(data_dir):
     query = query | index.query_index("exopolysaccharide")
 
     assert len(query) == 37
+
+    # delete the index when the test is done
+    shutil.rmtree(index_dir)
+
+def test_abstract_cataloging(tmp_path):
+    cataloger = AbstractCatalog(tmp_path)
+
+    abs = Abstract(1000, 1993, "This is a cool title", "Interesting text")
+    abs2 = Abstract(1001, 1994, "An interesting title", "Cool text")
+    cataloger.add_or_update_abstract(abs)
+    cataloger.add_or_update_abstract(abs2)
+
+    path = os.path.join(tmp_path, 'abstract_catalog.txt.gzip')
+    cataloger.write_catalog_to_disk(path)
+
+    cataloger2 = AbstractCatalog(tmp_path)
+    abstracts = []
+    for item in cataloger2.stream_existing_catalog(path):
+        abstracts.append(item)
+
+    assert len(abstracts) == 2
+    assert abstracts[0].title == abs.title
+    assert abstracts[1].title == abs2.title
+
+def test_abstract_cataloging_real_file(data_dir):
+    path = util.get_abstract_catalog(data_dir)
+    index_dir = util.get_index_dir(data_dir)
+
+    cataloger = AbstractCatalog(data_dir)
+    cataloger.catalog_abstracts()
+
+    # TODO: assertions
+    i = 0
+    for abs in cataloger.stream_existing_catalog(path):
+        i += 1
+        assert abs.pmid > 0
+
+    assert i == 4139
 
     # delete the index when the test is done
     shutil.rmtree(index_dir)
