@@ -4,6 +4,8 @@ from indexing.index import Index
 from indexing.abstract import Abstract
 from indexing.index_builder import IndexBuilder
 import indexing.km_util as util
+import workers.loaded_index as li
+from workers.work import skim_work
 
 def test_index_abstract(tmp_path):
     assert not os.path.exists(util.get_index_dir(tmp_path))
@@ -59,3 +61,31 @@ def test_index_abstract(tmp_path):
     assert len(query) == 0
 
     assert the_index.n_articles() == 2
+
+def test_citation_count(tmp_path):
+    assert not os.path.exists(util.get_index_dir(tmp_path))
+
+    cataloger = AbstractCatalog(tmp_path)
+    abs1 = Abstract(1000, 2020, "A Really Cool Pubmed Abstract",
+        "The quick brown fox jumped over the lazy dog.")
+
+    cataloger.add_or_update_abstract(abs1)
+    cataloger.write_catalog_to_disk(util.get_abstract_catalog(tmp_path))
+
+    indexer = IndexBuilder(tmp_path)
+    hot_storage = dict()
+    cold_storage = dict()
+
+    indexer._index_abstract(abs1, hot_storage)
+    #indexer._index_abstract(abs2, hot_storage)
+
+    indexer._serialize_hot_to_cold_storage(hot_storage, cold_storage)
+    indexer._write_index_to_disk(cold_storage)
+
+    # TODO: create fake icite data json
+
+    the_index = Index(tmp_path)
+    li.the_index = the_index
+
+    val = skim_work(dict())
+    pass

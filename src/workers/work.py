@@ -106,8 +106,19 @@ def skim_work(json: dict):
                     }
 
                 if return_pmids:
-                    abc_result['ab_pmid_intersection'] = str(ab['pmid_intersection'])
-                    abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
+                    ab = dict()
+                    for pmid in sorted(ab['pmid_intersection'], key=li.the_index.citation_count[pmid])[:5]:
+                        ab[pmid] = li.the_index.citation_count[pmid]
+                    #    ab.append((int(i), int(li.citation_count[i])))
+                    #ab.sort(key=compare)
+                    
+                    bc = []
+                    for i in bc['pmid_intersection']:
+                        bc.append((int(i), int(li.pmid_citation_count[i])))
+                    bc.sort(key=compare)
+
+                    abc_result['ab_pmid_intersection'] = str(ab)
+                    abc_result['bc_pmid_intersection'] = str(bc)
 
                 return_val.append(abc_result)
                 _update_job_status('progress', i + 1)

@@ -11,7 +11,7 @@ def start_worker():
     # connect to the disk index
     the_index = Index(li.pubmed_path)
     li.the_index = the_index
-
+    
     _r = Redis(host='redis', port=6379)
     _q = Queue(connection=_r)
 
