@@ -2,6 +2,7 @@ import mmap
 import pickle
 import math
 import gc
+import json
 import indexing.km_util as util
 from indexing.abstract_catalog import AbstractCatalog
 
@@ -20,6 +21,8 @@ class Index():
         self._abstract_catalog = util.get_abstract_catalog(pubmed_abstract_dir)
         self._offset_trie = dict()
         self._publication_years = dict()
+        self.citation_count = dict()
+        self._load_citation_data()
         self._init_byte_info()
         self._open_connection()
 
@@ -80,6 +83,10 @@ class Index():
             del self._token_cache[ltoken]
         if ltoken in self._query_cache:
             del self._query_cache[ltoken]
+
+    def _load_citation_data(self) -> None:
+        with open(str(self._pubmed_dir) + "/test.json", encoding="utf-8") as f:
+            self.citation_count = json.load(f)
 
     def _open_connection(self) -> None:
         self.file_obj = open(self._bin_path, mode='rb')

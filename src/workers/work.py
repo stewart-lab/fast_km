@@ -3,6 +3,9 @@ from rq import get_current_job
 import workers.loaded_index as li
 import workers.kinderminer as km
 
+def compare(a):
+    return li.the_index.citation_count[str(a)]
+
 def km_work(json: list):
     return_val = []
 
@@ -67,7 +70,6 @@ def skim_work(json: dict):
 
         for b_term in b_terms:
             res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids)
-
             if res['pvalue'] <= ab_fet_threshold:
                 ab_results.append(res)
 
@@ -106,8 +108,17 @@ def skim_work(json: dict):
                     }
 
                 if return_pmids:
-                    abc_result['ab_pmid_intersection'] = str(ab['pmid_intersection'])
-                    abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
+                    ct_ab = dict()
+                    for pmid in sorted(ab['pmid_intersection'], key=compare, reverse=True)[:5]:
+                        ct_ab[pmid] = li.the_index.citation_count[str(pmid)]
+
+                    
+                    ct_bc = dict()
+                    for pmid in sorted(bc['pmid_intersection'], key=compare, reverse=True)[:5]:
+                        ct_bc[pmid] = li.the_index.citation_count[str(pmid)]
+
+                    abc_result['ab_pmid_intersection'] = str(ct_ab)
+                    abc_result['bc_pmid_intersection'] = str(ct_bc)
 
                 return_val.append(abc_result)
                 _update_job_status('progress', i + 1)
