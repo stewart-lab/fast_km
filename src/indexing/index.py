@@ -3,7 +3,6 @@ import pickle
 import math
 import gc
 import indexing.km_util as util
-import indexing.abstract_catalog as abstract_catalog
 from indexing.abstract_catalog import AbstractCatalog
 
 delim = '\t'
@@ -87,7 +86,7 @@ class Index():
         self.connection = mmap.mmap(self.file_obj.fileno(), length=0, access=mmap.ACCESS_READ)
 
     def _init_byte_info(self) -> None:
-        with open(self._txt_path, 'r', encoding=abstract_catalog.enc) as t:
+        with open(self._txt_path, 'r', encoding=util.encoding) as t:
             for index, line in enumerate(t):
                 split = line.split(sep=delim)
                 key = split[0]

@@ -7,7 +7,6 @@ import indexing.km_util as util
 from indexing.abstract import Abstract
 
 delim = '\t'
-enc = 'utf-8'
 
 class AbstractCatalog():
     def __init__(self, pubmed_path) -> None:
@@ -76,7 +75,7 @@ class AbstractCatalog():
         if not os.path.exists(dir):
             os.mkdir(dir)
 
-        with gzip.open(path, 'wt', encoding=enc) as gzip_file:
+        with gzip.open(path, 'wt', encoding=util.encoding) as gzip_file:
             for pmid in self.catalog:
                 abs = self.catalog[pmid]
                 abs = pickle.loads(abs)
@@ -90,14 +89,14 @@ class AbstractCatalog():
         if not os.path.exists(path):
             return
 
-        with gzip.open(path, 'rt', encoding=enc) as file:
+        with gzip.open(path, 'rt', encoding=util.encoding) as file:
             for line in file:
                 abs = self._parse_abstract(line)
                 self.catalog[abs.pmid] = pickle.dumps(abs)
 
     def stream_existing_catalog(self, path: str) -> 'list[Abstract]':
         '''Used to index the abstracts' tokens in the completed catalog'''
-        with gzip.open(path, 'rt', encoding=enc) as file:
+        with gzip.open(path, 'rt', encoding=util.encoding) as file:
             for line in file:
                 yield self._parse_abstract(line)
 

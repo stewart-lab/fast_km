@@ -1,8 +1,8 @@
 import os
-import re
 import nltk
 
 tokenizer = nltk.RegexpTokenizer(r"\w+")
+encoding = 'utf-8'
 
 def report_progress(completed: float, total: float) -> None:
     """Shows a progress bar. Adapted from: 
@@ -26,7 +26,7 @@ def report_progress(completed: float, total: float) -> None:
 def read_all_lines(path: str) -> 'list[str]':
     """Reads a text file into a list of strings"""
 
-    with open(path, 'r', encoding='utf-8') as f:
+    with open(path, 'r', encoding=encoding) as f:
         lines = f.readlines()
         lines = [line.strip("\n\r") for line in lines]
 
@@ -40,7 +40,7 @@ def write_all_lines(path: str, items: 'list[str]') -> None:
     if not os.path.exists(dir):
         os.mkdir(dir)
 
-    with open(path, 'w', encoding='utf-8') as f:
+    with open(path, 'w', encoding=encoding) as f:
         for item in items:
             f.write(str(item))
             f.write('\n')
