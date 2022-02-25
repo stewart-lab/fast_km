@@ -26,7 +26,7 @@ def report_progress(completed: float, total: float) -> None:
 def read_all_lines(path: str) -> 'list[str]':
     """Reads a text file into a list of strings"""
 
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding='utf-8') as f:
         lines = f.readlines()
         lines = [line.strip("\n\r") for line in lines]
 
