@@ -2,7 +2,6 @@ import os
 import pytest
 import gzip
 import shutil
-import time
 from indexing.abstract_catalog import _parse_xml
 from indexing.index import Index
 from indexing.abstract import Abstract
@@ -13,6 +12,14 @@ from indexing import km_util as util
 @pytest.fixture
 def data_dir():
     return os.path.join(os.getcwd(), "src", "tests", "test_data", "indexer")
+
+def delete_existing_index(data_dir):
+    index_dir = util.get_index_dir(data_dir)
+
+    # delete the index if it exists already
+    if os.path.exists(index_dir):
+        shutil.rmtree(index_dir)
+    assert not os.path.exists(index_dir)
 
 def test_tokenization():
     text = "The quick brown fox jumped over the lazy dog."
@@ -25,6 +32,8 @@ def test_tokenization():
     assert "brown fox jumped" not in tokens
 
 def test_get_files_to_index(data_dir):
+    delete_existing_index(data_dir)
+
     # pretend we have not indexed any files yet
     # should have 1 file remaining to index
     indexer = AbstractCatalog(data_dir)
@@ -39,6 +48,8 @@ def test_get_files_to_index(data_dir):
     assert len(files_to_index) == 0
 
 def test_parse_xml(data_dir):
+    delete_existing_index(data_dir)
+    
     test_xml_file = os.path.join(data_dir, "pubmed21n1432.xml.gz")
     assert os.path.exists(test_xml_file)
 
@@ -57,12 +68,7 @@ def test_parse_xml(data_dir):
     assert abs_test.text.endswith("family members at the end-of-life.")
 
 def test_indexer(data_dir):
-    index_dir = util.get_index_dir(data_dir)
-
-    # delete the index if it exists already
-    if os.path.exists(index_dir):
-        shutil.rmtree(index_dir)
-    assert not os.path.exists(index_dir)
+    delete_existing_index(data_dir)
 
     # build the index
     indexer = IndexBuilder(data_dir)
@@ -102,8 +108,9 @@ def test_abstract_cataloging(tmp_path):
     assert abstracts[1].title == abs2.title
 
 def test_abstract_cataloging_real_file(data_dir):
+    delete_existing_index(data_dir)
+
     path = util.get_abstract_catalog(data_dir)
-    index_dir = util.get_index_dir(data_dir)
 
     cataloger = AbstractCatalog(data_dir)
     cataloger.catalog_abstracts()
@@ -115,6 +122,3 @@ def test_abstract_cataloging_real_file(data_dir):
         assert abs.pmid > 0
 
     assert i == 4139
-
-    # delete the index when the test is done
-    shutil.rmtree(index_dir)

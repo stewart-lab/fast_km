@@ -51,6 +51,3 @@ def test_kinderminer(data_dir):
 
     assert km_or_result['len(b_term_set)'] == km_result['len(b_term_set)']
     assert km_and_result['len(b_term_set)'] == km_result['len(b_term_set)']
-
-    # delete the index when the test is done
-    #shutil.rmtree(index_dir)
