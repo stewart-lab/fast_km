@@ -62,7 +62,6 @@ def test_indexer(data_dir):
     # delete the index if it exists already
     if os.path.exists(index_dir):
         shutil.rmtree(index_dir)
-        time.sleep(2)
     assert not os.path.exists(index_dir)
 
     # build the index
@@ -80,7 +79,7 @@ def test_indexer(data_dir):
     assert len(query) == 37
 
     # delete the index when the test is done
-    shutil.rmtree(index_dir)
+    #shutil.rmtree(index_dir)
 
 def test_abstract_cataloging(tmp_path):
     cataloger = AbstractCatalog(tmp_path)

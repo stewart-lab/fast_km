@@ -30,7 +30,6 @@ def test_kinderminer(data_dir):
     # delete the index if it exists already
     if os.path.exists(index_dir):
         shutil.rmtree(index_dir)
-        time.sleep(2)
     assert not os.path.exists(index_dir)
 
     # build the index
@@ -54,4 +53,4 @@ def test_kinderminer(data_dir):
     assert km_and_result['len(b_term_set)'] == km_result['len(b_term_set)']
 
     # delete the index when the test is done
-    shutil.rmtree(index_dir)
+    #shutil.rmtree(index_dir)
