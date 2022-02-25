@@ -40,7 +40,7 @@ def write_all_lines(path: str, items: 'list[str]') -> None:
     if not os.path.exists(dir):
         os.mkdir(dir)
 
-    with open(path, 'w') as f:
+    with open(path, 'w', encoding='utf-8') as f:
         for item in items:
             f.write(str(item))
             f.write('\n')
