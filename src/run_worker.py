@@ -6,7 +6,6 @@ from workers.km_worker import start_worker
 import indexing.download_abstracts as downloader
 from indexing.index_builder import IndexBuilder
 import workers.loaded_index as li
-from indexing.index import Index
 import indexing.km_util as util
 
 parser = argparse.ArgumentParser()

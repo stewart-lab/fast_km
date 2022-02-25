@@ -126,7 +126,7 @@ class IndexBuilder():
         temp_index_path = util.get_index_file(self.path_to_pubmed_abstracts) + '.tmp'
         temp_offset_path = util.get_offset_file(self.path_to_pubmed_abstracts) + '.tmp'
         with open(temp_index_path, 'wb') as b:
-            with open(temp_offset_path, 'w') as t:
+            with open(temp_offset_path, 'w', encoding=util.encoding) as t:
                 for token in cold_storage:
                     serialized_pmids = cold_storage[token]
 
@@ -141,5 +141,5 @@ class IndexBuilder():
                     b.write(serialized_pmids)
 
         # done writing; rename the temp files
-        os.rename(temp_index_path, util.get_index_file(self.path_to_pubmed_abstracts))
-        os.rename(temp_offset_path, util.get_offset_file(self.path_to_pubmed_abstracts))
+        os.replace(temp_index_path, util.get_index_file(self.path_to_pubmed_abstracts))
+        os.replace(temp_offset_path, util.get_offset_file(self.path_to_pubmed_abstracts))
