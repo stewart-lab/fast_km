@@ -75,7 +75,7 @@ class AbstractCatalog():
         if not os.path.exists(dir):
             os.mkdir(dir)
 
-        with gzip.open(path, 'wt') as gzip_file:
+        with gzip.open(path, 'wt', encoding='utf-8') as gzip_file:
             for pmid in self.catalog:
                 abs = self.catalog[pmid]
                 abs = pickle.loads(abs)
