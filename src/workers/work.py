@@ -138,6 +138,7 @@ def _update_job_status(key, value):
 
     if job is None:
         print('error: tried to update job status, but could not find job')
+        return
     
     job.meta[key] = value
     job.save_meta()
