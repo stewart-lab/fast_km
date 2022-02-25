@@ -3,7 +3,7 @@
 # API
 ## /skim/api/jobs/
 ### POST:
-Post a SKiM job to the job queue. Must be in json format. Returns the job ID. 
+Post a SKiM job to the job queue. Must be in json format. Returns the job ID.
 Parameters:
 A dictionaries with the keys:
 - "a_terms": list of strings

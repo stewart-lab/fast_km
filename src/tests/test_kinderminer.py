@@ -5,6 +5,7 @@ from indexing.index import Index
 from indexing.index_builder import IndexBuilder
 from workers import kinderminer as km
 from indexing import km_util as util
+from .test_index_building import data_dir
 
 def test_fisher_exact_test():
     # example shown in figure 1 of:

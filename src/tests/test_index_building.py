@@ -84,9 +84,6 @@ def test_indexer(data_dir):
 
     assert len(query) == 37
 
-    # delete the index when the test is done
-    #shutil.rmtree(index_dir)
-
 def test_abstract_cataloging(tmp_path):
     cataloger = AbstractCatalog(tmp_path)
 
