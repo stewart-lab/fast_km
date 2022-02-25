@@ -10,3 +10,4 @@ project/tests/htmlcov
 ./pubmed
 ./.env
 *Icon*
+**/Index/**
