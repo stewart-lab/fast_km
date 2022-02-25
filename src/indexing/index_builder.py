@@ -142,5 +142,5 @@ class IndexBuilder():
                     b.write(serialized_pmids)
 
         # done writing; rename the temp files
-        os.rename(temp_index_path, util.get_index_file(self.path_to_pubmed_abstracts))
-        os.rename(temp_offset_path, util.get_offset_file(self.path_to_pubmed_abstracts))
+        os.replace(temp_index_path, util.get_index_file(self.path_to_pubmed_abstracts))
+        os.replace(temp_offset_path, util.get_offset_file(self.path_to_pubmed_abstracts))
