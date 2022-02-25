@@ -43,7 +43,7 @@ def test_parse_xml(data_dir):
     test_xml_file = os.path.join(data_dir, "pubmed21n1432.xml.gz")
     assert os.path.exists(test_xml_file)
 
-    with gzip.open(test_xml_file, 'rb', encoding=abstract_catalog.enc) as file:
+    with gzip.open(test_xml_file, 'rb') as file:
         content = file.read()
         abstracts = _parse_xml(content)
     assert len(abstracts) > 2800
