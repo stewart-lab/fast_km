@@ -1,6 +1,7 @@
 import pytest
 import os
 import shutil
+import time
 from indexing.index import Index
 from indexing.index_builder import IndexBuilder
 from workers import kinderminer as km
@@ -29,6 +30,7 @@ def test_kinderminer(data_dir):
     # delete the index if it exists already
     if os.path.exists(index_dir):
         shutil.rmtree(index_dir)
+        time.sleep(2)
     assert not os.path.exists(index_dir)
 
     # build the index

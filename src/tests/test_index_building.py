@@ -2,8 +2,7 @@ import os
 import pytest
 import gzip
 import shutil
-import indexing
-from indexing import abstract_catalog
+import time
 from indexing.abstract_catalog import _parse_xml
 from indexing.index import Index
 from indexing.abstract import Abstract
@@ -63,6 +62,7 @@ def test_indexer(data_dir):
     # delete the index if it exists already
     if os.path.exists(index_dir):
         shutil.rmtree(index_dir)
+        time.sleep(2)
     assert not os.path.exists(index_dir)
 
     # build the index
