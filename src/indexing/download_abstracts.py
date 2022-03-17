@@ -1,5 +1,6 @@
 import ftplib
 import os
+import math
 import os.path as path
 import indexing.km_util as util
 
@@ -49,7 +50,7 @@ def list_files_to_download(ftp_address: str, ftp_dir: str, local_dir: str):
 
 # TODO: delete/update old files if date or bytes is different
 # TODO: unit tests
-def bulk_download(ftp_address: str, ftp_dir: str, local_dir: str):
+def bulk_download(ftp_address: str, ftp_dir: str, local_dir: str, n_files = math.inf):
     """Download all files from an FTP server directory. The server can 
     disconnect without warning, which results in an EOF exception and an 
     empty (zero byte) file written. In this case, the script will re-connect,
@@ -76,13 +77,16 @@ def bulk_download(ftp_address: str, ftp_dir: str, local_dir: str):
             for remote_filename in remote_files_to_get:
                 local_filepath = path.join(local_dir, remote_filename)
                 remove_empty_file(local_filepath)
+
+                if n_downloaded >= n_files:
+                    break
                 
                 if not path.exists(local_filepath):
                     download_file(local_dir, remote_filename, ftp)
                     n_downloaded += 1
                     util.report_progress(n_downloaded, len(remote_files_to_get))
 
-            if n_downloaded == len(remote_files_to_get):
+            if n_downloaded == len(remote_files_to_get) or n_downloaded >= n_files:
                 if n_downloaded > 0:
                     print('\n')
                 break

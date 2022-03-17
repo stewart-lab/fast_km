@@ -1,7 +1,12 @@
 import math
-from rq import get_current_job
+from rq import get_current_job, Queue
+from rq.worker import Worker
+from redis import Redis
+import rq.command as rqc
 import workers.loaded_index as li
 import workers.kinderminer as km
+from indexing.index_builder import IndexBuilder
+import indexing.download_abstracts as downloader
 
 def km_work(json: list):
     return_val = []
@@ -132,6 +137,69 @@ def triple_miner_work(json: list):
         km_set.append(km_query)
 
     return km_work(km_set)
+
+def update_index_work(json: dict):
+    if 'n_files' in json:
+        n_files = json['n_files']
+    else:
+        n_files = math.inf
+
+    # download baseline
+    print('Checking for files to download...')
+    _update_job_status('progress', 'downloading abstracts')
+
+    downloader.bulk_download(
+        ftp_address='ftp.ncbi.nlm.nih.gov',
+        ftp_dir='pubmed/baseline',
+        local_dir=li.pubmed_path,
+        n_files=n_files
+    )
+
+    # download daily updates
+    downloader.bulk_download(
+        ftp_address='ftp.ncbi.nlm.nih.gov',
+        ftp_dir='pubmed/updatefiles',
+        local_dir=li.pubmed_path,
+        n_files=n_files
+    )
+
+    # TODO: figure out how to report download and index building progress
+    _update_job_status('progress', 'building index')
+    index_builder = IndexBuilder(li.pubmed_path)
+    index_builder.build_index(overwrite_old=False) # wait to remove old index
+
+    print('restarting workers...')
+    _update_job_status('progress', 'restarting workers')
+    _r = Redis(host='redis', port=6379)
+    _q = Queue(connection=_r)
+    workers = Worker.all(_r)
+
+    interrupted_jobs = []
+    this_job = get_current_job()
+
+    for worker in workers:
+        # stop any currently-running job
+        job = worker.get_current_job()
+
+        if job and str(job.id) != str(this_job.id):
+            print('canceling job: ' + str(job.id))
+            interrupted_jobs.append(job)
+
+        # TODO: if the worker grabs another job now, it's a problem
+        # TODO: prevent >1 concurrent index jobs?
+
+        # shut down the worker
+        rqc.send_shutdown_command(_r, worker.name)
+
+    # remove the old index
+    index_builder.overwrite_old_index()
+
+    # re-queue interrupted jobs
+    for job in interrupted_jobs:
+        print('restarting job: ' + str(job))
+        _q.enqueue_job(job)
+
+    _update_job_status('progress', 'finished')
 
 def _update_job_status(key, value):
     job = get_current_job()
