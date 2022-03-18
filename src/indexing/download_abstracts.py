@@ -6,6 +6,8 @@ from datetime import date
 import os.path as path
 import indexing.km_util as util
 
+_ftp_lines = []
+
 def connect_to_ftp_server(ftp_address: str, ftp_dir: str):
     """Connects to an FTP server given an FTP address and directory"""
 
@@ -26,10 +28,15 @@ def download_file(local_dir: str, remote_filename: str, ftp) -> None:
     with open(local_filename, 'wb') as f:
         ftp.retrbinary("RETR " + remote_filename, f.write)
 
-def remove_empty_file(filename: str):
-    """Removes the file if the file is <1 byte in size"""
+def remove_partial_file(filename: str, expected_size: int):
+    """Removes partially downloaded file, given an expected file size"""
 
-    if path.exists(filename) and path.getsize(filename) < 1:
+    if path.exists(filename):
+        local_size = path.getsize(filename)
+    else:
+        local_size = 0
+
+    if local_size != expected_size and path.exists(filename):
         os.remove(filename)
 
 def list_files_to_download(ftp_address: str, ftp_dir: str, local_dir: str):
@@ -40,17 +47,34 @@ def list_files_to_download(ftp_address: str, ftp_dir: str, local_dir: str):
     ftp = connect_to_ftp_server(ftp_address, ftp_dir)
     remote_filenames = ftp.nlst()
 
+    # determine the size of files on the server and re-download any local files
+    # that have only been partially downloaded
+    ftp.retrlines('LIST', _retrline_callback)
+
+    # TODO: determine these instead of hardcoding them
+    byte_column = 4
+    filename_column = 8
+
+    byte_dict = {}
+    for line in _ftp_lines:
+        split_line = [x for x in str(line).split(' ') if x]
+        file_bytes = int(split_line[byte_column])
+        file_name = split_line[filename_column]
+        byte_dict[file_name] = file_bytes
+
     for remote_filename in remote_filenames:
         local_filename = path.join(local_dir, remote_filename)
-        remove_empty_file(local_filename)
+        remote_size = byte_dict[remote_filename]
+
+        remove_partial_file(local_filename, remote_size)
 
         if not path.exists(local_filename):
             files_to_download.append(remote_filename)
 
     ftp.quit()
+    _ftp_lines.clear()
     return files_to_download
 
-# TODO: delete/update old files if date or bytes is different
 def bulk_download(ftp_address: str, ftp_dir: str, local_dir: str, n_files = math.inf):
     """Download all files from an FTP server directory. The server can 
     disconnect without warning, which results in an EOF exception and an 
@@ -87,7 +111,7 @@ def bulk_download(ftp_address: str, ftp_dir: str, local_dir: str, n_files = math
 
             for remote_filename in remote_files_to_get:
                 local_filepath = path.join(local_dir, remote_filename)
-                remove_empty_file(local_filepath)
+                remove_partial_file(local_filepath)
 
                 if n_downloaded >= n_files:
                     break
@@ -108,3 +132,7 @@ def bulk_download(ftp_address: str, ftp_dir: str, local_dir: str, n_files = math
 
     # log out of FTP server
     ftp.quit()
+
+def _retrline_callback(ftp_line: str):
+    global _ftp_lines
+    _ftp_lines.append(ftp_line)
