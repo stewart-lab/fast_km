@@ -100,12 +100,11 @@ def bulk_download(ftp_address: str, ftp_dir: str, local_dir: str, n_files = math
     # delete any *.xml.gz* file from previous years
     current_year = int(date.today().strftime("%y"))
     for year in range(10, current_year):
-        print('checking year ' + str(year) + ', current year is ' + str(current_year))
         files_to_remove = glob.glob(os.path.join(local_dir, "pubmed" + str(year) + "*.xml.gz*"))
 
         for file in files_to_remove:
             if os.path.basename(file) not in remote_files_to_get:
-                print('deleting outdated file from ' + str(year) + ': ' + file)
+                print('deleting outdated file from \'' + str(year) + ': ' + file)
                 os.remove(file)
 
     # download the files
@@ -116,7 +115,6 @@ def bulk_download(ftp_address: str, ftp_dir: str, local_dir: str, n_files = math
 
             for remote_filename in remote_files_to_get:
                 local_filepath = path.join(local_dir, remote_filename)
-                remove_partial_file(local_filepath)
 
                 if n_downloaded >= n_files:
                     break
