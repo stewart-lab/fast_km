@@ -1,6 +1,8 @@
 import ftplib
 import os
 import math
+import glob
+from datetime import date
 import os.path as path
 import indexing.km_util as util
 
@@ -49,7 +51,6 @@ def list_files_to_download(ftp_address: str, ftp_dir: str, local_dir: str):
     return files_to_download
 
 # TODO: delete/update old files if date or bytes is different
-# TODO: unit tests
 def bulk_download(ftp_address: str, ftp_dir: str, local_dir: str, n_files = math.inf):
     """Download all files from an FTP server directory. The server can 
     disconnect without warning, which results in an EOF exception and an 
@@ -67,6 +68,16 @@ def bulk_download(ftp_address: str, ftp_dir: str, local_dir: str, n_files = math
 
     print('Need to download ' + str(len(remote_files_to_get)) + ' files'
         + ' from ' + ftp_address + '/' + ftp_dir)
+
+    # delete any *.xml.gz* file from previous years
+    current_year = int(date.today().strftime("%y"))
+    for year in range(0, current_year):
+        files_to_remove = glob.glob(os.path.join(local_dir, "pubmed" + str(year) + "*.xml.gz*"))
+
+        for file in files_to_remove:
+            if os.path.basename(file) not in remote_files_to_get:
+                print('deleting outdated file from ' + str(date.today().year) + ': ' + file)
+                os.remove(file)
 
     # download the files
     while True:
