@@ -38,6 +38,9 @@ def remove_partial_file(filename: str, expected_size: int):
 
     if local_size != expected_size and path.exists(filename):
         os.remove(filename)
+        return filename
+
+    return None
 
 def list_files_to_download(ftp_address: str, ftp_dir: str, local_dir: str):
     """Lists files in the FTP directory that are not in the local directory"""
@@ -66,7 +69,8 @@ def list_files_to_download(ftp_address: str, ftp_dir: str, local_dir: str):
         local_filename = path.join(local_dir, remote_filename)
         remote_size = byte_dict[remote_filename]
 
-        remove_partial_file(local_filename, remote_size)
+        if remove_partial_file(local_filename, remote_size):
+            print('partial file found, we will re-download it: ' + local_filename)
 
         if not path.exists(local_filename):
             files_to_download.append(remote_filename)
