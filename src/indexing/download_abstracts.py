@@ -79,7 +79,7 @@ def list_files_to_download(ftp_address: str, ftp_dir: str, local_dir: str):
     _ftp_lines.clear()
     return files_to_download
 
-def bulk_download(ftp_address: str, ftp_dir: str, local_dir: str, n_files = math.inf):
+def bulk_download(ftp_address: str, ftp_dir: str, local_dir: str, n_to_download = math.inf):
     """Download all files from an FTP server directory. The server can 
     disconnect without warning, which results in an EOF exception and an 
     empty (zero byte) file written. In this case, the script will re-connect,
@@ -89,45 +89,42 @@ def bulk_download(ftp_address: str, ftp_dir: str, local_dir: str, n_files = math
     if not os.path.exists(local_dir):
         os.mkdir(local_dir)
 
-    # get list of files to download
-    remote_files_to_get = list_files_to_download(ftp_address, ftp_dir, 
-        local_dir)
+    remote_files_to_get = ['temp']
     n_downloaded = 0
 
-    print('Need to download ' + str(len(remote_files_to_get)) + ' files'
-        + ' from ' + ftp_address + '/' + ftp_dir)
+    while remote_files_to_get and n_downloaded < n_to_download:
+        # get list of files to download
+        remote_files_to_get = list_files_to_download(ftp_address, ftp_dir, 
+            local_dir)
 
-    # delete any *.xml.gz* file from previous years
-    current_year = int(date.today().strftime("%y"))
-    for year in range(10, current_year):
-        files_to_remove = glob.glob(os.path.join(local_dir, "pubmed" + str(year) + "*.xml.gz*"))
+        print('Need to download ' + str(len(remote_files_to_get)) + ' files'
+            + ' from ' + ftp_address + '/' + ftp_dir)
 
-        for file in files_to_remove:
-            if os.path.basename(file) not in remote_files_to_get:
-                print('deleting outdated file from \'' + str(year) + ': ' + file)
-                os.remove(file)
+        # delete any *.xml.gz* file from previous years
+        current_year = int(date.today().strftime("%y"))
+        for year in range(10, current_year):
+            files_to_remove = glob.glob(os.path.join(local_dir, "pubmed" + str(year) + "*.xml.gz*"))
 
-    # download the files
-    while True:
+            for file in files_to_remove:
+                if os.path.basename(file) not in remote_files_to_get:
+                    print('deleting outdated file from \'' + str(year) + ': ' + file)
+                    os.remove(file)
+
+        # download the files
         try:
             # connect to server and navigate to directory to download from
             ftp = connect_to_ftp_server(ftp_address, ftp_dir)
 
             for remote_filename in remote_files_to_get:
+                if n_downloaded >= n_to_download:
+                    break
+
                 local_filepath = path.join(local_dir, remote_filename)
 
-                if n_downloaded >= n_files:
-                    break
-                
                 if not path.exists(local_filepath):
                     download_file(local_dir, remote_filename, ftp)
                     n_downloaded += 1
                     util.report_progress(n_downloaded, len(remote_files_to_get))
-
-            if n_downloaded == len(remote_files_to_get) or n_downloaded >= n_files:
-                if n_downloaded > 0:
-                    print('\n')
-                break
 
         # handle server disconnections
         except EOFError:

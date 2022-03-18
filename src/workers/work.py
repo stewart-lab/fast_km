@@ -152,7 +152,7 @@ def update_index_work(json: dict):
         ftp_address='ftp.ncbi.nlm.nih.gov',
         ftp_dir='pubmed/baseline',
         local_dir=li.pubmed_path,
-        n_files=n_files
+        n_to_download=n_files
     )
 
     # download daily updates
@@ -160,7 +160,7 @@ def update_index_work(json: dict):
         ftp_address='ftp.ncbi.nlm.nih.gov',
         ftp_dir='pubmed/updatefiles',
         local_dir=li.pubmed_path,
-        n_files=n_files
+        n_to_download=n_files
     )
 
     # TODO: figure out how to report download and index building progress
