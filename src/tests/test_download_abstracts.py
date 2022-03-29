@@ -43,7 +43,9 @@ def test_remove_not_empty_file(tmp_path):
     assert os.path.exists(local_file)
 
     # delete the file if file is not 5 bytes (should NOT be deleted)
-    dl.remove_partial_file(local_file, 5)
+    local_size = os.path.getsize(local_file)
+    assert local_size > 0
+    dl.remove_partial_file(local_file, local_size)
     assert os.path.exists(local_file)
 
 def test_list_files_to_download(tmp_path):
