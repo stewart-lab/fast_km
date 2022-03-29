@@ -4,7 +4,7 @@ import rq_dashboard
 from redis import Redis
 from rq import Queue
 from flask_restful import Api
-from workers.work import km_work, skim_work, triple_miner_work
+from workers.work import km_work, skim_work, triple_miner_work, update_index_work
 import logging
 
 _r = Redis(host='redis', port=6379)
@@ -29,12 +29,11 @@ def _set_up_rq_dashboard():
     _app.config['RQ_DASHBOARD_REDIS_URL'] = 'redis://redis:6379'
 
 ## ******** Generic Post/Get ********
-def _post_generic(work, request):
+def _post_generic(work, request, job_timeout = 43200):
     if request.content_type != 'application/json':
         return 'Content type must be application/json', 400
 
-    # NOTE: this is the max amount of time a job is allowed to take (12 hrs)
-    job_timeout = 43200
+    # NOTE: the max amount of time a job is allowed to take is 12 hrs by default
 
     json_data = request.get_json(request.data)
     job = _q.enqueue(work, json_data, job_timeout = job_timeout)
@@ -94,4 +93,13 @@ def _post_tripleminer_job():
 
 @_app.route('/tripleminer/api/jobs/', methods=['GET'])
 def _get_tripleminer_job():
+    return _get_generic(request)
+
+## ******** Update Index Post/Get ********
+@_app.route('/update_index/api/jobs/', methods=['POST'])
+def _post_update_index_job():
+    return _post_generic(update_index_work, request, job_timeout=172800)
+
+@_app.route('/update_index/api/jobs/', methods=['GET'])
+def _get_update_index_job():
     return _get_generic(request)
