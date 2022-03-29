@@ -8,6 +8,9 @@ import workers.kinderminer as km
 from indexing.index_builder import IndexBuilder
 import indexing.download_abstracts as downloader
 
+_r = Redis(host='redis', port=6379)
+_q = Queue(connection=_r)
+
 def km_work(json: list):
     return_val = []
 
@@ -168,10 +171,20 @@ def update_index_work(json: dict):
     index_builder = IndexBuilder(li.pubmed_path)
     index_builder.build_index(overwrite_old=False) # wait to remove old index
 
-    print('restarting workers...')
+    # restart the workers
     _update_job_status('progress', 'restarting workers')
-    _r = Redis(host='redis', port=6379)
-    _q = Queue(connection=_r)
+    interrupted_jobs = restart_workers(requeue_interrupted_jobs=False)
+
+    # remove the old index
+    index_builder.overwrite_old_index()
+
+    # re-queue interrupted jobs
+    _queue_jobs(interrupted_jobs)
+
+    _update_job_status('progress', 'finished')
+
+def restart_workers(requeue_interrupted_jobs = True):
+    print('restarting workers...')
     workers = Worker.all(_r)
 
     interrupted_jobs = []
@@ -191,15 +204,15 @@ def update_index_work(json: dict):
         # shut down the worker
         rqc.send_shutdown_command(_r, worker.name)
 
-    # remove the old index
-    index_builder.overwrite_old_index()
+    if requeue_interrupted_jobs():
+        _queue_jobs(interrupted_jobs)
 
-    # re-queue interrupted jobs
-    for job in interrupted_jobs:
+    return interrupted_jobs
+
+def _queue_jobs(jobs):
+    for job in jobs:
         print('restarting job: ' + str(job))
         _q.enqueue_job(job)
-
-    _update_job_status('progress', 'finished')
 
 def _update_job_status(key, value):
     job = get_current_job()
