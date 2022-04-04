@@ -1,4 +1,5 @@
 import math
+import os
 from rq import get_current_job, Queue
 from rq.worker import Worker
 from redis import Redis
@@ -7,6 +8,7 @@ import workers.loaded_index as li
 import workers.kinderminer as km
 from indexing.index_builder import IndexBuilder
 import indexing.download_abstracts as downloader
+import indexing.km_util as util
 
 _r = Redis(host='redis', port=6379)
 _q = Queue(connection=_r)
@@ -154,7 +156,7 @@ def update_index_work(json: dict):
     downloader.bulk_download(
         ftp_address='ftp.ncbi.nlm.nih.gov',
         ftp_dir='pubmed/baseline',
-        local_dir=li.pubmed_path,
+        local_dir=util.get_abstracts_dir(li.data_path),
         n_to_download=n_files
     )
 
@@ -162,13 +164,13 @@ def update_index_work(json: dict):
     downloader.bulk_download(
         ftp_address='ftp.ncbi.nlm.nih.gov',
         ftp_dir='pubmed/updatefiles',
-        local_dir=li.pubmed_path,
+        local_dir=util.get_abstracts_dir(li.data_path),
         n_to_download=n_files
     )
 
     # TODO: figure out how to report download and index building progress
     _update_job_status('progress', 'building index')
-    index_builder = IndexBuilder(li.pubmed_path)
+    index_builder = IndexBuilder(li.data_path)
     index_builder.build_index(overwrite_old=False) # wait to remove old index
 
     # restart the workers
@@ -208,6 +210,18 @@ def restart_workers(requeue_interrupted_jobs = True):
         _queue_jobs(interrupted_jobs)
 
     return interrupted_jobs
+
+def get_controlled_vocab(the_json: dict):
+    cv_folder = util.get_controlled_vocab_folder_path(li.data_path)
+
+    if 'file_name' in the_json:
+        file_path = os.path.join(cv_folder, the_json['file_name'])
+
+        if os.path.exists(file_path):
+            return ['The requested data was not found at: ' + str(file_path)]
+        else:
+            with open(file_path, 'r') as f:
+                return f.readlines()
 
 def _queue_jobs(jobs):
     for job in jobs:

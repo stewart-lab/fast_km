@@ -22,7 +22,7 @@ def test_index_abstract(tmp_path):
 
     cataloger.add_or_update_abstract(abs1)
     cataloger.add_or_update_abstract(abs2)
-    cataloger.write_catalog_to_disk(util.get_abstract_catalog(tmp_path))
+    cataloger.write_catalog_to_disk(util.get_abstract_catalog(cataloger.path_to_pubmed_abstracts))
 
     indexer = IndexBuilder(tmp_path)
     hot_storage = dict()

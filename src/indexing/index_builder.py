@@ -8,8 +8,8 @@ from indexing.abstract_catalog import AbstractCatalog
 delim = '\t'
 
 class IndexBuilder():
-    def __init__(self, path_to_pubmed_abstracts: str):
-        self.path_to_pubmed_abstracts = path_to_pubmed_abstracts
+    def __init__(self, data_dir: str):
+        self.path_to_pubmed_abstracts = util.get_abstracts_dir(data_dir)
 
     def build_index(self, dump_rate = 300000, overwrite_old = True):
         print('cataloging abstracts...')
@@ -118,7 +118,7 @@ class IndexBuilder():
         dir = os.path.dirname(util.get_index_file(self.path_to_pubmed_abstracts))
         
         if not os.path.exists(dir):
-            os.mkdir(dir)
+            os.makedirs(dir)
 
         n_bytes = 0
 

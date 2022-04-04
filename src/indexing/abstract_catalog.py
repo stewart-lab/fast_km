@@ -9,10 +9,10 @@ from indexing.abstract import Abstract
 delim = '\t'
 
 class AbstractCatalog():
-    def __init__(self, pubmed_path) -> None:
+    def __init__(self, data_dir) -> None:
         self.catalog = dict()
         self.abstract_files = list()
-        self.path_to_pubmed_abstracts = pubmed_path
+        self.path_to_pubmed_abstracts = util.get_abstracts_dir(data_dir)
 
     def catalog_abstracts(self, dump_rate = 150):
         abstract_files_to_catalog = self._get_files_to_catalog()
@@ -73,7 +73,7 @@ class AbstractCatalog():
         dir = os.path.dirname(path)
         
         if not os.path.exists(dir):
-            os.mkdir(dir)
+            os.makedirs(dir)
 
         with gzip.open(path, 'wt', encoding=util.encoding) as gzip_file:
             for pmid in self.catalog:

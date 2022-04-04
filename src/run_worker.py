@@ -36,7 +36,7 @@ def start_workers(do_multiprocessing = True):
 def main():
     print('workers waiting 10 sec for redis to set up...')
     time.sleep(10)
-    li.pubmed_path = '/mnt/pubmed'
+    li.data_path = '/mnt/fast_km-data'
 
     start_workers()
 
