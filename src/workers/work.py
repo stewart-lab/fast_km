@@ -217,11 +217,13 @@ def get_controlled_vocab(the_json: dict):
     if 'file_name' in the_json:
         file_path = os.path.join(cv_folder, the_json['file_name'])
 
-        if os.path.exists(file_path):
+        if not os.path.exists(file_path):
             return ['The requested data was not found at: ' + str(file_path)]
         else:
             with open(file_path, 'r') as f:
                 return f.readlines()
+    else:
+        return ['Invalid request; expected \'file_name\' as key in dictionary']
 
 def _queue_jobs(jobs):
     for job in jobs:
