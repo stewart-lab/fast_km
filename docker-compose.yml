@@ -20,7 +20,7 @@ services:
     image: fast_km-worker:build
     command: --workers 1
     volumes:
-      - ${PUBMED_DIR}:/mnt/pubmed  # edit .env file to change pubmed dir
+      - ${DATA_DIR}:/mnt/fast_km-data  # edit .env file to change data dir
     depends_on:
       - redis
     networks:

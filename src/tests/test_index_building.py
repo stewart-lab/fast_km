@@ -14,7 +14,8 @@ def data_dir():
     return os.path.join(os.getcwd(), "src", "tests", "test_data", "indexer")
 
 def delete_existing_index(data_dir):
-    index_dir = util.get_index_dir(data_dir)
+    pubmed_dir = util.get_abstracts_dir(data_dir)
+    index_dir = util.get_index_dir(pubmed_dir)
 
     # delete the index if it exists already
     if os.path.exists(index_dir):
@@ -50,7 +51,8 @@ def test_get_files_to_index(data_dir):
 def test_parse_xml(data_dir):
     delete_existing_index(data_dir)
     
-    test_xml_file = os.path.join(data_dir, "pubmed21n1432.xml.gz")
+    pubmed_dir = util.get_abstracts_dir(data_dir)
+    test_xml_file = os.path.join(pubmed_dir, "pubmed21n1432.xml.gz")
     assert os.path.exists(test_xml_file)
 
     with gzip.open(test_xml_file, 'rb') as file:
@@ -107,7 +109,8 @@ def test_abstract_cataloging(tmp_path):
 def test_abstract_cataloging_real_file(data_dir):
     delete_existing_index(data_dir)
 
-    path = util.get_abstract_catalog(data_dir)
+    pubmed_dir = util.get_abstracts_dir(data_dir)
+    path = util.get_abstract_catalog(pubmed_dir)
 
     cataloger = AbstractCatalog(data_dir)
     cataloger.catalog_abstracts()

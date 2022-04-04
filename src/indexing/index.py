@@ -9,16 +9,16 @@ from indexing.abstract_catalog import AbstractCatalog
 delim = '\t'
 
 class Index():
-    def __init__(self, pubmed_abstract_dir: str):
+    def __init__(self, data_path: str):
         # caches
         self._query_cache = dict()
         self._token_cache = dict()
         self._n_articles_by_pub_year = dict()
 
-        self._pubmed_dir = pubmed_abstract_dir
-        self._bin_path = util.get_index_file(pubmed_abstract_dir)
-        self._txt_path = util.get_offset_file(pubmed_abstract_dir)
-        self._abstract_catalog = util.get_abstract_catalog(pubmed_abstract_dir)
+        self._pubmed_dir = util.get_abstracts_dir(data_path)
+        self._bin_path = util.get_index_file(self._pubmed_dir)
+        self._txt_path = util.get_offset_file(self._pubmed_dir)
+        self._abstract_catalog = util.get_abstract_catalog(self._pubmed_dir)
         self._offset_trie = dict()
         self._publication_years = dict()
         self._init_byte_info()

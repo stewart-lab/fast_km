@@ -21,5 +21,5 @@ def start_worker():
 
 def _load_index():
     # connect to the disk index
-    the_index = Index(li.pubmed_path)
+    the_index = Index(li.data_path)
     li.the_index = the_index

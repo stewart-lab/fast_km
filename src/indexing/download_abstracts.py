@@ -21,7 +21,7 @@ def download_file(local_dir: str, remote_filename: str, ftp) -> None:
 
     # create local directory if it doesn't exist yet
     if not os.path.exists(local_dir):
-        os.mkdir(local_dir)
+        os.makedirs(local_dir)
 
     local_filename = path.join(local_dir, remote_filename)
          
@@ -87,7 +87,7 @@ def bulk_download(ftp_address: str, ftp_dir: str, local_dir: str, n_to_download 
 
     # create local directory if it doesn't exist yet
     if not os.path.exists(local_dir):
-        os.mkdir(local_dir)
+        os.makedirs(local_dir)
 
     remote_files_to_get = ['temp']
     n_downloaded = 0

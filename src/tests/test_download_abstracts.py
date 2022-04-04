@@ -53,7 +53,7 @@ def test_list_files_to_download(tmp_path):
     ftp_address = 'ftp.ncbi.nlm.nih.gov'
     ftp_dir = 'pubmed/baseline'
 
-    os.mkdir(local_dir)
+    os.makedirs(local_dir)
     files = dl.list_files_to_download(ftp_address, ftp_dir, local_dir)
     assert len(files) >= 1000
 

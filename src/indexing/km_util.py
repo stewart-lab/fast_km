@@ -38,7 +38,7 @@ def write_all_lines(path: str, items: 'list[str]') -> None:
     dir = os.path.dirname(path)
 
     if not os.path.exists(dir):
-        os.mkdir(dir)
+        os.makedirs(dir)
 
     with open(path, 'w', encoding=encoding) as f:
         for item in items:
@@ -49,6 +49,12 @@ def get_tokens(text: str) -> 'list[str]':
     l_text = text.lower()
     tokens = tokenizer.tokenize(l_text)
     return tokens
+
+def get_controlled_vocab_folder_path(data_dir: str) -> str:
+    return os.path.join(data_dir, 'ControlledVocabulary')
+
+def get_abstracts_dir(data_dir: str):
+    return os.path.join(data_dir, 'PubMedAbstracts')
 
 def get_index_dir(abstracts_dir: str) -> str:
     return os.path.join(abstracts_dir, 'Index')
