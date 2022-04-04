@@ -26,8 +26,10 @@ def start_server(pw_hash: str):
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR)
 
+    yo = _bcrypt.generate_password_hash('none')
+
     # start the server
-    _app.run(host="0.0.0.0")
+    _app.run(host="0.0.0.0", port=4455)
 
 def _set_up_rq_dashboard():
     _app.config.from_object(rq_dashboard.default_settings)
@@ -35,7 +37,7 @@ def _set_up_rq_dashboard():
     _app.config['RQ_DASHBOARD_REDIS_URL'] = 'redis://redis:6379'
 
 def _authenticate(request):
-    if _pw_hash == 'none':
+    if _pw_hash == 'none' or _bcrypt.check_password_hash(_pw_hash, 'none'):
         return True
 
     if request.authorization and 'password' in request.authorization:
