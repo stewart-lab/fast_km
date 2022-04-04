@@ -8,12 +8,14 @@ from workers.work import km_work, skim_work, triple_miner_work, update_index_wor
 import logging
 from flask_bcrypt import Bcrypt
 
+null_password = 'none'
+
 _r = Redis(host='redis', port=6379)
 _q = Queue(connection=_r)
 _app = Flask(__name__)
 _api = Api(_app)
 _bcrypt = Bcrypt(_app)
-_pw_hash = ''
+_pw_hash = null_password
 
 def start_server(pw_hash: str):
     global _pw_hash
@@ -35,7 +37,7 @@ def _set_up_rq_dashboard():
     _app.config['RQ_DASHBOARD_REDIS_URL'] = 'redis://redis:6379'
 
 def _authenticate(request):
-    if _pw_hash == 'none' or _bcrypt.check_password_hash(_pw_hash, 'none'):
+    if _pw_hash == null_password or _bcrypt.check_password_hash(_pw_hash, null_password):
         return True
 
     if request.authorization and 'password' in request.authorization:
