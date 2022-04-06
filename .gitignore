@@ -10,3 +10,5 @@ project/tests/htmlcov
 ./pubmed
 ./.env
 *Icon*
+**venv**
+**/test_data/Index**
