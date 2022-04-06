@@ -1,6 +1,7 @@
 import mmap
 import pickle
 import math
+import os
 import gc
 import json
 import indexing.km_util as util
@@ -89,11 +90,18 @@ class Index():
             self.citation_count = json.load(f)
 
     def _open_connection(self) -> None:
+        if not os.path.exists(self._bin_path):
+            print('warning: index does not exist and needs to be built')
+            return
+
         self.file_obj = open(self._bin_path, mode='rb')
         self.connection = mmap.mmap(self.file_obj.fileno(), length=0, access=mmap.ACCESS_READ)
 
     def _init_byte_info(self) -> None:
-        with open(self._txt_path, 'r') as t:
+        if not os.path.exists(self._txt_path):
+            return
+
+        with open(self._txt_path, 'r', encoding=util.encoding) as t:
             for index, line in enumerate(t):
                 split = line.split(sep=delim)
                 key = split[0]

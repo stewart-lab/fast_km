@@ -4,15 +4,21 @@ import rq_dashboard
 from redis import Redis
 from rq import Queue
 from flask_restful import Api
-from workers.work import km_work, skim_work, triple_miner_work
+from workers.work import km_work, skim_work, triple_miner_work, update_index_work
 import logging
+from flask_bcrypt import Bcrypt
 
 _r = Redis(host='redis', port=6379)
 _q = Queue(connection=_r)
 _app = Flask(__name__)
 _api = Api(_app)
+_bcrypt = Bcrypt(_app)
+_pw_hash = ''
 
-def start_server():
+def start_server(pw_hash: str):
+    global _pw_hash
+    _pw_hash = pw_hash.replace('____', '$')
+
     # set up redis-queue dashboard
     _set_up_rq_dashboard()
 
@@ -28,15 +34,29 @@ def _set_up_rq_dashboard():
     _app.register_blueprint(rq_dashboard.blueprint, url_prefix="/rq")
     _app.config['RQ_DASHBOARD_REDIS_URL'] = 'redis://redis:6379'
 
+def _authenticate(request):
+    if _pw_hash == 'none':
+        return True
+
+    if request.authorization and 'password' in request.authorization:
+        candidate = request.authorization['password']
+    else:
+        return False
+
+    return _bcrypt.check_password_hash(_pw_hash, candidate)
+
 ## ******** Generic Post/Get ********
-def _post_generic(work, request):
+def _post_generic(work, request, job_timeout = 43200):
     if request.content_type != 'application/json':
         return 'Content type must be application/json', 400
 
-    # NOTE: this is the max amount of time a job is allowed to take (12 hrs)
-    job_timeout = 43200
+    # NOTE: the max amount of time a job is allowed to take is 12 hrs by default
 
     json_data = request.get_json(request.data)
+    
+    if not _authenticate(request):
+        return 'Invalid password. do request.post(..., auth=(\'username\', \'password\'))', 401
+
     job = _q.enqueue(work, json_data, job_timeout = job_timeout)
 
     job_data = dict()
@@ -48,6 +68,9 @@ def _post_generic(work, request):
     return response
 
 def _get_generic(request):
+    if not _authenticate(request):
+        return 'Invalid password. do request.post(..., auth=(\'username\', \'password\'))', 401
+
     id = request.args['id']
     job = _q.fetch_job(id)
 
@@ -94,4 +117,13 @@ def _post_tripleminer_job():
 
 @_app.route('/tripleminer/api/jobs/', methods=['GET'])
 def _get_tripleminer_job():
+    return _get_generic(request)
+
+## ******** Update Index Post/Get ********
+@_app.route('/update_index/api/jobs/', methods=['POST'])
+def _post_update_index_job():
+    return _post_generic(update_index_work, request, job_timeout=172800)
+
+@_app.route('/update_index/api/jobs/', methods=['GET'])
+def _get_update_index_job():
     return _get_generic(request)

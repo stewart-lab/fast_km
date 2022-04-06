@@ -11,22 +11,14 @@ class IndexBuilder():
     def __init__(self, path_to_pubmed_abstracts: str):
         self.path_to_pubmed_abstracts = path_to_pubmed_abstracts
 
-    def build_index(self, dump_rate = 300000):
+    def build_index(self, dump_rate = 300000, overwrite_old = True):
+        print('cataloging abstracts...')
         # catalog abstracts
         abstract_catalog = AbstractCatalog(self.path_to_pubmed_abstracts)
         abstract_catalog.catalog_abstracts()
         abstract_catalog.catalog.clear() # saves RAM
 
-        # delete the old index. MUST do this because if indexing is
-        # interrupted, then we will have a new catalog of abstracts but an
-        # old index, with no way of knowing if the index is done building
-        old_index = util.get_index_file(self.path_to_pubmed_abstracts)
-        old_offsets = util.get_offset_file(self.path_to_pubmed_abstracts)
-        if os.path.exists(old_index):
-            os.remove(old_index)
-        if os.path.exists(old_offsets):
-            os.remove(old_offsets)
-
+        print('building index...')
         # build the index
         catalog_path = util.get_abstract_catalog(self.path_to_pubmed_abstracts)
         cold_storage = dict()
@@ -44,7 +36,14 @@ class IndexBuilder():
 
         # write the index
         self._serialize_hot_to_cold_storage(hot_storage, cold_storage, consolidate_cold_storage=True)
-        self._write_index_to_disk(cold_storage)
+        self._write_index_to_disk(cold_storage, overwrite_old)
+
+    def overwrite_old_index(self):
+        temp_index_path = util.get_index_file(self.path_to_pubmed_abstracts) + '.tmp'
+        temp_offset_path = util.get_offset_file(self.path_to_pubmed_abstracts) + '.tmp'
+
+        os.replace(temp_index_path, util.get_index_file(self.path_to_pubmed_abstracts))
+        os.replace(temp_offset_path, util.get_offset_file(self.path_to_pubmed_abstracts))
 
     def _index_abstract(self, abstract: Abstract, hot_storage: dict):
         tokens = util.get_tokens(abstract.title)
@@ -115,7 +114,7 @@ class IndexBuilder():
                 serialized_combined_dict = quickle.dumps(combined_dict)
                 cold_storage[token] = serialized_combined_dict
 
-    def _write_index_to_disk(self, cold_storage: dict):
+    def _write_index_to_disk(self, cold_storage: dict, overwrite_old = True):
         dir = os.path.dirname(util.get_index_file(self.path_to_pubmed_abstracts))
         
         if not os.path.exists(dir):
@@ -126,7 +125,7 @@ class IndexBuilder():
         temp_index_path = util.get_index_file(self.path_to_pubmed_abstracts) + '.tmp'
         temp_offset_path = util.get_offset_file(self.path_to_pubmed_abstracts) + '.tmp'
         with open(temp_index_path, 'wb') as b:
-            with open(temp_offset_path, 'w') as t:
+            with open(temp_offset_path, 'w', encoding=util.encoding) as t:
                 for token in cold_storage:
                     serialized_pmids = cold_storage[token]
 
@@ -141,5 +140,5 @@ class IndexBuilder():
                     b.write(serialized_pmids)
 
         # done writing; rename the temp files
-        os.rename(temp_index_path, util.get_index_file(self.path_to_pubmed_abstracts))
-        os.rename(temp_offset_path, util.get_offset_file(self.path_to_pubmed_abstracts))
+        if overwrite_old:
+            self.overwrite_old_index()
