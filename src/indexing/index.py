@@ -141,7 +141,7 @@ class Index():
             if token not in self._token_cache and token not in self._serialized_tokens_from_disk:
                 self._read_bytes_from_disk(token, persist_serialized=True)
 
-        serialized_tokens_by_size = sorted([token for token in tokens], key=lambda t: len(self._serialized_tokens_from_disk[t]))
+        serialized_tokens_by_size = sorted([token for token in tokens if token in self._serialized_tokens_from_disk], key=lambda t: len(self._serialized_tokens_from_disk[t]))
 
         for i, token in enumerate(serialized_tokens_by_size):
             # deserialize the set
