@@ -134,6 +134,7 @@ class Index():
         token_loc_in_phrase = max(i for i, val in enumerate(tokens) if val == least_freq_token)
 
         for pmid in possible_pmids:
+            ngram_found_in_pmid = False
             start_locs = self._token_cache[least_freq_token][pmid]
 
             if type(start_locs) is int:
@@ -201,13 +202,6 @@ class Index():
             deserialized_dict = pickle.loads(stored_bytes)
             self._token_cache[token] = deserialized_dict
         gc.enable()
-
-    def _cache_value_len(self, token):
-        val = self._token_cache[token]
-        if type(val) is int:
-            return 1
-        else:
-            return len(val)
 
 def _intersect_dict_keys(dicts: 'list[dict]'):
     lowest_n_keys = sorted(dicts, key=lambda x: len(x))[0]
