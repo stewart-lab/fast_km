@@ -36,7 +36,7 @@ def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.
 
     # query the index (handling synonyms if appropriate)
     a_term_set = _construct_abstract_set(a_term, idx)
-    b_term_set = _construct_abstract_set(b_term, idx)
+    b_term_set = _construct_abstract_set(b_term, idx, a_term_set)
 
     # censor by year if applicable
     if censor_year is not math.inf:
@@ -71,21 +71,21 @@ def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.
 
     return result
 
-def _construct_abstract_set(term: str, idx: Index) -> set:
+def _construct_abstract_set(term: str, idx: Index, req_pmids: 'set[int]' = None) -> set:
     # TODO: support parenthesis for allowing OR and AND at the same time?
     # e.g., "(cancer/carcinoma) & BRCA1"
     if logical_or in term:
         terms = term.split(logical_or)
         pmid_set = set()
         for synonym in terms:
-            pmid_set.update(idx.query_index(synonym))
+            pmid_set.update(idx.query_index(synonym, req_pmids))
     elif logical_and in term:
         terms = term.split(logical_and)
         pmid_set = idx.query_index(terms[0])
         for t in terms[1:]:
-            pmid_set.intersection_update(idx.query_index(t))
+            pmid_set.intersection_update(idx.query_index(t, req_pmids))
     else:
-        pmid_set = idx.query_index(term)
+        pmid_set = idx.query_index(term, req_pmids)
 
     return pmid_set
 
