@@ -11,3 +11,4 @@ project/tests/htmlcov
 ./.env
 *Icon*
 **/Index/**
+**venv**

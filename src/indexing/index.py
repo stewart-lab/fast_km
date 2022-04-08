@@ -126,20 +126,26 @@ class Index():
             return possible_pmids
 
         # handle >1-grams
+
+        # find least-frequently occurring token to minimize the number of places we have to look
+        least_freq_token = sorted([token for token in tokens], key=lambda token: len(self._token_cache[token]))[0]
+
+        # get the position of the token in the phrase
+        token_loc_in_phrase = max(i for i, val in enumerate(tokens) if val == least_freq_token)
+
         for pmid in possible_pmids:
-            ngram_found_in_pmid = False
-            token0_locations = self._token_cache[tokens[0]][pmid]
+            start_locs = self._token_cache[least_freq_token][pmid]
 
-            if type(token0_locations) is int:
-                token0_locations = [token0_locations]
+            if type(start_locs) is int:
+                start_locs = [start_locs]
 
-            for start in token0_locations:
-                for t, token in enumerate(tokens[1:], 1):
+            for start_loc in start_locs:
+                for i, token in enumerate(tokens):
                     locations = self._token_cache[token][pmid]
-                    expected_location = start + t
+                    expected_location = start_loc + i - token_loc_in_phrase
 
                     if (type(locations) is int and expected_location == locations) or (type(locations) is list and expected_location in locations):
-                        if t == len(tokens) - 1:
+                        if i == len(tokens) - 1:
                             ngram_found_in_pmid = True
                     else:
                         break
@@ -195,6 +201,13 @@ class Index():
             deserialized_dict = pickle.loads(stored_bytes)
             self._token_cache[token] = deserialized_dict
         gc.enable()
+
+    def _cache_value_len(self, token):
+        val = self._token_cache[token]
+        if type(val) is int:
+            return 1
+        else:
+            return len(val)
 
 def _intersect_dict_keys(dicts: 'list[dict]'):
     lowest_n_keys = sorted(dicts, key=lambda x: len(x))[0]
