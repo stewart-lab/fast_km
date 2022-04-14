@@ -17,9 +17,9 @@ class Index():
 
         self._pubmed_dir = pubmed_abstract_dir
         self._bin_path = util.get_index_file(pubmed_abstract_dir)
-        self._txt_path = util.get_offset_file(pubmed_abstract_dir)
+        self._offsets_path = util.get_offset_file(pubmed_abstract_dir)
         self._abstract_catalog = util.get_abstract_catalog(pubmed_abstract_dir)
-        self._offset_trie = dict()
+        self._byte_offsets = dict()
         self._publication_years = dict()
         self._init_byte_info()
         self._open_connection()
@@ -36,8 +36,8 @@ class Index():
 
         tokens = util.get_tokens(query)
 
-        if len(tokens) > 10:
-            raise ValueError("Query must have <=10 words")
+        if len(tokens) > 100:
+            raise ValueError("Query must have <=100 words")
         if not tokens:
             return set()
 
@@ -91,17 +91,17 @@ class Index():
         self.connection = mmap.mmap(self.file_obj.fileno(), length=0, access=mmap.ACCESS_READ)
 
     def _init_byte_info(self) -> None:
-        if not os.path.exists(self._txt_path):
+        if not os.path.exists(self._offsets_path):
             return
 
-        with open(self._txt_path, 'r', encoding=util.encoding) as t:
+        with open(self._offsets_path, 'r', encoding=util.encoding) as t:
             for index, line in enumerate(t):
                 split = line.split(sep=delim)
                 key = split[0]
                 byte_offset = int(split[1].strip())
                 byte_len = int(split[2].strip())
 
-                self._offset_trie[key] = (byte_offset, byte_len)
+                self._byte_offsets[key] = (byte_offset, byte_len)
 
         catalog = AbstractCatalog(self._pubmed_dir)
         cat_path = util.get_abstract_catalog(self._pubmed_dir)
@@ -111,69 +111,49 @@ class Index():
     def _query_disk(self, tokens: 'list[str]') -> 'set[int]':
         result = set()
 
-        if tokens[0] in self._token_cache:
-            token0_pmids = self._token_cache[tokens[0]]
-        else:
-            token0_pmids = self._read_token_from_disk(tokens[0])
-            self._token_cache[tokens[0]] = token0_pmids
+        possible_pmids = set()
+        for i, token in enumerate(tokens):
+            # deserialize the tokens
+            if token not in self._token_cache:
+                self._token_cache[token] = self._read_token_from_disk(token)
+
+        # find the set of PMIDs that contain all of the tokens
+        # (not necessarily in order)
+        possible_pmids = _intersect_dict_keys([self._token_cache[token] for token in tokens])
 
         # handle 1-grams
         if len(tokens) == 1:
-            for key in token0_pmids:
-                result.add(key)
-            return result
+            return possible_pmids
 
         # handle >1-grams
-        for pmid in token0_pmids:
-            possibly_in_pmid = True
+        for pmid in possible_pmids:
+            ngram_found_in_pmid = False
+            token0_locations = self._token_cache[tokens[0]][pmid]
 
-            l = 0
-            while True:
-                if type(token0_pmids[pmid]) is list:
-                    if l == len(token0_pmids[pmid]) - 1:
-                        break
+            if type(token0_locations) is int:
+                token0_locations = [token0_locations]
 
-                    loc_0 = token0_pmids[pmid][l]
-                else:
-                    loc_0 = token0_pmids[pmid]
-                    if l == 1:
-                        break
+            for start in token0_locations:
+                for t, token in enumerate(tokens[1:], 1):
+                    locations = self._token_cache[token][pmid]
+                    expected_location = start + t
 
-                ngram_found_in_pmid = False
-
-                for i, token in enumerate(tokens):
-                    if i == 0: # or token == query_wildcard:
-                        continue
-
-                    if token in self._token_cache:
-                        token_pmids = self._token_cache[token]
-                    else:
-                        token_pmids = self._read_token_from_disk(token)
-                        self._token_cache[token] = token_pmids
-
-                    if pmid not in token_pmids:
-                        possibly_in_pmid = False
-                        break
-
-                    loc = loc_0 + i
-                    if loc == token_pmids[pmid] or (type(token_pmids[pmid]) is list and loc in token_pmids[pmid]):
-                        if i == len(tokens) - 1:
+                    if (type(locations) is int and expected_location == locations) or (type(locations) is list and expected_location in locations):
+                        if t == len(tokens) - 1:
                             ngram_found_in_pmid = True
                     else:
                         break
 
-                if not possibly_in_pmid or ngram_found_in_pmid:
+                if ngram_found_in_pmid:
                     break
 
-                l += 1
-            
             if ngram_found_in_pmid:
                 result.add(pmid)
 
         return result
 
     def _read_token_from_disk(self, token: str) -> dict:
-        if token not in self._offset_trie:
+        if token not in self._byte_offsets:
             self._token_cache[token] = dict()
         elif token not in self._token_cache:
             stored_bytes = self._read_bytes_from_disk(token)
@@ -189,10 +169,25 @@ class Index():
         return self._token_cache[token]
 
     def _read_bytes_from_disk(self, token: str) -> bytes:
-        byte_info = self._offset_trie[token]
+        byte_info = self._byte_offsets[token]
         byte_offset = byte_info[0]
         byte_len = byte_info[1]
 
         self.connection.seek(byte_offset)
         stored_bytes = self.connection.read(byte_len)
         return stored_bytes
+
+def _intersect_dict_keys(dicts: 'list[dict]'):
+    lowest_n_keys = sorted(dicts, key=lambda x: len(x))[0]
+    key_intersect = set(lowest_n_keys.keys())
+
+    if len(dicts) == 1:
+        return key_intersect
+
+    for key in lowest_n_keys:
+        for item in dicts:
+            if key not in item:
+                key_intersect.remove(key)
+                break
+
+    return key_intersect
