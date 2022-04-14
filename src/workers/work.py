@@ -1,4 +1,5 @@
 import math
+import indexing.index
 from rq import get_current_job, Queue
 from rq.worker import Worker
 from redis import Redis
@@ -12,6 +13,7 @@ _r = Redis(host='redis', port=6379)
 _q = Queue(connection=_r)
 
 def km_work(json: list):
+    indexing.index._connect_to_mongo()
     return_val = []
 
     if len(json) > 100000:

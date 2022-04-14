@@ -26,6 +26,11 @@ services:
     networks:
       - fast_km-network
 
+  mongo:
+    image: mongo
+    networks:
+      - fast_km-network
+
   redis:
     image: redis
     networks:
