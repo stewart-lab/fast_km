@@ -43,7 +43,7 @@ def test_index_abstract(tmp_path):
     query = the_index.query_index("are are are")
     assert query == set([abs2.pmid])
 
-    query = the_index.query_index("are are are some", set([abs2.pmid]))
+    query = the_index.query_index("are are are some")
     assert len(query) == 0
 
     query = the_index.query_index("are are are quick")
