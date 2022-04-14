@@ -16,8 +16,8 @@ def km_work(json: list):
     indexing.index._connect_to_mongo()
     return_val = []
 
-    if len(json) > 100000:
-        raise ValueError('Must be <=100000 queries')
+    if len(json) > 1000000:
+        raise ValueError('Must be <=1000000 queries')
 
     for item in json:
         a_term = item['a_term']
@@ -50,6 +50,7 @@ def km_work(json: list):
     return return_val
 
 def skim_work(json: dict):
+    indexing.index._connect_to_mongo()
     return_val = []
 
     a_terms = json['a_terms']
@@ -125,6 +126,7 @@ def skim_work(json: dict):
     return return_val
 
 def triple_miner_work(json: list):
+    indexing.index._connect_to_mongo()
     km_set = []
 
     for query in json:
