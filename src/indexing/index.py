@@ -40,6 +40,7 @@ class Index():
             return self._query_cache[query]
         else:
             cached_result = _check_mongo_for_query(query)
+            self._query_cache[query] = result
             if not isinstance(cached_result, type(None)):
                 return cached_result
 
