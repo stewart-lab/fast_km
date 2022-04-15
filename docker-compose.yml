@@ -28,6 +28,7 @@ services:
 
   mongo:
     image: mongo
+    command: --quiet
     networks:
       - fast_km-network
 

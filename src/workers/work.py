@@ -146,6 +146,7 @@ def triple_miner_work(json: list):
     return km_work(km_set)
 
 def update_index_work(json: dict):
+    indexing.index._connect_to_mongo()
     if 'n_files' in json:
         n_files = json['n_files']
     else:
@@ -175,19 +176,24 @@ def update_index_work(json: dict):
     index_builder = IndexBuilder(li.pubmed_path)
     index_builder.build_index(overwrite_old=False) # wait to remove old index
 
-    # restart the workers
+    # restart the workers (TODO: except this one)
     _update_job_status('progress', 'restarting workers')
-    interrupted_jobs = restart_workers(requeue_interrupted_jobs=False)
+    interrupted_jobs = _restart_workers(requeue_interrupted_jobs=False)
 
     # remove the old index
     index_builder.overwrite_old_index()
+    clear_mongo_cache()
 
     # re-queue interrupted jobs
     _queue_jobs(interrupted_jobs)
 
     _update_job_status('progress', 'finished')
 
-def restart_workers(requeue_interrupted_jobs = True):
+def clear_mongo_cache():
+    indexing.index._connect_to_mongo()
+    indexing.index._empty_mongo()
+
+def _restart_workers(requeue_interrupted_jobs = True):
     print('restarting workers...')
     workers = Worker.all(_r)
 

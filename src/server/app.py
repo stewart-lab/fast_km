@@ -4,7 +4,7 @@ import rq_dashboard
 from redis import Redis
 from rq import Queue
 from flask_restful import Api
-from workers.work import km_work, skim_work, triple_miner_work, update_index_work
+from workers.work import km_work, skim_work, triple_miner_work, update_index_work, clear_mongo_cache
 import logging
 from flask_bcrypt import Bcrypt
 
@@ -127,3 +127,8 @@ def _post_update_index_job():
 @_app.route('/update_index/api/jobs/', methods=['GET'])
 def _get_update_index_job():
     return _get_generic(request)
+
+## ******** Clear MongoDB Cache Post ********
+@_app.route('/clear_cache/api/jobs/', methods=['POST'])
+def _post_clear_cache_job():
+    return _post_generic(clear_mongo_cache, request)

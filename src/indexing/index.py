@@ -54,8 +54,9 @@ class Index():
         result = self._query_disk(tokens)
         run_time = time.perf_counter() - start_time
 
-        max_token_size = max([len(self._token_cache[t]) for t in tokens])
-        if (max_token_size > 100000 or run_time > 0.1) and len(result) < 1000:
+        token_size = max([len(self._token_cache[t]) for t in tokens])
+        query_size = len(result)
+        if query_size < 10000 and (token_size > 50000 or run_time > 0.05):
             _place_in_mongo(query, result)
 
         self._query_cache[query] = result
