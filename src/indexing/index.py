@@ -54,9 +54,9 @@ class Index():
         result = self._query_disk(tokens)
         run_time = time.perf_counter() - start_time
 
-        token_size = max([len(self._token_cache[t]) for t in tokens])
+        token_byte_size = max([self._byte_offsets.get(t, (0, 0))[1] for t in tokens])
         query_size = len(result)
-        if query_size < 10000 and (token_size > 50000 or run_time > 0.05):
+        if query_size < 10000 and (token_byte_size > 500000 or run_time > 0.05):
             _place_in_mongo(query, result)
 
         self._query_cache[query] = result
@@ -211,23 +211,24 @@ def _intersect_dict_keys(dicts: 'list[dict]'):
     return key_intersect
 
 def _connect_to_mongo():
+    # TODO: set expiration time for cached items (72h, etc.?)
+    # mongo_cache.create_index('query', unique=True) #expireafterseconds=72 * 60 * 60, 
     global mongo_cache
     try:
         loc = 'mongo'
         client = pymongo.MongoClient(loc, 27017)
         db = client["query_cache_db"]
         mongo_cache = db["query_cache"]
-        mongo_cache.create_index('query', unique=True) #expireafterseconds=72 * 60 * 60, 
+        mongo_cache.create_index('query', unique=True)
     except:
         print('Warning: could not find a MongoDB instance to use as a query cache')
-        pass
+        mongo_cache = None
 
 def _check_mongo_for_query(query: str):
     if not isinstance(mongo_cache, type(None)):
         result = mongo_cache.find_one({'query': query})
 
         if not isinstance(result, type(None)):
-            print('fetched ' + query + ' from mongo cache')
             return set(result['result'])
         else:
             return None
@@ -238,7 +239,7 @@ def _place_in_mongo(query, result):
     if not isinstance(mongo_cache, type(None)):
         try:
             mongo_cache.insert_one({'query': query, 'result': list(result)})
-            print('posted ' + query + ' to mongo cache')
+            print('posted \'' + query + '\' to mongo cache')
         except errors.DuplicateKeyError:
             # tried to insert and got a duplicate key error. probably just the result
             # of a race condition (another worker added the query record).
