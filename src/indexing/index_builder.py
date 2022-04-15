@@ -4,6 +4,7 @@ from io import BytesIO
 import indexing.km_util as util
 from indexing.abstract import Abstract
 from indexing.abstract_catalog import AbstractCatalog
+import indexing.index
 
 delim = '\t'
 
@@ -19,6 +20,8 @@ class IndexBuilder():
         abstract_catalog.catalog.clear() # saves RAM
 
         print('building index...')
+        indexing.index._empty_mongo()
+
         # build the index
         catalog_path = util.get_abstract_catalog(self.path_to_pubmed_abstracts)
         cold_storage = dict()

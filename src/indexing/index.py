@@ -54,7 +54,8 @@ class Index():
         result = self._query_disk(tokens)
         run_time = time.perf_counter() - start_time
 
-        if run_time > 0.1 and len(result) < 1000:
+        max_token_size = max([len(self._token_cache[t]) for t in tokens])
+        if (max_token_size > 100000 or run_time > 0.1) and len(result) < 1000:
             _place_in_mongo(query, result)
 
         self._query_cache[query] = result
@@ -222,8 +223,6 @@ def _connect_to_mongo():
 
 def _check_mongo_for_query(query: str):
     if not isinstance(mongo_cache, type(None)):
-        print('fetching ' + query + ' from mongo cache')
-
         result = mongo_cache.find_one({'query': query})
 
         if not isinstance(result, type(None)):
@@ -232,13 +231,10 @@ def _check_mongo_for_query(query: str):
         else:
             return None
     else:
-        print('no mongo cache to fetch from')
         return None
 
 def _place_in_mongo(query, result):
     if not isinstance(mongo_cache, type(None)):
-        print('posting ' + query + ' to mongo cache')
-
         try:
             mongo_cache.insert_one({'query': query, 'result': list(result)})
             print('posted ' + query + ' to mongo cache')
@@ -248,4 +244,9 @@ def _place_in_mongo(query, result):
             # it's fine, just continue on.
             pass
     else:
-        print('no mongo cache to post to')
+        pass
+
+def _empty_mongo():
+    if not isinstance(mongo_cache, type(None)):
+        x = mongo_cache.delete_many({})
+        print('mongodb cache cleared, ' + str(x.deleted_count) + ' items were deleted')
