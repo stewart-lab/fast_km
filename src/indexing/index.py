@@ -50,13 +50,9 @@ class Index():
         if not tokens:
             return set()
 
-        start_time = time.perf_counter()
         result = self._query_disk(tokens)
-        run_time = time.perf_counter() - start_time
 
-        token_byte_size = max([self._byte_offsets.get(t, (0, 0))[1] for t in tokens])
-        query_size = len(result)
-        if query_size < 10000 and (token_byte_size > 500000 or run_time > 0.05):
+        if len(result) < 10000:
             _place_in_mongo(query, result)
 
         self._query_cache[query] = result
