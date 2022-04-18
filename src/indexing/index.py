@@ -39,10 +39,10 @@ class Index():
         if query in self._query_cache:
             return self._query_cache[query]
         else:
-            cached_result = _check_mongo_for_query(query)
-            if not isinstance(cached_result, type(None)):
-                self._query_cache[query] = cached_result
-                return cached_result
+            result = _check_mongo_for_query(query)
+            if not isinstance(result, type(None)):
+                self._query_cache[query] = result
+                return result
 
         tokens = util.get_tokens(query)
 

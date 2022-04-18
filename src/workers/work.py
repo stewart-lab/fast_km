@@ -189,7 +189,7 @@ def update_index_work(json: dict):
 
     _update_job_status('progress', 'finished')
 
-def clear_mongo_cache():
+def clear_mongo_cache(json):
     indexing.index._connect_to_mongo()
     indexing.index._empty_mongo()
 
