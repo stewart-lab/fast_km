@@ -16,8 +16,8 @@ def km_work(json: list):
     indexing.index._connect_to_mongo()
     return_val = []
 
-    if len(json) > 1000000:
-        raise ValueError('Must be <=1000000 queries')
+    if len(json) > 1000000000:
+        raise ValueError('Must be <=1000000000 queries')
 
     for item in json:
         a_term = item['a_term']

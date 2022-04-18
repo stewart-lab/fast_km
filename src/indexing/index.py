@@ -223,7 +223,11 @@ def _connect_to_mongo():
 
 def _check_mongo_for_query(query: str):
     if not isinstance(mongo_cache, type(None)):
-        result = mongo_cache.find_one({'query': query})
+        try:
+            result = mongo_cache.find_one({'query': query})
+            print('warning: non-fatal error in retrieving from mongo')
+        except:
+            return None
 
         if not isinstance(result, type(None)):
             return set(result['result'])
@@ -231,6 +235,7 @@ def _check_mongo_for_query(query: str):
             return None
     else:
         return None
+    
 
 def _place_in_mongo(query, result):
     if not isinstance(mongo_cache, type(None)):
@@ -240,6 +245,10 @@ def _place_in_mongo(query, result):
             # tried to insert and got a duplicate key error. probably just the result
             # of a race condition (another worker added the query record).
             # it's fine, just continue on.
+            pass
+        except errors.AutoReconnect:
+            # not sure what this error is. seems to throw occasionally. just ignore it.
+            print('warning: non-fatal AutoReconnect error in inserting to mongo')
             pass
     else:
         pass
