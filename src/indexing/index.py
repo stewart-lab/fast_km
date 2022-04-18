@@ -225,8 +225,8 @@ def _check_mongo_for_query(query: str):
     if not isinstance(mongo_cache, type(None)):
         try:
             result = mongo_cache.find_one({'query': query})
-            print('warning: non-fatal error in retrieving from mongo')
         except:
+            print('warning: non-fatal error in retrieving from mongo')
             return None
 
         if not isinstance(result, type(None)):
