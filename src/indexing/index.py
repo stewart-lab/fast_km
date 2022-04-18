@@ -213,7 +213,7 @@ def _connect_to_mongo():
     global mongo_cache
     try:
         loc = 'mongo'
-        client = pymongo.MongoClient(loc, 27017)
+        client = pymongo.MongoClient(loc, 27017, serverSelectionTimeoutMS = 500, connectTimeoutMS = 500)
         db = client["query_cache_db"]
         mongo_cache = db["query_cache"]
         mongo_cache.create_index('query', unique=True)
