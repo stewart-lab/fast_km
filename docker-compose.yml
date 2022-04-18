@@ -7,7 +7,7 @@ services:
     image: fast_km-server:build
     command: --pw ${PASSWORD_HASH}  # edit .env file to change password
     ports:
-      - "5001:5000"
+      - "5099:5000"  # HOST_PORT:CONTAINER_PORT
     depends_on:
       - redis
     networks:
@@ -23,6 +23,12 @@ services:
       - ${PUBMED_DIR}:/mnt/pubmed  # edit .env file to change pubmed dir
     depends_on:
       - redis
+    networks:
+      - fast_km-network
+
+  mongo:
+    image: mongo
+    command: --quiet --logpath /dev/null
     networks:
       - fast_km-network
 

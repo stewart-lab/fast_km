@@ -3,10 +3,14 @@ import pickle
 import math
 import os
 import gc
+import time
+import pymongo
+from pymongo import errors
 import indexing.km_util as util
 from indexing.abstract_catalog import AbstractCatalog
 
 delim = '\t'
+mongo_cache = None
 
 class Index():
     def __init__(self, pubmed_abstract_dir: str):
@@ -14,6 +18,7 @@ class Index():
         self._query_cache = dict()
         self._token_cache = dict()
         self._n_articles_by_pub_year = dict()
+        _connect_to_mongo()
 
         self._pubmed_dir = pubmed_abstract_dir
         self._bin_path = util.get_index_file(pubmed_abstract_dir)
@@ -33,6 +38,11 @@ class Index():
 
         if query in self._query_cache:
             return self._query_cache[query]
+        else:
+            result = _check_mongo_for_query(query)
+            if not isinstance(result, type(None)):
+                self._query_cache[query] = result
+                return result
 
         tokens = util.get_tokens(query)
 
@@ -42,7 +52,12 @@ class Index():
             return set()
 
         result = self._query_disk(tokens)
+
+        if len(result) < 10000 or len(tokens) > 1:
+            _place_in_mongo(query, result)
+
         self._query_cache[query] = result
+
         return result
 
     def censor_by_year(self, pmids: 'set[int]', censor_year: int) -> 'set[int]':
@@ -191,3 +206,54 @@ def _intersect_dict_keys(dicts: 'list[dict]'):
                 break
 
     return key_intersect
+
+def _connect_to_mongo():
+    # TODO: set expiration time for cached items (72h, etc.?)
+    # mongo_cache.create_index('query', unique=True) #expireafterseconds=72 * 60 * 60, 
+    global mongo_cache
+    try:
+        loc = 'mongo'
+        client = pymongo.MongoClient(loc, 27017, serverSelectionTimeoutMS = 500, connectTimeoutMS = 500)
+        db = client["query_cache_db"]
+        mongo_cache = db["query_cache"]
+        mongo_cache.create_index('query', unique=True)
+    except:
+        print('warning: could not find a MongoDB instance to use as a query cache')
+        mongo_cache = None
+
+def _check_mongo_for_query(query: str):
+    if not isinstance(mongo_cache, type(None)):
+        try:
+            result = mongo_cache.find_one({'query': query})
+        except:
+            print('warning: non-fatal error in retrieving from mongo')
+            return None
+
+        if not isinstance(result, type(None)):
+            return set(result['result'])
+        else:
+            return None
+    else:
+        return None
+    
+
+def _place_in_mongo(query, result):
+    if not isinstance(mongo_cache, type(None)):
+        try:
+            mongo_cache.insert_one({'query': query, 'result': list(result)})
+        except errors.DuplicateKeyError:
+            # tried to insert and got a duplicate key error. probably just the result
+            # of a race condition (another worker added the query record).
+            # it's fine, just continue on.
+            pass
+        except errors.AutoReconnect:
+            # not sure what this error is. seems to throw occasionally. just ignore it.
+            print('warning: non-fatal AutoReconnect error in inserting to mongo')
+            pass
+    else:
+        pass
+
+def _empty_mongo():
+    if not isinstance(mongo_cache, type(None)):
+        x = mongo_cache.delete_many({})
+        print('mongodb cache cleared, ' + str(x.deleted_count) + ' items were deleted')
