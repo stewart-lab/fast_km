@@ -11,9 +11,6 @@ import indexing.download_abstracts as downloader
 _r = Redis(host='redis', port=6379)
 _q = Queue(connection=_r)
 
-def compare(a):
-    return li.the_index.citation_count[str(a)]
-
 def km_work(json: list):
     return_val = []
 
@@ -116,17 +113,26 @@ def skim_work(json: dict):
                     }
 
                 if return_pmids:
-                    ct_ab = dict()
-                    for pmid in sorted(ab['pmid_intersection'], key=compare, reverse=True)[:5]:
-                        ct_ab[pmid] = li.the_index.citation_count[str(pmid)]
+                    if li.the_index.citation_count == None:
+                        abc_result['ab_pmid_intersection'] = 'No Info'
+                        abc_result['bc_pmid_intersection'] = 'No Info'
+                    else:
+                        ct_ab = dict()
+                        count = 10
+                        if 'top_n_articles' in json:
+                            count = int(json['top_n_articles'])
+                        
+                        for pmid in sorted(ab['pmid_intersection'], key=lambda pmid: -li.the_index.citation_count.get(str(pmid), 0)):
+                            ct_ab[pmid] = li.the_index.citation_count.get(str(pmid), 0)
 
-                    
-                    ct_bc = dict()
-                    for pmid in sorted(bc['pmid_intersection'], key=compare, reverse=True)[:5]:
-                        ct_bc[pmid] = li.the_index.citation_count[str(pmid)]
+                        
+                        ct_bc = dict()
+                        for pmid in sorted(bc['pmid_intersection'], key=lambda pmid: -li.the_index.citation_count.get(str(pmid), 0)):
+                            ct_bc[pmid] = li.the_index.citation_count.get(str(pmid), 0)
+                            
 
-                    abc_result['ab_pmid_intersection'] = str(ct_ab)
-                    abc_result['bc_pmid_intersection'] = str(ct_bc)
+                        abc_result['ab_pmid_intersection'] = str(ct_ab)
+                        abc_result['bc_pmid_intersection'] = str(ct_bc)
 
                 return_val.append(abc_result)
                 _update_job_status('progress', i + 1)

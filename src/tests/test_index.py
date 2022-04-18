@@ -78,13 +78,15 @@ def test_citation_count(tmp_path):
     abs3 = Abstract(1002, 2022, "sdfsb  rgtd gfhdfg",
         "Test repeat test repeat")
     ct = {1000:1, 1001:2, 1002:3}
-    with open(str(tmp_path) + "/test.json", "w", encoding="utf-8") as f:
-            json.dump(ct, f)
+    
     cataloger.add_or_update_abstract(abs1)
     cataloger.add_or_update_abstract(abs2)
     cataloger.add_or_update_abstract(abs3)
     cataloger.write_catalog_to_disk(util.get_abstract_catalog(tmp_path))
 
+    with open(util.get_icite_file(tmp_path), "w", encoding="utf-8") as f:
+        json.dump(ct, f)
+        
     indexer = IndexBuilder(tmp_path)
     hot_storage = dict()
     cold_storage = dict()

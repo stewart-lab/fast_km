@@ -86,8 +86,12 @@ class Index():
             del self._query_cache[ltoken]
 
     def _load_citation_data(self) -> None:
-        with open(str(self._pubmed_dir) + "/test.json", encoding="utf-8") as f:
-            self.citation_count = json.load(f)
+        try:
+            with open(util.get_icite_file(self._pubmed_dir), encoding="utf-8") as f:
+                self.citation_count = json.load(f)
+        except:
+            self.citation_count = None
+            print("Citation count data does not exist.")
 
     def _open_connection(self) -> None:
         if not os.path.exists(self._bin_path):

@@ -64,3 +64,6 @@ def get_offset_file(abstracts_dir: str) -> str:
 
 def get_cataloged_files(abstracts_dir: str) -> str:
     return os.path.join(get_index_dir(abstracts_dir), 'cataloged.txt')
+
+def get_icite_file(abstracts_dir: str) -> str:
+    return os.path.join(get_index_dir(abstracts_dir), 'icite.json')
