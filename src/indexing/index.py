@@ -218,7 +218,7 @@ def _connect_to_mongo():
         mongo_cache = db["query_cache"]
         mongo_cache.create_index('query', unique=True)
     except:
-        print('Warning: could not find a MongoDB instance to use as a query cache')
+        print('warning: could not find a MongoDB instance to use as a query cache')
         mongo_cache = None
 
 def _check_mongo_for_query(query: str):
@@ -236,7 +236,6 @@ def _place_in_mongo(query, result):
     if not isinstance(mongo_cache, type(None)):
         try:
             mongo_cache.insert_one({'query': query, 'result': list(result)})
-            print('posted \'' + query + '\' to mongo cache')
         except errors.DuplicateKeyError:
             # tried to insert and got a duplicate key error. probably just the result
             # of a race condition (another worker added the query record).
