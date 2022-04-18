@@ -69,7 +69,7 @@ def _post_generic(work, request, job_timeout = 43200):
 
 def _get_generic(request):
     if not _authenticate(request):
-        return 'Invalid password. do request.post(..., auth=(\'username\', \'password\'))', 401
+        return 'Invalid password. do request.get(..., auth=(\'username\', \'password\'))', 401
 
     id = request.args['id']
     job = _q.fetch_job(id)
