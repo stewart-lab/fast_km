@@ -78,7 +78,6 @@ def skim_work(json: dict):
 
         for b_term in b_terms:
             res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids)
-
             if res['pvalue'] <= ab_fet_threshold:
                 ab_results.append(res)
 
@@ -117,8 +116,26 @@ def skim_work(json: dict):
                     }
 
                 if return_pmids:
-                    abc_result['ab_pmid_intersection'] = str(ab['pmid_intersection'])
-                    abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
+                    if li.the_index.citation_count == None:
+                        abc_result['ab_pmid_intersection'] = 'No Info'
+                        abc_result['bc_pmid_intersection'] = 'No Info'
+                    else:
+                        ct_ab = dict()
+                        count = 10
+                        if 'top_n_articles' in json:
+                            count = int(json['top_n_articles'])
+                        
+                        for pmid in sorted(ab['pmid_intersection'], key=lambda pmid: -int(li.the_index.citation_count.get(str(pmid), 0))):
+                            ct_ab[pmid] = li.the_index.citation_count.get(str(pmid), 0)
+
+                        
+                        ct_bc = dict()
+                        for pmid in sorted(bc['pmid_intersection'], key=lambda pmid: -int(li.the_index.citation_count.get(str(pmid), 0))):
+                            ct_bc[pmid] = li.the_index.citation_count.get(str(pmid), 0)
+                            
+
+                        abc_result['ab_pmid_intersection'] = str(ct_ab)
+                        abc_result['bc_pmid_intersection'] = str(ct_bc)
 
                 return_val.append(abc_result)
                 _update_job_status('progress', i + 1)

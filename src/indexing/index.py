@@ -3,6 +3,7 @@ import pickle
 import math
 import os
 import gc
+import json
 import time
 import pymongo
 from pymongo import errors
@@ -26,6 +27,8 @@ class Index():
         self._abstract_catalog = util.get_abstract_catalog(pubmed_abstract_dir)
         self._byte_offsets = dict()
         self._publication_years = dict()
+        self.citation_count = dict()
+        self._load_citation_data()
         self._init_byte_info()
         self._open_connection()
 
@@ -96,6 +99,14 @@ class Index():
             del self._token_cache[ltoken]
         if ltoken in self._query_cache:
             del self._query_cache[ltoken]
+
+    def _load_citation_data(self) -> None:
+        try:
+            with open(util.get_icite_file(self._pubmed_dir), encoding="utf-8") as f:
+                self.citation_count = json.load(f)
+        except:
+            self.citation_count = None
+            print("Citation count data does not exist.")
 
     def _open_connection(self) -> None:
         if not os.path.exists(self._bin_path):
