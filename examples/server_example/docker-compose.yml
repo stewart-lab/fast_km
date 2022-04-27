@@ -1,30 +1,39 @@
 version: "3.3"
 services:
   server:
-    image: rmillikin/fast_km-server:dev
+    image: rmillikin/fast_km-server:latest
+    container_name: fast_km-server
+    command: --pw ${PASSWORD_HASH} # edit .env file to change this
     ports:
-      - "5000:5000"
+      - "5099:5000" # HOST_PORT:CONTAINER_PORT
     depends_on:
       - redis
-    resources:
-      limits:
-        cpus: '3.0'
-        memory: '12gb'
+    networks:
+      - fast_km-network
 
   workers:
-    image: rmillikin/fast_km-worker:dev
-    command: python -u src/run_worker.py --workers 1
+    image: rmillikin/fast_km-worker:latest
+    container_name: fast_km-worker
+    command: --workers 3
     volumes:
-      - ${PUBMED_DIR}:/mnt/pubmed  # edit .env file to change pubmed dir
+      - ${PUBMED_DIR}:/mnt/pubmed  # edit .env file to change this
     depends_on:
       - redis
-    resources:
-      limits:
-        cpus: '10.0'
-        memory: '128gb'
+    networks:
+      - fast_km-network
+
+  mongo:
+    image: mongo
+    container_name: fast_km-mongo
+    command: --quiet --logpath /dev/null
+    networks:
+      - fast_km-network
 
   redis:
     image: redis
-    resources:
-      limits:
-        memory: '1gb'
+    container_name: fast_km-redis
+    networks:
+      - fast_km-network
+
+networks:
+  fast_km-network:

@@ -1,4 +1,5 @@
 import math
+import indexing.index
 from rq import get_current_job, Queue
 from rq.worker import Worker
 from redis import Redis
@@ -12,10 +13,11 @@ _r = Redis(host='redis', port=6379)
 _q = Queue(connection=_r)
 
 def km_work(json: list):
+    indexing.index._connect_to_mongo()
     return_val = []
 
-    if len(json) > 100000:
-        raise ValueError('Must be <=100000 queries')
+    if len(json) > 1000000000:
+        raise ValueError('Must be <=1000000000 queries')
 
     for item in json:
         a_term = item['a_term']
@@ -48,6 +50,7 @@ def km_work(json: list):
     return return_val
 
 def skim_work(json: dict):
+    indexing.index._connect_to_mongo()
     return_val = []
 
     a_terms = json['a_terms']
@@ -140,6 +143,7 @@ def skim_work(json: dict):
     return return_val
 
 def triple_miner_work(json: list):
+    indexing.index._connect_to_mongo()
     km_set = []
 
     for query in json:
@@ -159,6 +163,7 @@ def triple_miner_work(json: list):
     return km_work(km_set)
 
 def update_index_work(json: dict):
+    indexing.index._connect_to_mongo()
     if 'n_files' in json:
         n_files = json['n_files']
     else:
@@ -188,19 +193,24 @@ def update_index_work(json: dict):
     index_builder = IndexBuilder(li.pubmed_path)
     index_builder.build_index(overwrite_old=False) # wait to remove old index
 
-    # restart the workers
+    # restart the workers (TODO: except this one)
     _update_job_status('progress', 'restarting workers')
-    interrupted_jobs = restart_workers(requeue_interrupted_jobs=False)
+    interrupted_jobs = _restart_workers(requeue_interrupted_jobs=False)
 
     # remove the old index
     index_builder.overwrite_old_index()
+    clear_mongo_cache()
 
     # re-queue interrupted jobs
     _queue_jobs(interrupted_jobs)
 
     _update_job_status('progress', 'finished')
 
-def restart_workers(requeue_interrupted_jobs = True):
+def clear_mongo_cache(json):
+    indexing.index._connect_to_mongo()
+    indexing.index._empty_mongo()
+
+def _restart_workers(requeue_interrupted_jobs = True):
     print('restarting workers...')
     workers = Worker.all(_r)
 

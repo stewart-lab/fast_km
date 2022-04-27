@@ -34,19 +34,52 @@ def test_kinderminer(data_dir):
     # build the index
     indexer = IndexBuilder(data_dir)
     indexer.build_index()
-    
-    # run kinderminer query
     idx = Index(data_dir)
-    km_result = km.kinderminer_search('cancer', 'brca1', idx, return_pmids=True)
 
-    assert km_result['pmid_intersection'] == {34580114}
+    # test index querying
+    lung_pmids = idx.query_index('lung')
+    tissue_pmids = idx.query_index('tissue')
+    assert len(lung_pmids) == 109
+    assert len(tissue_pmids) == 234
 
-    km_or_result = km.kinderminer_search('cancer/carcinoma', 'brca1', idx)
-    km_and_result = km.kinderminer_search('cancer&carcinoma', 'brca1', idx)
+    # test FET table construction
+    fet_table = km.get_contingency_table(tissue_pmids, lung_pmids, idx.n_articles())
+    assert fet_table == [
+        [16, 218], 
+        [93, 3812]
+    ]
 
-    # assertions
-    assert km_or_result['len(a_term_set)'] > km_result['len(a_term_set)']
-    assert km_and_result['len(a_term_set)'] < km_result['len(a_term_set)']
+    # test KM query results
+    km_result = km.kinderminer_search('significant', 'cancer', idx, return_pmids=True)
+    assert km_result['pvalue'] == pytest.approx(0.486007, abs=1e-6)
+    assert km_result['len(a_term_set)'] == 679
+    assert km_result['len(b_term_set)'] == 301
+    assert km_result['sort_ratio'] == pytest.approx(0.166112, abs=1e-6)
+    assert km_result['n_articles'] == 4139
+    assert len(km_result['pmid_intersection']) == 50
 
-    assert km_or_result['len(b_term_set)'] == km_result['len(b_term_set)']
-    assert km_and_result['len(b_term_set)'] == km_result['len(b_term_set)']
+    # test multi-word term
+    km_result = km.kinderminer_search('a significant', 'cancer', idx, return_pmids=True)
+    assert km_result['pvalue'] == pytest.approx(0.928095, abs=1e-6)
+    assert km_result['len(a_term_set)'] == 217
+    assert km_result['len(b_term_set)'] == 301
+    assert km_result['sort_ratio'] == pytest.approx(0.036544, abs=1e-6)
+    assert km_result['n_articles'] == 4139
+    assert len(km_result['pmid_intersection']) == 11
+
+    # test 'and', 'or' logical operators
+    km_result = km.kinderminer_search('skin', 'cancer/carcinoma', idx, return_pmids=True)
+    assert km_result['pvalue'] == pytest.approx(0.748696, abs=1e-6)
+    assert km_result['len(a_term_set)'] == 76
+    assert km_result['len(b_term_set)'] == 335
+    assert km_result['sort_ratio'] == pytest.approx(0.0149253, abs=1e-6)
+    assert km_result['n_articles'] == 4139
+    assert km_result['pmid_intersection'] == {34579370, 34580336, 34581683, 34579963, 34582109}
+
+    km_result = km.kinderminer_search('skin&treatment', 'cancer', idx, return_pmids=True)
+    assert km_result['pvalue'] == pytest.approx(0.326369, abs=1e-6)
+    assert km_result['len(a_term_set)'] == 16
+    assert km_result['len(b_term_set)'] == 301
+    assert km_result['sort_ratio'] == pytest.approx(0.006644, abs=1e-6)
+    assert km_result['n_articles'] == 4139
+    assert km_result['pmid_intersection'] == {34580336, 34582109}
