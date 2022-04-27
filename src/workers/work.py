@@ -122,12 +122,12 @@ def skim_work(json: dict):
                         if 'top_n_articles' in json:
                             count = int(json['top_n_articles'])
                         
-                        for pmid in sorted(ab['pmid_intersection'], key=lambda pmid: -li.the_index.citation_count.get(str(pmid), 0)):
+                        for pmid in sorted(ab['pmid_intersection'], key=lambda pmid: -int(li.the_index.citation_count.get(str(pmid), 0))):
                             ct_ab[pmid] = li.the_index.citation_count.get(str(pmid), 0)
 
                         
                         ct_bc = dict()
-                        for pmid in sorted(bc['pmid_intersection'], key=lambda pmid: -li.the_index.citation_count.get(str(pmid), 0)):
+                        for pmid in sorted(bc['pmid_intersection'], key=lambda pmid: -int(li.the_index.citation_count.get(str(pmid), 0))):
                             ct_bc[pmid] = li.the_index.citation_count.get(str(pmid), 0)
                             
 

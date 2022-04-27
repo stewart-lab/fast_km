@@ -77,7 +77,7 @@ def test_citation_count(tmp_path):
         "Some of the words are are the repeated repeat but some are-are-are not.")
     abs3 = Abstract(1002, 2022, "sdfsb  rgtd gfhdfg",
         "Test repeat test repeat")
-    ct = {1000:1, 1001:2, 1002:3}
+    ct = {"1000":"1", "1001":"2", "1002":"3"}
     
     cataloger.add_or_update_abstract(abs1)
     cataloger.add_or_update_abstract(abs2)
@@ -114,5 +114,5 @@ def test_citation_count(tmp_path):
         "return_pmids": 'True'
     }
     val = skim_work(query)
-    assert val[0]['bc_pmid_intersection'] == "{1001: 2, 1000: 1}"
+    assert val[0]['bc_pmid_intersection'] == "{1001: '2', 1000: '1'}"
     print(val)
