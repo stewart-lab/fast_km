@@ -1,4 +1,5 @@
 import math
+import sys
 import indexing.index
 from rq import get_current_job, Queue
 from rq.worker import Worker
@@ -49,15 +50,34 @@ def km_work(json: list):
 
     return return_val
 
-def skim_work(json: dict):
+def km_work_all_vs_all(json: dict):
     indexing.index._connect_to_mongo()
     return_val = []
+    km_only = False
 
     a_terms = json['a_terms']
     b_terms = json['b_terms']
-    c_terms = json['c_terms']
-    top_n = json['top_n']
-    ab_fet_threshold = json['ab_fet_threshold']
+
+    if 'c_terms' in json:
+        # SKiM query
+        c_terms = json['c_terms']
+
+        top_n = json['top_n']
+        ab_fet_threshold = json['ab_fet_threshold']
+    else:
+        # KM query
+        km_only = True
+        c_terms = ['__KM_ONLY__'] # dummy variable
+
+        if 'top_n' in json:
+            top_n = json['top_n']
+        else:
+            top_n = sys.maxsize
+
+        if 'ab_fet_threshold' in json:
+            ab_fet_threshold = json['ab_fet_threshold']
+        else:
+            ab_fet_threshold = math.inf
 
     if 'censor_year' in json:
         censor_year = json['censor_year']
@@ -92,33 +112,37 @@ def skim_work(json: dict):
         # take top N per a-b pair and run b-terms against c-terms
         for i, c_term in enumerate(c_terms):
             for ab in ab_results:
-                b_term = ab['b_term']
-                bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year, return_pmids)
-
                 abc_result = {
                         'a_term': ab['a_term'],
                         'b_term': ab['b_term'],
-                        'c_term': c_term,
 
                         'ab_pvalue': ab['pvalue'],
                         'ab_sort_ratio': ab['sort_ratio'],
                         'ab_pred_score': km.get_prediction_score(ab['pvalue'], ab['sort_ratio']),
                         
-                        'bc_pvalue': bc['pvalue'],
-                        'bc_sort_ratio': bc['sort_ratio'],
-                        'bc_pred_score': km.get_prediction_score(bc['pvalue'], bc['sort_ratio']),
-
                         'a_count': ab['len(a_term_set)'],
                         'b_count': ab['len(b_term_set)'],
-                        'c_count': bc['len(b_term_set)'],
                         'ab_count': ab['len(a_b_intersect)'],
-                        'bc_count': bc['len(a_b_intersect)'],
-                        'total_count': bc['n_articles']
+                        'total_count': ab['n_articles']
                     }
 
                 if return_pmids:
                     abc_result['ab_pmid_intersection'] = str(ab['pmid_intersection'])
-                    abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
+
+                # add c-terms and b-c term KM info (SKiM)
+                if not km_only:
+                    b_term = ab['b_term']
+                    bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year, return_pmids)
+
+                    abc_result['c_term'] = c_term
+                    abc_result['bc_pvalue'] = bc['pvalue']
+                    abc_result['bc_sort_ratio'] = bc['sort_ratio']
+                    abc_result['bc_pred_score'] = km.get_prediction_score(bc['pvalue'], bc['sort_ratio'])
+                    abc_result['c_count'] = bc['len(b_term_set)']
+                    abc_result['bc_count'] = bc['len(a_b_intersect)']
+                    
+                    if return_pmids:
+                        abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
 
                 return_val.append(abc_result)
                 _update_job_status('progress', i + 1)

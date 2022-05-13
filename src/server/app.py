@@ -4,7 +4,7 @@ import rq_dashboard
 from redis import Redis
 from rq import Queue
 from flask_restful import Api
-from workers.work import km_work, skim_work, triple_miner_work, update_index_work, clear_mongo_cache
+from workers.work import km_work, km_work_all_vs_all, triple_miner_work, update_index_work, clear_mongo_cache
 import logging
 from flask_bcrypt import Bcrypt
 
@@ -104,7 +104,7 @@ def _get_km_job():
 ## ******** SKiM Post/Get ********
 @_app.route('/skim/api/jobs/', methods=['POST'])
 def _post_skim_job():
-    return _post_generic(skim_work, request)
+    return _post_generic(km_work_all_vs_all, request)
 
 @_app.route('/skim/api/jobs/', methods=['GET'])
 def _get_skim_job():

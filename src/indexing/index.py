@@ -54,7 +54,8 @@ class Index():
         result = self._query_disk(tokens)
 
         if len(result) < 10000 or len(tokens) > 1:
-            _place_in_mongo(query, result)
+            if os.path.exists(self._bin_path):
+                _place_in_mongo(query, result)
 
         self._query_cache[query] = result
 
