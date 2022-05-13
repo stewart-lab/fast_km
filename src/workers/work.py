@@ -15,6 +15,9 @@ _q = Queue(connection=_r)
 
 def km_work(json: list):
     indexing.index._connect_to_mongo()
+    if li.the_index._check_if_mongo_should_be_refreshed():
+        clear_mongo_cache([])
+
     return_val = []
 
     if len(json) > 1000000000:
@@ -52,6 +55,9 @@ def km_work(json: list):
 
 def km_work_all_vs_all(json: dict):
     indexing.index._connect_to_mongo()
+    if li.the_index._check_if_mongo_should_be_refreshed():
+        clear_mongo_cache([])
+
     return_val = []
     km_only = False
 
@@ -151,6 +157,9 @@ def km_work_all_vs_all(json: dict):
 
 def triple_miner_work(json: list):
     indexing.index._connect_to_mongo()
+    if li.the_index._check_if_mongo_should_be_refreshed():
+        clear_mongo_cache([])
+        
     km_set = []
 
     for query in json:

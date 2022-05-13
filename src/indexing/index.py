@@ -193,6 +193,33 @@ class Index():
         stored_bytes = self.connection.read(byte_len)
         return stored_bytes
 
+    def _check_if_mongo_should_be_refreshed(self, terms_to_check: 'list[str]' = ['fever']):
+        # the purpose of this function is to check a non-cached version of a token
+        # and compare to a cached version of a token. if the two do not produce
+        # the same result, then the cache is outdated and needs to be cleared.
+
+        # the list of terms to check should contain words that are frequent enough
+        # where we can catch if the cache needs to be updated, but not so frequent
+        # that they add a lot of overhead to every job.
+
+        if not os.path.exists(self._bin_path):
+            return False
+
+        for item in terms_to_check:
+            query = item.lower().strip()
+            mongo_result = _check_mongo_for_query(query)
+
+            if not mongo_result:
+                continue
+
+            tokens = util.get_tokens(query)
+            result = self._query_disk(tokens)
+
+            if result != mongo_result:
+                return True
+
+        return False
+
 def _intersect_dict_keys(dicts: 'list[dict]'):
     lowest_n_keys = sorted(dicts, key=lambda x: len(x))[0]
     key_intersect = set(lowest_n_keys.keys())
@@ -236,7 +263,6 @@ def _check_mongo_for_query(query: str):
             return None
     else:
         return None
-    
 
 def _place_in_mongo(query, result):
     if not isinstance(mongo_cache, type(None)):
