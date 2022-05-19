@@ -3,7 +3,7 @@ import requests
 import time
 import os
 import shutil
-from subprocess import check_call, check_output
+from subprocess import check_output
 from indexing import km_util as util
 # the tests in this file test the Docker container communication, job
 # queuing, mongoDB caching, etc. They require that the API server and workers
@@ -21,29 +21,24 @@ the_auth = ('username', 'password')
 def data_dir():
     return os.path.join(os.getcwd(), "src", "tests", "test_data", "indexer")
 
-def test_api(data_dir):
-    # TODO: this is very hacky. it replaces the .env file with one just
-    # for this unit test. --env-file docker param doesn't seem to work.
-    # ideally would find some alternative to this...
-    env_file = os.path.join(os.getcwd(), '.env')
-    shell_file = os.path.join(os.getcwd(), 'container_integration_test.sh')
-    tmp_env_file = os.path.join(os.getcwd(), 'tmp')
-    os.rename(env_file, tmp_env_file)
-
-    with open(env_file, 'w') as f:
-        f.write('PUBMED_DIR=\"' + data_dir + "\"")
-        f.write('\n')
-        f.write('PASSWORD_HASH="____2b____12____YfgpDEOwxLy..UkZEe0H8.0aO/AQXpbsA4sAgZ9RWQShkG4iZYl16"')
-    
-    with open(shell_file, 'w') as f:
-        f.write('docker compose up --build --wait --force-recreate -V')
+def test_api(data_dir, monkeypatch):
+    # set the pubmed dir for this test
+    monkeypatch.setenv(name='PUBMED_DIR', value='./src/tests/test_data/indexer')
+    docker_compose = 'docker compose'
 
     try:
-        cmd_output = check_output("docker compose down", shell=True)
+        cmd_output = check_output(docker_compose, shell=True)
     except:
-        pytest.skip('skipped; docker compose is not available on this system')
+        try:
+            docker_compose = 'docker-compose'
+            cmd_output = check_output(docker_compose, shell=True)
+        except:
+            pytest.skip('skipped; docker compose may not be available on this system')
 
     try:
+        # remove any old containers
+        cmd_output = check_output(docker_compose + ' down', shell=True)
+
         # delete the index if it exists already
         index_dir = util.get_index_dir(data_dir)
         if os.path.exists(index_dir):
@@ -52,7 +47,8 @@ def test_api(data_dir):
 
         # run the docker containers
         time.sleep(1)
-        cmd_output = check_output("source " + 'container_integration_test.sh', shell=True)
+        
+        cmd_output = check_output(docker_compose + " up --build --wait", shell=True)
         time.sleep(15)
 
         # run query
@@ -73,8 +69,7 @@ def test_api(data_dir):
         assert False, str(e)
 
     finally:
-        cmd_output = check_output("docker compose down", shell=True)
-        os.rename(tmp_env_file, env_file)
+        cmd_output = check_output(docker_compose + " down", shell=True)
 
 def _post_job(url, json):
     job_id = requests.post(url=url, json=json, auth=the_auth).json()['id']
