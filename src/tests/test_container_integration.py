@@ -24,16 +24,19 @@ def data_dir():
 def test_api(data_dir, monkeypatch):
     # set the pubmed dir for this test
     monkeypatch.setenv(name='PUBMED_DIR', value='./src/tests/test_data/indexer')
+
+    # use "docker compose" by default, but might need to use "docker-compose" (old syntax)
+    # depending on the machine this is being run on
     docker_compose = 'docker compose'
 
     try:
         cmd_output = check_output(docker_compose, shell=True)
     except:
-        try:
-            docker_compose = 'docker-compose'
-            cmd_output = check_output(docker_compose, shell=True)
-        except:
-            pytest.skip('skipped; docker compose may not be available on this system')
+        #try:
+        docker_compose = 'docker-compose'
+        #    cmd_output = check_output(docker_compose, shell=True)
+        #except:
+        #    pytest.skip('skipped; docker compose may not be available on this system')
 
     try:
         # remove any old containers
