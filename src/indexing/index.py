@@ -255,7 +255,6 @@ def _check_mongo_for_query(query: str):
             return None
 
         if not isinstance(result, type(None)):
-            print('retrieved: ' + query)
             return set(result['result'])
         else:
             return None
@@ -266,7 +265,6 @@ def _place_in_mongo(query, result):
     if not isinstance(mongo_cache, type(None)):
         try:
             mongo_cache.insert_one({'query': query, 'result': list(result)})
-            print('cached: ' + query)
         except errors.DuplicateKeyError:
             # tried to insert and got a duplicate key error. probably just the result
             # of a race condition (another worker added the query record).
