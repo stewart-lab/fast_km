@@ -51,8 +51,13 @@ def test_api(data_dir, monkeypatch):
         # run the docker containers
         time.sleep(1)
         
-        cmd_output = check_output(docker_compose + " up --build --wait", shell=True)
-        time.sleep(15)
+        if docker_compose == 'docker compose':
+            cmd_output = check_output(docker_compose + " up --build --wait", shell=True)
+            time.sleep(15)
+        else:
+            # docker-compose does not have the '--wait' flag
+            cmd_output = check_output(docker_compose + " up --build -d", shell=True)
+            time.sleep(25)
 
         # run query
         skim_url = api_url + skim_append
