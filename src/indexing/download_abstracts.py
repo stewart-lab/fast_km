@@ -85,6 +85,9 @@ def bulk_download(ftp_address: str, ftp_dir: str, local_dir: str, n_to_download 
     empty (zero byte) file written. In this case, the script will re-connect,
     remove the empty file, and start downloading files again."""
 
+    if n_to_download == 0:
+        return
+
     # create local directory if it doesn't exist yet
     if not os.path.exists(local_dir):
         os.mkdir(local_dir)

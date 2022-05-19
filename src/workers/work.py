@@ -14,7 +14,8 @@ _r = Redis(host='redis', port=6379)
 _q = Queue(connection=_r)
 
 def km_work(json: list):
-    indexing.index._connect_to_mongo()
+    _initialize_mongo_caching()
+
     return_val = []
 
     if len(json) > 1000000000:
@@ -51,7 +52,8 @@ def km_work(json: list):
     return return_val
 
 def km_work_all_vs_all(json: dict):
-    indexing.index._connect_to_mongo()
+    _initialize_mongo_caching()
+
     return_val = []
     km_only = False
 
@@ -150,7 +152,8 @@ def km_work_all_vs_all(json: dict):
     return return_val
 
 def triple_miner_work(json: list):
-    indexing.index._connect_to_mongo()
+    _initialize_mongo_caching()
+        
     km_set = []
 
     for query in json:
@@ -175,6 +178,10 @@ def update_index_work(json: dict):
         n_files = json['n_files']
     else:
         n_files = math.inf
+    if 'clear_cache' in json:
+        clear_cache = json['clear_cache']
+    else:
+        clear_cache = True
 
     # download baseline
     print('Checking for files to download...')
@@ -206,7 +213,9 @@ def update_index_work(json: dict):
 
     # remove the old index
     index_builder.overwrite_old_index()
-    clear_mongo_cache()
+
+    if clear_cache:
+        clear_mongo_cache([])
 
     # re-queue interrupted jobs
     _queue_jobs(interrupted_jobs)
@@ -216,6 +225,15 @@ def update_index_work(json: dict):
 def clear_mongo_cache(json):
     indexing.index._connect_to_mongo()
     indexing.index._empty_mongo()
+
+def _initialize_mongo_caching():
+    indexing.index._connect_to_mongo()
+    if li.the_index._check_if_mongo_should_be_refreshed():
+        clear_mongo_cache([])
+
+        # this second call looks weird, but it's to cache the terms_to_check
+        # such as 'fever' to save the current state of the index
+        li.the_index._check_if_mongo_should_be_refreshed()
 
 def _restart_workers(requeue_interrupted_jobs = True):
     print('restarting workers...')
@@ -238,7 +256,7 @@ def _restart_workers(requeue_interrupted_jobs = True):
         # shut down the worker
         rqc.send_shutdown_command(_r, worker.name)
 
-    if requeue_interrupted_jobs():
+    if requeue_interrupted_jobs:
         _queue_jobs(interrupted_jobs)
 
     return interrupted_jobs
