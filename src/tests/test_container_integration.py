@@ -21,9 +21,9 @@ the_auth = ('username', 'password')
 def data_dir():
     return os.path.join(os.getcwd(), "src", "tests", "test_data", "indexer")
 
-def test_api(data_dir, monkeypatch):
+def test_container_integration(data_dir, monkeypatch, capfd):
     # set the pubmed dir for this test
-    monkeypatch.setenv(name='PUBMED_DIR', value='./src/tests/test_data/indexer')
+    monkeypatch.setenv(name='PUBMED_DIR', value='\"' + data_dir + '\"')
 
     # use "docker compose" by default, but might need to use "docker-compose" (old syntax)
     # depending on the machine this is being run on
@@ -52,11 +52,11 @@ def test_api(data_dir, monkeypatch):
         time.sleep(1)
         
         if docker_compose == 'docker compose':
-            cmd_output = check_output(docker_compose + " up --build --wait", shell=True)
+            cmd_output = check_output(docker_compose + ' up --build --wait', shell=True)
             time.sleep(15)
         else:
             # docker-compose does not have the '--wait' flag
-            cmd_output = check_output(docker_compose + " up --build -d", shell=True)
+            cmd_output = check_output(docker_compose + ' up --build -d', shell=True)
             time.sleep(25)
 
         # run query
@@ -77,17 +77,17 @@ def test_api(data_dir, monkeypatch):
         assert False, str(e)
 
     finally:
-        cmd_output = check_output(docker_compose + " down", shell=True)
+        cmd_output = check_output(docker_compose + ' down', shell=True)
 
 def _post_job(url, json):
     job_id = requests.post(url=url, json=json, auth=the_auth).json()['id']
 
-    get_response = requests.get(url + "?id=" + job_id, auth=the_auth).json()
+    get_response = requests.get(url + '?id=' + job_id, auth=the_auth).json()
     job_status = get_response['status']
 
     while job_status == 'queued' or job_status == 'started':
         time.sleep(1)
-        get_response = requests.get(url + "?id=" + job_id, auth=the_auth).json()
+        get_response = requests.get(url + '?id=' + job_id, auth=the_auth).json()
         job_status = get_response['status']
 
     return get_response
