@@ -54,8 +54,7 @@ class Index():
         result = self._query_disk(tokens)
 
         if len(result) < 10000 or len(tokens) > 1:
-            if os.path.exists(self._bin_path):
-                _place_in_mongo(query, result)
+            _place_in_mongo(query, result)
 
         self._query_cache[query] = result
 
@@ -202,18 +201,16 @@ class Index():
         # where we can catch if the cache needs to be updated, but not so frequent
         # that they add a lot of overhead to every job.
 
-        if not os.path.exists(self._bin_path):
-            return False
-
         for item in terms_to_check:
             query = item.lower().strip()
             mongo_result = _check_mongo_for_query(query)
 
-            if not mongo_result:
-                continue
-
             tokens = util.get_tokens(query)
             result = self._query_disk(tokens)
+
+            if isinstance(mongo_result, type(None)):
+                _place_in_mongo(query, result)
+                continue
 
             if result != mongo_result:
                 return True
@@ -258,6 +255,7 @@ def _check_mongo_for_query(query: str):
             return None
 
         if not isinstance(result, type(None)):
+            print('retrieved: ' + query)
             return set(result['result'])
         else:
             return None
@@ -268,6 +266,7 @@ def _place_in_mongo(query, result):
     if not isinstance(mongo_cache, type(None)):
         try:
             mongo_cache.insert_one({'query': query, 'result': list(result)})
+            print('cached: ' + query)
         except errors.DuplicateKeyError:
             # tried to insert and got a duplicate key error. probably just the result
             # of a race condition (another worker added the query record).

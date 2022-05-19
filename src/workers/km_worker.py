@@ -2,12 +2,16 @@ from redis import Redis
 from rq import Worker, Queue, Connection
 from indexing.index import Index
 import workers.loaded_index as li
+import time
 
 class KmWorker(Worker):
     def __init__(self, queues=None, *args, **kwargs):
         super().__init__(queues, *args, **kwargs)
 
 def start_worker():
+    print('worker sleeping for 5 sec before starting...')
+    time.sleep(5)
+
     print('starting worker...')
 
     _load_index()
