@@ -21,9 +21,9 @@ the_auth = ('username', 'password')
 def data_dir():
     return os.path.join(os.getcwd(), "src", "tests", "test_data", "indexer")
 
-def test_container_integration(data_dir, monkeypatch, capfd):
+def test_container_integration(data_dir, monkeypatch):
     # set the pubmed dir for this test
-    monkeypatch.setenv(name='PUBMED_DIR', value='\"' + data_dir + '\"')
+    monkeypatch.setenv(name='PUBMED_DIR', value=data_dir.replace(os.getcwd(), '.'))
 
     # use "docker compose" by default, but might need to use "docker-compose" (old syntax)
     # depending on the machine this is being run on
