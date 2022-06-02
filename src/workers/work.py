@@ -95,7 +95,7 @@ def km_work_all_vs_all(json: dict):
     if type(censor_year) is str:
         censor_year = int(censor_year)
 
-    for a_term in a_terms:
+    for a_term_n, a_term in enumerate(a_terms):
         ab_results = []
 
         for b_term in b_terms:
@@ -112,7 +112,7 @@ def km_work_all_vs_all(json: dict):
         ab_results = ab_results[:top_n]
 
         # take top N per a-b pair and run b-terms against c-terms
-        for i, c_term in enumerate(c_terms):
+        for c_term_n, c_term in enumerate(c_terms):
             for ab in ab_results:
                 abc_result = {
                         'a_term': ab['a_term'],
@@ -146,8 +146,13 @@ def km_work_all_vs_all(json: dict):
                     if return_pmids:
                         abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
 
+                    # report number of C-terms complete
+                    _update_job_status('progress', c_term_n + 1)
+                else:
+                    # report number of A-terms complete
+                    _update_job_status('progress', a_term_n + 1)
+
                 return_val.append(abc_result)
-                _update_job_status('progress', i + 1)
 
     return return_val
 
