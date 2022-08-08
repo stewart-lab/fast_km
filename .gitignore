@@ -12,3 +12,4 @@ project/tests/htmlcov
 *Icon*
 **/Index/**
 **venv**
+src/tests/test_data/indexer/neo4j**
