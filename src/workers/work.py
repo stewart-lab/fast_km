@@ -105,8 +105,8 @@ def km_work_all_vs_all(json: dict):
                 ab_results.append(res)
 
         # sort by prediction score, descending
-        ab_results.sort(key=lambda res: 
-            km.get_prediction_score(res['pvalue'], res['sort_ratio']), 
+        ab_results.sort(key=lambda res:
+            km.get_prediction_score(res['pvalue'], res['sort_ratio']),
             reverse=True)
 
         ab_results = ab_results[:top_n]
@@ -121,7 +121,7 @@ def km_work_all_vs_all(json: dict):
                         'ab_pvalue': ab['pvalue'],
                         'ab_sort_ratio': ab['sort_ratio'],
                         'ab_pred_score': km.get_prediction_score(ab['pvalue'], ab['sort_ratio']),
-                        
+
                         'a_count': ab['len(a_term_set)'],
                         'b_count': ab['len(b_term_set)'],
                         'ab_count': ab['len(a_b_intersect)'],
@@ -142,15 +142,15 @@ def km_work_all_vs_all(json: dict):
                     abc_result['bc_pred_score'] = km.get_prediction_score(bc['pvalue'], bc['sort_ratio'])
                     abc_result['c_count'] = bc['len(b_term_set)']
                     abc_result['bc_count'] = bc['len(a_b_intersect)']
-                    
+
                     if return_pmids:
                         abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
 
-                    # report number of C-terms complete
-                    _update_job_status('progress', c_term_n + 1)
+                    # report percentage of C-terms complete
+                    _update_job_status('progress', round(((c_term_n + 1) / len(c_terms)), 2))
                 else:
-                    # report number of A-terms complete
-                    _update_job_status('progress', a_term_n + 1)
+                    # report percentage of A-B pairs complete
+                    _update_job_status('progress', round(((a_term_n + 1) / len(a_terms)), 2))
 
                 return_val.append(abc_result)
 
@@ -158,7 +158,7 @@ def km_work_all_vs_all(json: dict):
 
 def triple_miner_work(json: list):
     _initialize_mongo_caching()
-        
+
     km_set = []
 
     for query in json:
@@ -277,6 +277,6 @@ def _update_job_status(key, value):
     if job is None:
         print('error: tried to update job status, but could not find job')
         return
-    
+
     job.meta[key] = value
     job.save_meta()
