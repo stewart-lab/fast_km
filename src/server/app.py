@@ -4,7 +4,7 @@ import rq_dashboard
 from redis import Redis
 from rq import Queue
 from flask_restful import Api
-from workers.work import km_work, km_work_all_vs_all, triple_miner_work, update_index_work, clear_mongo_cache
+from workers.work import km_work, km_work_all_vs_all, update_index_work, clear_mongo_cache
 import logging
 from flask_bcrypt import Bcrypt
 
@@ -108,15 +108,6 @@ def _post_skim_job():
 
 @_app.route('/skim/api/jobs/', methods=['GET'])
 def _get_skim_job():
-    return _get_generic(request)
-
-## ******** TripleMiner Post/Get ********
-@_app.route('/tripleminer/api/jobs/', methods=['POST'])
-def _post_tripleminer_job():
-    return _post_generic(triple_miner_work, request)
-
-@_app.route('/tripleminer/api/jobs/', methods=['GET'])
-def _get_tripleminer_job():
     return _get_generic(request)
 
 ## ******** Update Index Post/Get ********
