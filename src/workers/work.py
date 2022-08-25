@@ -137,7 +137,7 @@ def km_work_all_vs_all(json: dict):
 
                     if query_kg:
                         rel = knowledge_graph.query(a_term, b_term)
-                        res['ab_relationship'] = rel
+                        abc_result['ab_relationship'] = rel
 
                     # add c-terms and b-c term KM info (SKiM)
                     if not km_only:
@@ -156,7 +156,7 @@ def km_work_all_vs_all(json: dict):
 
                         if query_kg:
                             rel = knowledge_graph.query(b_term, c_term)
-                            res['bc_relationship'] = rel
+                            abc_result['bc_relationship'] = rel
 
                         # report percentage of C-terms complete
                         _update_job_status('progress', round(((c_term_n + 1) / len(c_terms)), 2))
