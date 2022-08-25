@@ -9,9 +9,16 @@ password = "mypass"
 
 class KnowledgeGraph:
     def __init__(self):
-        self.graph = Graph(uri, auth=(user, password))
+        try:
+            self.graph = Graph(uri, auth=(user, password))
+        except:
+            self.graph = None
+            print('Could not find a neo4j knowledge graph database')
 
     def query(self, a_term: str, b_term: str):
+        if not self.graph:
+            return 'neo4j connection error'
+
         # get a-term nodes
         a_term_stripped = a_term.lower().strip()
         a_term_stripped = str.join(' ', util.get_tokens(a_term_stripped))

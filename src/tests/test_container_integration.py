@@ -62,7 +62,14 @@ def test_container_integration(data_dir, monkeypatch):
         # run query
         skim_url = api_url + skim_append
         query = {'a_terms': ['cancer'], 'b_terms': ['coffee'], 'c_terms': ['water'], 'ab_fet_threshold': 1, 'top_n': 50}
-        result = _post_job(skim_url, query)['result']
+        job_info = _post_job(skim_url, query)
+
+        if job_info['status'] == 'failed':
+            if 'message' in job_info:
+                raise RuntimeError('the job failed because: ' + job_info['message'])
+            raise RuntimeError('the job failed without an annotated reason')
+        
+        result = job_info['result']
         assert result[0]['total_count'] == 0
 
         # build the index
