@@ -76,7 +76,7 @@ def test_container_integration(data_dir, monkeypatch):
         # it does not test for actual querying of the knowledge graph. need to
         # write that into a test.
         assert 'ab_relationship' in result[0]
-        assert 'connection error' not in result[0]['relationship']
+        assert 'connection error' not in result[0]['ab_relationship']
 
         # build the index
         _post_job(api_url + update_index_append, {'n_files': 0, 'clear_cache': False})
@@ -86,7 +86,7 @@ def test_container_integration(data_dir, monkeypatch):
         result = _post_job(skim_url, query)['result']
         assert result[0]['total_count'] > 4000
         assert 'ab_relationship' in result[0]
-        assert 'connection error' not in result[0]['relationship']
+        assert 'connection error' not in result[0]['ab_relationship']
 
     except Exception as e:
         assert False, str(e)
