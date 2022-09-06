@@ -156,7 +156,7 @@ def km_work_all_vs_all(json: dict):
                 progress = round(((a_term_n + 1) / len(a_terms)), 4)
 
             # report progress but never report 100% progress until the job is actually done
-            _update_job_status(min(progress, 0.9999))
+            _update_job_status('progress', min(progress, 0.9999))
                 
     _update_job_status('progress', 1.0000)
     return return_val
