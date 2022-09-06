@@ -9,7 +9,7 @@ import workers.loaded_index as li
 import workers.kinderminer as km
 from indexing.index_builder import IndexBuilder
 import indexing.download_abstracts as downloader
-from knowledge_graph.knowledge_graph import KnowledgeGraph
+from knowledge_graph.knowledge_graph import KnowledgeGraph, rel_pvalue_cutoff
 
 _r = Redis(host='redis', port=6379)
 _q = Queue(connection=_r)
@@ -46,9 +46,9 @@ def km_work(json: list):
         if 'query_knowledge_graph' in item:
             query_kg = bool(item['query_knowledge_graph'])
 
-        if query_kg:
-            rel = knowledge_graph.query(a_term, b_term)
-            res['relationship'] = rel
+            if query_kg and res['pvalue'] < rel_pvalue_cutoff:
+                rel = knowledge_graph.query(a_term, b_term)
+                res['relationship'] = rel
 
         return_val.append(res)
 
@@ -135,7 +135,7 @@ def km_work_all_vs_all(json: dict):
                     if return_pmids:
                         abc_result['ab_pmid_intersection'] = str(ab['pmid_intersection'])
 
-                    if query_kg:
+                    if query_kg and abc_result['ab_pvalue'] < rel_pvalue_cutoff:
                         rel = knowledge_graph.query(a_term, b_term)
                         abc_result['ab_relationship'] = rel
 
@@ -154,7 +154,7 @@ def km_work_all_vs_all(json: dict):
                         if return_pmids:
                             abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
 
-                        if query_kg:
+                        if query_kg and abc_result['bc_pvalue'] < rel_pvalue_cutoff:
                             rel = knowledge_graph.query(b_term, c_term)
                             abc_result['bc_relationship'] = rel
 
