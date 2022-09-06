@@ -145,8 +145,8 @@ def km_work_all_vs_all(json: dict):
 
                     if return_pmids:
                         abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
-                        
-                    return_val.append(abc_result)
+
+                return_val.append(abc_result)
 
             # report percentage of C-terms complete
             if not km_only:
