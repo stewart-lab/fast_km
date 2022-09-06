@@ -146,17 +146,18 @@ def km_work_all_vs_all(json: dict):
                     if return_pmids:
                         abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
 
-                    # report percentage of C-terms complete
-                    progress = round(((c_term_n + 1) / len(c_terms)), 2)
-                else:
-                    # report percentage of A-B pairs complete
-                    progress = round(((a_term_n + 1) / len(a_terms)), 2)
+            # report percentage of C-terms complete
+            if not km_only:
+                progress = round(((c_term_n + 1) / len(c_terms)), 4)
+            else:
+                # report percentage of A-B pairs complete
+                progress = round(((a_term_n + 1) / len(a_terms)), 4)
 
                 # report progress but never report 100% progress until the job is actually done
                 _update_job_status(min(progress, 0.9999))
                 return_val.append(abc_result)
 
-    _update_job_status('progress', 1.00)
+    _update_job_status('progress', 1.0000)
     return return_val
 
 def triple_miner_work(json: list):
