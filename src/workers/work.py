@@ -147,10 +147,10 @@ def km_work_all_vs_all(json: dict):
                         abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
 
                     # report percentage of C-terms complete
-                    _update_job_status('progress', round(((c_term_n + 1) / len(c_terms)), 2))
+                    _update_job_status('progress', round((c_term_n / len(c_terms)), 2))
                 else:
                     # report percentage of A-B pairs complete
-                    _update_job_status('progress', round(((a_term_n + 1) / len(a_terms)), 2))
+                    _update_job_status('progress', round((a_term_n / len(a_terms)), 2))
 
                 return_val.append(abc_result)
 
