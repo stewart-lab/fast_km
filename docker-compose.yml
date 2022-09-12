@@ -39,14 +39,11 @@ services:
 
   neo4j:
     image: neo4j
-    volumes:
-      - ${PUBMED_DIR}/neo4j_data:/data  # edit .env file to change pubmed dir
-      - ${PUBMED_DIR}/neo4j_logs:/logs  # edit .env file to change pubmed dir
     environment:
       NEO4J_AUTH: neo4j/mypass
-    # ports:
-    #   - "7474:7474"
-    #   - "7687:7687"
+    ports:
+      - "7474:7474"
+      - "7687:7687"
     networks:
       - fast_km-network
 

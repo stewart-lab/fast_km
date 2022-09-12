@@ -136,7 +136,7 @@ def km_work_all_vs_all(json: dict):
                         abc_result['ab_pmid_intersection'] = str(ab['pmid_intersection'])
 
                     if query_kg and abc_result['ab_pvalue'] < rel_pvalue_cutoff:
-                        rel = knowledge_graph.query(a_term, b_term)
+                        rel = knowledge_graph.query(abc_result['a_term'], abc_result['b_term'])
                         abc_result['ab_relationship'] = rel
 
                     # add c-terms and b-c term KM info (SKiM)
@@ -155,7 +155,7 @@ def km_work_all_vs_all(json: dict):
                             abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
 
                         if query_kg and abc_result['bc_pvalue'] < rel_pvalue_cutoff:
-                            rel = knowledge_graph.query(b_term, c_term)
+                            rel = knowledge_graph.query(abc_result['b_term'], abc_result['c_term'])
                             abc_result['bc_relationship'] = rel
 
                         # report percentage of C-terms complete
