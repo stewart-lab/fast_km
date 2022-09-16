@@ -102,11 +102,16 @@ def km_work_all_vs_all(json: dict):
         for a_term_n, a_term in enumerate(a_terms):
             ab_results = []
 
-            for b_term in b_terms:
+            for b_term_n, b_term in enumerate(b_terms):
                 res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids)
 
                 if res['pvalue'] <= ab_fet_threshold:
                     ab_results.append(res)
+
+                # report KM progress - percentage of A-B pairs complete
+                if km_only:
+                    progress = round(((b_term_n + 1) / len(b_terms)), 4)
+                    _update_job_status('progress', min(progress, 0.9999))
 
             # sort by prediction score, descending
             ab_results.sort(key=lambda res: 
@@ -158,15 +163,16 @@ def km_work_all_vs_all(json: dict):
                             rel = knowledge_graph.query(abc_result['b_term'], abc_result['c_term'])
                             abc_result['bc_relationship'] = rel
 
-                        # report percentage of C-terms complete
-                        _update_job_status('progress', round(((c_term_n + 1) / len(c_terms)), 2))
-                    else:
-                        # report percentage of A-B pairs complete
-                        _update_job_status('progress', round(((a_term_n + 1) / len(a_terms)), 2))
-
                     return_val.append(abc_result)
 
+                if not km_only:
+                    # report SKiM progress - percentage of C-terms complete
+                    progress = round(((c_term_n + 1) / len(c_terms)), 4)
+                    _update_job_status('progress', min(progress, 0.9999))
+                    
+        _update_job_status('progress', 1.0000)
         return return_val
+
     except Exception as e:
         # report back a reason for job failure
         _update_job_status('message', repr(e))
