@@ -26,6 +26,7 @@ class Index():
         self._abstract_catalog = util.get_abstract_catalog(pubmed_abstract_dir)
         self._byte_offsets = dict()
         self._publication_years = dict()
+        self._date_censored_pmids = dict()
         self._init_byte_info()
         self._open_connection()
 
@@ -61,13 +62,15 @@ class Index():
         return result
 
     def censor_by_year(self, pmids: 'set[int]', censor_year: int) -> 'set[int]':
-        censored_set = set()
+        if censor_year not in self._date_censored_pmids:
+            censored_set = set()
 
-        for pmid in pmids:
-            if self._publication_years[pmid] <= censor_year:
-                censored_set.add(pmid)
+            for pmid, year in self._publication_years.items():
+                if year <= censor_year:
+                    censored_set.add(pmid)
+            self._date_censored_pmids = censored_set
 
-        return censored_set
+        return self._date_censored_pmids[censor_year] & pmids
 
     def n_articles(self, censor_year = math.inf) -> int:
         """Returns the number of indexed abstracts, given an optional 
