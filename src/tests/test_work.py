@@ -37,5 +37,5 @@ def test_skim_work(data_dir):
     assert result[0]['c_term'] == 'coffee'
     assert result[0]['ab_count'] > 0
     assert result[0]['bc_count'] > 0
-    assert result[0]['ab_relationship'] == 'neo4j connection error'
-    assert result[0]['bc_relationship'] == 'neo4j connection error'
+    #assert result[0]['ab_relationship'] == 'neo4j connection error'
+    #assert result[0]['bc_relationship'] == 'neo4j connection error'

@@ -68,7 +68,7 @@ class Index():
             for pmid, year in self._publication_years.items():
                 if year <= censor_year:
                     censored_set.add(pmid)
-            self._date_censored_pmids = censored_set
+            self._date_censored_pmids[censor_year] = censored_set
 
         return self._date_censored_pmids[censor_year] & pmids
 
