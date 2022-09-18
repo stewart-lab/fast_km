@@ -5,6 +5,7 @@ from indexing.index import Index
 from indexing.index_builder import IndexBuilder
 from workers import kinderminer as km
 from indexing import km_util as util
+import indexing.index as index
 from .test_index_building import data_dir
 
 def test_fisher_exact_test():
@@ -23,6 +24,19 @@ def test_fisher_exact_test():
     sort_ratio = km.get_sort_ratio(table)
     assert sort_ratio == pytest.approx(15 / 59)
 
+def test_text_sanitation():
+    text = 'Testing123****.'
+    sanitized_text = index.sanitize_term(text)
+    assert sanitized_text == 'testing123'
+
+    text = 'The quick brown fox / jumped over the lazy dog.'
+    sanitized_text = index.sanitize_term(text)
+    assert sanitized_text == 'the quick brown fox/jumped over the lazy dog'
+
+    text = 'This&is&a&test.'
+    sanitized_text = index.sanitize_term(text)
+    assert sanitized_text == 'this&is&a&test'
+
 def test_kinderminer(data_dir):
     index_dir = util.get_index_dir(data_dir)
 
@@ -37,8 +51,8 @@ def test_kinderminer(data_dir):
     idx = Index(data_dir)
 
     # test index querying
-    lung_pmids = idx.query_index('lung')
-    tissue_pmids = idx.query_index('tissue')
+    lung_pmids = idx._query_index('lung')
+    tissue_pmids = idx._query_index('tissue')
     assert len(lung_pmids) == 109
     assert len(tissue_pmids) == 234
 

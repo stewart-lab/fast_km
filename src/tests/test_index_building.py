@@ -76,11 +76,11 @@ def test_indexer(data_dir):
     
     # query the index
     index = Index(data_dir)
-    query = index.query_index("polysaccharide")
-    query = query | index.query_index("polysaccharides")
-    query = query | index.query_index("lipopolysaccharides")
-    query = query | index.query_index("lipopolysaccharide")
-    query = query | index.query_index("exopolysaccharide")
+    query = index._query_index("polysaccharide")
+    query = query | index._query_index("polysaccharides")
+    query = query | index._query_index("lipopolysaccharides")
+    query = query | index._query_index("lipopolysaccharide")
+    query = query | index._query_index("exopolysaccharide")
 
     assert len(query) == 37
 

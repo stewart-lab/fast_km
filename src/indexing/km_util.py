@@ -50,6 +50,9 @@ def get_tokens(text: str) -> 'list[str]':
     tokens = tokenizer.tokenize(l_text)
     return tokens
 
+def sanitize_text(text: str) -> str:
+    return str.join(' ', get_tokens(text))
+
 def get_index_dir(abstracts_dir: str) -> str:
     return os.path.join(abstracts_dir, 'Index')
 

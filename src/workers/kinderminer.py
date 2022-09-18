@@ -3,8 +3,6 @@ import time
 import math
 from indexing.index import Index
 
-logical_or = '/' # supports '/' to mean 'or'
-logical_and = '&' # supports '&' to mean 'and'
 fet_sided = 'greater'
 
 def get_contingency_table(a_term_set: set, b_term_set: set, total_n: int):
@@ -35,8 +33,8 @@ def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.
     result = dict()
 
     # query the index (handling synonyms if appropriate)
-    a_term_set = _construct_abstract_set(a_term, idx)
-    b_term_set = _construct_abstract_set(b_term, idx)
+    a_term_set = idx.construct_abstract_set(a_term)
+    b_term_set = idx.construct_abstract_set(b_term)
 
     # censor by year if applicable
     if censor_year is not math.inf:
@@ -70,24 +68,6 @@ def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.
         result['pmid_intersection'] = a_term_set & b_term_set
 
     return result
-
-def _construct_abstract_set(term: str, idx: Index) -> set:
-    # TODO: support parenthesis for allowing OR and AND at the same time?
-    # e.g., "(cancer/carcinoma) & BRCA1"
-    if logical_or in term:
-        terms = term.split(logical_or)
-        pmid_set = set()
-        for synonym in terms:
-            pmid_set.update(idx.query_index(synonym))
-    elif logical_and in term:
-        terms = term.split(logical_and)
-        pmid_set = idx.query_index(terms[0])
-        for t in terms[1:]:
-            pmid_set.intersection_update(idx.query_index(t))
-    else:
-        pmid_set = idx.query_index(term)
-
-    return pmid_set
 
 def get_prediction_score(fet, ratio):
     max_score = 323.0

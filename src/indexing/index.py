@@ -10,6 +10,8 @@ import indexing.km_util as util
 from indexing.abstract_catalog import AbstractCatalog
 
 delim = '\t'
+logical_or = '/' # supports '/' to mean 'or'
+logical_and = '&' # supports '&' to mean 'and'
 mongo_cache = None
 
 class Index():
@@ -34,32 +36,34 @@ class Index():
         self.connection.close()
         self.file_obj.close()
 
-    def query_index(self, query: str) -> 'set[int]':
-        query = query.lower().strip()
+    def construct_abstract_set(self, term: str) -> set:
+        # TODO: support parenthesis for allowing OR and AND at the same time?
+        # e.g., "(cancer/carcinoma) & BRCA1"
 
-        if query in self._query_cache:
-            return self._query_cache[query]
+        term = sanitize_term(term)
+        is_cached, pmid_set = self.check_caches_for_term(term)
+
+        if is_cached:
+            return pmid_set
+
+        if logical_or in term:
+            terms = term.split(logical_or)
+            pmid_set = set()
+            for synonym in terms:
+                pmid_set.update(self._query_index(synonym))
+        elif logical_and in term:
+            terms = term.split(logical_and)
+            pmid_set = self._query_index(terms[0])
+            for t in terms[1:]:
+                pmid_set.intersection_update(self._query_index(t))
         else:
-            result = _check_mongo_for_query(query)
-            if not isinstance(result, type(None)):
-                self._query_cache[query] = result
-                return result
+            pmid_set = self._query_index(term)
 
-        tokens = util.get_tokens(query)
+        if len(pmid_set) < 10000:
+            _place_in_mongo(term, pmid_set)
+        self._query_cache[term] = pmid_set
 
-        if len(tokens) > 100:
-            raise ValueError("Query must have <=100 words")
-        if not tokens:
-            return set()
-
-        result = self._query_disk(tokens)
-
-        if len(result) < 10000 or len(tokens) > 1:
-            _place_in_mongo(query, result)
-
-        self._query_cache[query] = result
-
-        return result
+        return pmid_set
 
     def censor_by_year(self, pmids: 'set[int]', censor_year: int) -> 'set[int]':
         if censor_year not in self._date_censored_pmids:
@@ -99,6 +103,42 @@ class Index():
             del self._token_cache[ltoken]
         if ltoken in self._query_cache:
             del self._query_cache[ltoken]
+
+    def check_caches_for_term(self, term: str):
+        if term in self._query_cache:
+            # check RAM cache
+            return (True, self._query_cache[term])
+        else:
+            # check mongoDB cache
+            result = _check_mongo_for_query(term)
+            if not isinstance(result, type(None)):
+                self._query_cache[term] = result
+                return (True, result)
+
+        return (False, None)
+
+    def _query_index(self, query: str) -> 'set[int]':
+        query = util.sanitize_text(query)
+
+        is_cached, result = self.check_caches_for_term(query)
+        if is_cached:
+            return result
+
+        tokens = util.get_tokens(query)
+
+        if len(tokens) > 100:
+            raise ValueError("Query must have <=100 words")
+        if not tokens:
+            return set()
+
+        result = self._query_disk(tokens)
+
+        if len(result) < 10000 or len(tokens) > 1:
+            _place_in_mongo(query, result)
+
+        self._query_cache[query] = result
+
+        return result
 
     def _open_connection(self) -> None:
         if not os.path.exists(self._bin_path):
@@ -220,7 +260,25 @@ class Index():
 
         return False
 
-def _intersect_dict_keys(dicts: 'list[dict]'):
+def sanitize_term(term: str) -> str:
+    if logical_or in term or logical_and in term:
+        sanitized_subterms = []
+
+        if logical_or in term:
+            string_joiner = logical_or
+        elif logical_and in term:
+            string_joiner = logical_and
+
+        for subterm in term.split(string_joiner):
+            sanitized_subterms.append(util.sanitize_text(subterm))
+
+        sanitized_term = str.join(string_joiner, sanitized_subterms)
+    else:
+        sanitized_term = util.sanitize_text(term)
+
+    return sanitized_term
+
+def _intersect_dict_keys(dicts: 'list[dict]') -> None:
     lowest_n_keys = sorted(dicts, key=lambda x: len(x))[0]
     key_intersect = set(lowest_n_keys.keys())
 
@@ -235,7 +293,7 @@ def _intersect_dict_keys(dicts: 'list[dict]'):
 
     return key_intersect
 
-def _connect_to_mongo():
+def _connect_to_mongo() -> None:
     # TODO: set expiration time for cached items (72h, etc.?)
     # mongo_cache.create_index('query', unique=True) #expireafterseconds=72 * 60 * 60, 
     global mongo_cache
@@ -249,7 +307,7 @@ def _connect_to_mongo():
         print('warning: could not find a MongoDB instance to use as a query cache')
         mongo_cache = None
 
-def _check_mongo_for_query(query: str):
+def _check_mongo_for_query(query: str) -> bool:
     if not isinstance(mongo_cache, type(None)):
         try:
             result = mongo_cache.find_one({'query': query})
@@ -264,7 +322,7 @@ def _check_mongo_for_query(query: str):
     else:
         return None
 
-def _place_in_mongo(query, result):
+def _place_in_mongo(query: str, result: 'set[int]') -> None:
     if not isinstance(mongo_cache, type(None)):
         try:
             mongo_cache.insert_one({'query': query, 'result': list(result)})
@@ -280,7 +338,7 @@ def _place_in_mongo(query, result):
     else:
         pass
 
-def _empty_mongo():
+def _empty_mongo() -> None:
     if not isinstance(mongo_cache, type(None)):
         x = mongo_cache.delete_many({})
         print('mongodb cache cleared, ' + str(x.deleted_count) + ' items were deleted')
