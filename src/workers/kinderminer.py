@@ -38,8 +38,8 @@ def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.
 
     # censor by year if applicable
     if censor_year is not math.inf:
-        a_term_set = idx.censor_by_year(a_term_set, censor_year)
-        b_term_set = idx.censor_by_year(b_term_set, censor_year)
+        a_term_set = idx.censor_by_year(a_term_set, censor_year, a_term)
+        b_term_set = idx.censor_by_year(b_term_set, censor_year, b_term)
 
     # create contingency table
     table = get_contingency_table(a_term_set, b_term_set, 
@@ -66,6 +66,9 @@ def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.
 
     if return_pmids:
         result['pmid_intersection'] = a_term_set & b_term_set
+
+        if len(result['pmid_intersection']) > 1000:
+            result['pmid_intersection'] = set(list(result['pmid_intersection'])[:1000])
 
     return result
 

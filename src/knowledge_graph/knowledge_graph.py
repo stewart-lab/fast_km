@@ -7,7 +7,8 @@ uri="bolt://neo4j:7687"
 user = "neo4j"
 password = "mypass"
 
-rel_pvalue_cutoff = 0.01
+rel_pvalue_cutoff = 1e-5
+min_pmids_for_rel = 3
 
 class KnowledgeGraph:
     def __init__(self):
@@ -77,6 +78,9 @@ class KnowledgeGraph:
 
         with open(path_to_tsv_file, 'r') as f:
             for i, line in enumerate(f):
+                if i == 0:
+                    continue
+
                 spl = line.strip().split('\t')
 
                 node1_name = _sanitize_txt(spl[0])
@@ -84,6 +88,12 @@ class KnowledgeGraph:
                 rel_txt = spl[2]
                 node2_name = _sanitize_txt(spl[3])
                 node2_type = spl[4]
+
+                pmids = spl[len(spl) - 1].strip('}').strip('{')
+                pmids = [int(x.strip()) for x in pmids.split(',')]
+
+                if len(pmids) < min_pmids_for_rel:
+                    continue
 
                 if node1_type not in nodes:
                     nodes[node1_type] = set()
@@ -101,6 +111,9 @@ class KnowledgeGraph:
         rels = {}
         with open(path_to_tsv_file, 'r') as f:
             for n_rel, line in enumerate(f):
+                if n_rel == 0:
+                    continue
+
                 spl = line.strip().split('\t')
 
                 node1_name = _sanitize_txt(spl[0])
@@ -108,14 +121,19 @@ class KnowledgeGraph:
                 rel_txt = spl[2]
                 node2_name = _sanitize_txt(spl[3])
                 node2_type = spl[4]
-                pmid = [int(spl[5])]
+
+                pmids = spl[len(spl) - 1].strip('}').strip('{')
+                pmids = [int(x.strip()) for x in pmids.split(',')]
+
+                if len(pmids) < min_pmids_for_rel:
+                    continue
 
                 category_txt = node1_type + ',' + rel_txt + ',' + node2_type
 
                 if category_txt not in rels:
                     rels[category_txt] = []
                 
-                rels[category_txt].append(((node1_name), {"pmid": pmid}, (node2_name)))
+                rels[category_txt].append(((node1_name), {"pmids": pmids}, (node2_name)))
                 
                 if (n_rel + 1) % 20000 == 0:
                     self._post_rels(rels)
@@ -133,10 +151,6 @@ class KnowledgeGraph:
             batch_size = 5000
 
             for batch in _group_elements(rel_nodes, batch_size):
-                # TODO: merge_relationships will just use the last PMID for each relation, it won't combine them into a list.
-                # need to do this for prod version.
-                existing_rels = None
-
                 merge_relationships(self.graph.auto(), batch, r_type, start_node_key=(n1_type, "name"), end_node_key=(n2_type, "name"))
 
 def _sanitize_txt(term: str):

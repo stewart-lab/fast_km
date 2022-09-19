@@ -19,6 +19,7 @@ class Index():
         # caches
         self._query_cache = dict()
         self._token_cache = dict()
+        self._date_censored_query_cache = dict()
         self._n_articles_by_pub_year = dict()
         _connect_to_mongo()
 
@@ -65,7 +66,7 @@ class Index():
 
         return pmid_set
 
-    def censor_by_year(self, pmids: 'set[int]', censor_year: int) -> 'set[int]':
+    def censor_by_year(self, pmids: 'set[int]', censor_year: int, term: str) -> 'set[int]':
         if censor_year not in self._date_censored_pmids:
             censored_set = set()
 
@@ -74,7 +75,13 @@ class Index():
                     censored_set.add(pmid)
             self._date_censored_pmids[censor_year] = censored_set
 
-        return self._date_censored_pmids[censor_year] & pmids
+        if (term, censor_year) in self._date_censored_query_cache:
+            return self._date_censored_query_cache[(term, censor_year)]
+        
+        date_censored_pmid_set = self._date_censored_pmids[censor_year] & pmids
+        self._date_censored_query_cache[(term, censor_year)] = date_censored_pmid_set
+
+        return date_censored_pmid_set
 
     def n_articles(self, censor_year = math.inf) -> int:
         """Returns the number of indexed abstracts, given an optional 
@@ -127,7 +134,9 @@ class Index():
         tokens = util.get_tokens(query)
 
         if len(tokens) > 100:
-            raise ValueError("Query must have <=100 words")
+            print("Query failed, must have <=100 words; query was " + query)
+            return set()
+            # raise ValueError("Query must have <=100 words")
         if not tokens:
             return set()
 
@@ -272,6 +281,7 @@ def sanitize_term(term: str) -> str:
         for subterm in term.split(string_joiner):
             sanitized_subterms.append(util.sanitize_text(subterm))
 
+        sanitized_subterms.sort()
         sanitized_term = str.join(string_joiner, sanitized_subterms)
     else:
         sanitized_term = util.sanitize_text(term)

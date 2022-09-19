@@ -31,11 +31,11 @@ def test_text_sanitation():
 
     text = 'The quick brown fox / jumped over the lazy dog.'
     sanitized_text = index.sanitize_term(text)
-    assert sanitized_text == 'the quick brown fox/jumped over the lazy dog'
+    assert sanitized_text == 'jumped over the lazy dog/the quick brown fox'
 
     text = 'This&is&a&test.'
     sanitized_text = index.sanitize_term(text)
-    assert sanitized_text == 'this&is&a&test'
+    assert sanitized_text == 'a&is&test&this'
 
 def test_kinderminer(data_dir):
     index_dir = util.get_index_dir(data_dir)
@@ -65,6 +65,9 @@ def test_kinderminer(data_dir):
 
     # test censor year
     # also tests that the article title is queried properly
+    km_result = km.kinderminer_search('patients undergoing pancreaticoduodenectomy', 'somatostatin', idx, censor_year=2020, return_pmids=True)
+    assert km_result['len(a_term_set)'] == 1
+    assert km_result['n_articles'] == 6
     km_result = km.kinderminer_search('patients undergoing pancreaticoduodenectomy', 'somatostatin', idx, censor_year=2020, return_pmids=True)
     assert km_result['len(a_term_set)'] == 1
     assert km_result['n_articles'] == 6

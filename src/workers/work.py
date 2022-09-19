@@ -103,9 +103,6 @@ def km_work_all_vs_all(json: dict):
             ab_results = []
 
             for b_term_n, b_term in enumerate(b_terms):
-                # DEBUG
-                print('querying ' + b_term)
-                
                 res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids)
 
                 if res['pvalue'] <= ab_fet_threshold:
@@ -179,10 +176,6 @@ def km_work_all_vs_all(json: dict):
     except Exception as e:
         # report back a reason for job failure
         _update_job_status('message', repr(e))
-
-        # DEBUG
-        print('something messed up')
-
         return []
 
 def update_index_work(json: dict):
