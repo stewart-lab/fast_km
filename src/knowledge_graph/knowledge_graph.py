@@ -157,7 +157,7 @@ class KnowledgeGraph:
             for batch in _group_elements(rel_nodes, batch_size):
                 merge_relationships(self.graph.auto(), batch, r_type, start_node_key=(n1_type, "name"), end_node_key=(n2_type, "name"))
 
-    def _null_rel_response(a_term, b_term):
+    def _null_rel_response(self, a_term, b_term):
         {'a_term': a_term, 'a_type': '', 'relationship': '', 'b_term': b_term, 'b_type': '', 'pmids': []}
 
 def _sanitize_txt(term: str):
