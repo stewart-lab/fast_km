@@ -53,11 +53,15 @@ def _post_generic(work, request, job_timeout = 43200):
     # NOTE: the max amount of time a job is allowed to take is 12 hrs by default
 
     json_data = request.get_json(request.data)
-    
+
     if not _authenticate(request):
         return 'Invalid password. do request.post(..., auth=(\'username\', \'password\'))', 401
 
-    job = _q.enqueue(work, json_data, job_timeout = job_timeout)
+    # If the job is posted with an id lets use it
+    if 'id' in json_data:
+        job = _q.enqueue(work, json_data, job_timeout=job_timeout, job_id=json_data['id'])
+    else:
+        job = _q.enqueue(work, json_data, job_timeout=job_timeout)
 
     job_data = dict()
     job_data['id'] = job.id
@@ -81,7 +85,7 @@ def _get_generic(request):
 
     if 'progress' in meta:
         job_data['progress'] = meta['progress']
-    
+
     if job.result is not None:
         job_data['result'] = job.result
         status_code = 200
