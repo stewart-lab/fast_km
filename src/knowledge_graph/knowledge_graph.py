@@ -2,6 +2,7 @@ from py2neo import Graph, Node, Relationship, NodeMatcher
 from py2neo.bulk import create_nodes, create_relationships, merge_relationships
 from itertools import islice
 import indexing.km_util as util
+import indexing.index as index
 
 uri="bolt://neo4j:7687"
 user = "neo4j"
@@ -23,6 +24,9 @@ class KnowledgeGraph:
     def query(self, a_term: str, b_term: str):
         if not self.graph:
             return [{'a_term': a_term, 'a_type': '', 'relationship': 'neo4j connection error', 'b_term': b_term, 'b_type': '', 'pmids': []}]
+
+        if index.logical_and in a_term or index.logical_and in b_term:
+            return [self._null_rel_response(a_term, b_term)]
 
         a_term_stripped = _sanitize_txt(a_term)
         b_term_stripped = _sanitize_txt(b_term)
@@ -54,11 +58,11 @@ class KnowledgeGraph:
             b_type = str(relation.nodes[1].labels).strip(':')
             relationship = str(type(relation)).replace("'", "").replace(">", "").split('.')[2]
 
-            relation_json = {'a_term': a_term, 'a_type': a_type, 'relationship': relationship, 'b_term': b_term, 'b_type': b_type, 'pmids':relation['pmids']}
+            relation_json = {'a_term': a_term, 'a_type': a_type, 'relationship': relationship, 'b_term': b_term, 'b_type': b_type, 'pmids':relation['pmids'][:100]}
             result.append(relation_json)
 
         if not result:
-            result.append({'a_term': a_term, 'a_type': '', 'relationship': '', 'b_term': b_term, 'b_type': '', 'pmids': []})
+            result.append(self._null_rel_response(a_term, b_term))
 
         self.query_cache[(a_term_stripped, b_term_stripped)] = result
         return result
@@ -153,7 +157,11 @@ class KnowledgeGraph:
             for batch in _group_elements(rel_nodes, batch_size):
                 merge_relationships(self.graph.auto(), batch, r_type, start_node_key=(n1_type, "name"), end_node_key=(n2_type, "name"))
 
+    def _null_rel_response(a_term, b_term):
+        {'a_term': a_term, 'a_type': '', 'relationship': '', 'b_term': b_term, 'b_type': '', 'pmids': []}
+
 def _sanitize_txt(term: str):
+    term = term.split(index.logical_or)[0]
     return str.join(' ', util.get_tokens(term.lower().strip()))
 
 # batches "lst" into "chunk_size" sized elements
