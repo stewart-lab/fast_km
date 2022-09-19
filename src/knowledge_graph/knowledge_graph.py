@@ -54,7 +54,7 @@ class KnowledgeGraph:
             b_type = str(relation.nodes[1].labels).strip(':')
             relationship = str(type(relation)).replace("'", "").replace(">", "").split('.')[2]
 
-            relation_json = {'a_term': a_term, 'a_type': a_type, 'relationship': relationship, 'b_term': b_term, 'b_type': b_type, 'pmids':[1, 2, 3, 4, 5]}
+            relation_json = {'a_term': a_term, 'a_type': a_type, 'relationship': relationship, 'b_term': b_term, 'b_type': b_type, 'pmids':relation['pmids']}
             result.append(relation_json)
 
         if not result:
