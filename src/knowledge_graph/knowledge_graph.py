@@ -54,11 +54,15 @@ class KnowledgeGraph:
         for relation in relation_matches:
             # TODO: this is pretty hacky.
             # need to find a better way to retrieve node/relation types as strings.
-            a_type = str(relation.nodes[0].labels).strip(':')
-            b_type = str(relation.nodes[1].labels).strip(':')
+            node1_name = relation.nodes[0]['name']
+            node1_type = str(relation.nodes[0].labels).strip(':')
+            
+            node2_name = relation.nodes[1]['name']
+            node2_type = str(relation.nodes[1].labels).strip(':')
+            
             relationship = str(type(relation)).replace("'", "").replace(">", "").split('.')[2]
 
-            relation_json = {'a_term': a_term, 'a_type': a_type, 'relationship': relationship, 'b_term': b_term, 'b_type': b_type, 'pmids':relation['pmids'][:100]}
+            relation_json = {'a_term': node1_name, 'a_type': node1_type, 'relationship': relationship, 'b_term': node2_name, 'b_type': node2_type, 'pmids':relation['pmids'][:100]}
             result.append(relation_json)
 
         if not result:
