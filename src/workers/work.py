@@ -9,12 +9,14 @@ import workers.loaded_index as li
 import workers.kinderminer as km
 from indexing.index_builder import IndexBuilder
 import indexing.download_abstracts as downloader
+from knowledge_graph.knowledge_graph import KnowledgeGraph, rel_pvalue_cutoff
 
 _r = Redis(host='redis', port=6379)
 _q = Queue(connection=_r)
 
 def km_work(json: list):
     _initialize_mongo_caching()
+    knowledge_graph = connect_to_neo4j()
 
     return_val = []
 
@@ -25,15 +27,7 @@ def km_work(json: list):
         a_term = item['a_term']
         b_term = item['b_term']
 
-        if 'censor_year' in item:
-            censor_year = int(item['censor_year'])
-        else:
-            censor_year = math.inf
-
-        if censor_year is None or censor_year > 2100:
-            censor_year = math.inf
-        if censor_year < 0:
-            censor_year = 0
+        censor_year = _get_censor_year(item)
 
         if a_term is None or b_term is None:
             raise TypeError('Must supply a_term and b_term')
@@ -47,12 +41,22 @@ def km_work(json: list):
         if 'pmid_intersection' in res:
             res['pmid_intersection'] = str(res['pmid_intersection'])
 
+        # query knowledge graph
+        query_kg = False
+        if 'query_knowledge_graph' in item:
+            query_kg = bool(item['query_knowledge_graph'])
+
+            if query_kg and res['pvalue'] < rel_pvalue_cutoff:
+                rel = knowledge_graph.query(a_term, b_term)
+                res['relationship'] = rel
+
         return_val.append(res)
 
     return return_val
 
 def km_work_all_vs_all(json: dict):
     _initialize_mongo_caching()
+    knowledge_graph = connect_to_neo4j()
 
     return_val = []
     km_only = False
@@ -81,32 +85,40 @@ def km_work_all_vs_all(json: dict):
         else:
             ab_fet_threshold = math.inf
 
-    if 'censor_year' in json:
-        censor_year = json['censor_year']
-    else:
-        censor_year = math.inf
+    censor_year = _get_censor_year(json)
 
     return_pmids = False
     if 'return_pmids' in json:
         return_pmids = bool(json['return_pmids'])
 
+    query_kg = False
+    if 'query_knowledge_graph' in json:
+        query_kg = bool(json['query_knowledge_graph'])
+
     if type(top_n) is str:
         top_n = int(top_n)
-    if type(censor_year) is str:
-        censor_year = int(censor_year)
+
+    _update_job_status('progress', 0)
 
     for a_term_n, a_term in enumerate(a_terms):
         ab_results = []
 
-        for b_term in b_terms:
+        for b_term_n, b_term in enumerate(b_terms):
             res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids)
 
             if res['pvalue'] <= ab_fet_threshold:
                 ab_results.append(res)
 
+            # report KM progress
+            if km_only:
+                numerator = a_term_n * len(b_terms) + b_term_n + 1
+                denom = len(a_terms) * len(b_terms)
+                progress = round((numerator / denom), 4)
+                _update_job_status('progress', min(progress, 0.9999))
+
         # sort by prediction score, descending
-        ab_results.sort(key=lambda res:
-            km.get_prediction_score(res['pvalue'], res['sort_ratio']),
+        ab_results.sort(key=lambda res: 
+            km.get_prediction_score(res['pvalue'], res['sort_ratio']), 
             reverse=True)
 
         ab_results = ab_results[:top_n]
@@ -121,7 +133,7 @@ def km_work_all_vs_all(json: dict):
                         'ab_pvalue': ab['pvalue'],
                         'ab_sort_ratio': ab['sort_ratio'],
                         'ab_pred_score': km.get_prediction_score(ab['pvalue'], ab['sort_ratio']),
-
+                        
                         'a_count': ab['len(a_term_set)'],
                         'b_count': ab['len(b_term_set)'],
                         'ab_count': ab['len(a_b_intersect)'],
@@ -130,6 +142,10 @@ def km_work_all_vs_all(json: dict):
 
                 if return_pmids:
                     abc_result['ab_pmid_intersection'] = str(ab['pmid_intersection'])
+
+                if query_kg and abc_result['ab_pvalue'] < rel_pvalue_cutoff:
+                    rel = knowledge_graph.query(abc_result['a_term'], abc_result['b_term'])
+                    abc_result['ab_relationship'] = rel
 
                 # add c-terms and b-c term KM info (SKiM)
                 if not km_only:
@@ -142,45 +158,23 @@ def km_work_all_vs_all(json: dict):
                     abc_result['bc_pred_score'] = km.get_prediction_score(bc['pvalue'], bc['sort_ratio'])
                     abc_result['c_count'] = bc['len(b_term_set)']
                     abc_result['bc_count'] = bc['len(a_b_intersect)']
-
+                    
                     if return_pmids:
                         abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
 
+                    if query_kg and abc_result['bc_pvalue'] < rel_pvalue_cutoff:
+                        rel = knowledge_graph.query(abc_result['b_term'], abc_result['c_term'])
+                        abc_result['bc_relationship'] = rel
+
                 return_val.append(abc_result)
 
-            # report percentage of C-terms complete
             if not km_only:
+                # report SKiM progress - percentage of C-terms complete
                 progress = round(((c_term_n + 1) / len(c_terms)), 4)
-            else:
-                # report percentage of A-B pairs complete
-                progress = round(((a_term_n + 1) / len(a_terms)), 4)
-
-            # report progress but never report 100% progress until the job is actually done
-            _update_job_status('progress', min(progress, 0.9999))
+                _update_job_status('progress', min(progress, 0.9999))
                 
     _update_job_status('progress', 1.0000)
     return return_val
-
-def triple_miner_work(json: list):
-    _initialize_mongo_caching()
-
-    km_set = []
-
-    for query in json:
-        a_term = query['a_term']
-        b_term = query['b_term']
-        c_term = query['c_term']
-
-        km_query = dict()
-        km_query['a_term'] = a_term + '&&' + b_term
-        km_query['b_term'] = c_term
-
-        if 'censor_year' in query:
-            km_query['censor_year'] = query['censor_year']
-
-        km_set.append(km_query)
-
-    return km_work(km_set)
 
 def update_index_work(json: dict):
     indexing.index._connect_to_mongo()
@@ -245,6 +239,9 @@ def _initialize_mongo_caching():
         # such as 'fever' to save the current state of the index
         li.the_index._check_if_mongo_should_be_refreshed()
 
+def connect_to_neo4j():
+    return KnowledgeGraph()
+
 def _restart_workers(requeue_interrupted_jobs = True):
     print('restarting workers...')
     workers = Worker.all(_r)
@@ -282,6 +279,19 @@ def _update_job_status(key, value):
     if job is None:
         print('error: tried to update job status, but could not find job')
         return
-
+    
     job.meta[key] = value
     job.save_meta()
+
+def _get_censor_year(item):
+    if 'censor_year' in item:
+        censor_year = int(item['censor_year'])
+    else:
+        censor_year = math.inf
+
+    if censor_year is None or censor_year > 2100:
+        censor_year = math.inf
+    if censor_year < 0:
+        censor_year = 0
+
+    return censor_year

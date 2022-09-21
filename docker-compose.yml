@@ -37,5 +37,18 @@ services:
     networks:
       - fast_km-network
 
+  neo4j:
+    image: neo4j
+    environment:
+      NEO4J_AUTH: neo4j/mypass
+    volumes:
+      - ${NEO4J_DIR}/data:/data
+      - ${NEO4J_DIR}/logs:/logs
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    networks:
+      - fast_km-network
+
 networks:
   fast_km-network:

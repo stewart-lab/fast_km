@@ -32,8 +32,10 @@ def test_skim_work(data_dir):
     assert result[0]['ab_count'] > 0
 
     # test SKiM with A-B-C terms
-    result = work.km_work_all_vs_all({'a_terms': ['cancer'], 'b_terms': ['test'], 'c_terms': ['coffee'], 'top_n': 50, 'ab_fet_threshold': 0.8})
+    result = work.km_work_all_vs_all({'a_terms': ['cancer'], 'b_terms': ['test'], 'c_terms': ['coffee'], 'top_n': 50, 'ab_fet_threshold': 0.8, 'query_knowledge_graph': True})
     assert len(result) == 1
     assert result[0]['c_term'] == 'coffee'
     assert result[0]['ab_count'] > 0
     assert result[0]['bc_count'] > 0
+    #assert result[0]['ab_relationship'] == 'neo4j connection error'
+    #assert result[0]['bc_relationship'] == 'neo4j connection error'

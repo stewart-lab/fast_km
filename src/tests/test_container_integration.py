@@ -61,9 +61,22 @@ def test_container_integration(data_dir, monkeypatch):
 
         # run query
         skim_url = api_url + skim_append
-        query = {'a_terms': ['cancer'], 'b_terms': ['coffee'], 'c_terms': ['water'], 'ab_fet_threshold': 1, 'top_n': 50}
-        result = _post_job(skim_url, query)['result']
+        query = {'a_terms': ['cancer'], 'b_terms': ['coffee'], 'c_terms': ['water'], 'ab_fet_threshold': 1, 'top_n': 50, 'query_knowledge_graph': 'True'}
+        job_info = _post_job(skim_url, query)
+
+        if job_info['status'] == 'failed':
+            if 'message' in job_info:
+                raise RuntimeError('the job failed because: ' + job_info['message'])
+            raise RuntimeError('the job failed without an annotated reason')
+        
+        result = job_info['result']
         assert result[0]['total_count'] == 0
+
+        # TODO: this just tests that the neo4j database can be connected to.
+        # it does not test for actual querying of the knowledge graph. need to
+        # write that into a test.
+        #assert 'ab_relationship' in result[0]
+        #assert 'connection error' not in result[0]['ab_relationship']
 
         # build the index
         _post_job(api_url + update_index_append, {'n_files': 0, 'clear_cache': False})
@@ -72,6 +85,8 @@ def test_container_integration(data_dir, monkeypatch):
         # cache to auto-clear.
         result = _post_job(skim_url, query)['result']
         assert result[0]['total_count'] > 4000
+        #assert 'ab_relationship' in result[0]
+        #assert 'connection error' not in result[0]['ab_relationship']
 
     except Exception as e:
         assert False, str(e)

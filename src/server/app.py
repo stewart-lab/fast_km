@@ -3,8 +3,11 @@ from flask import jsonify
 import rq_dashboard
 from redis import Redis
 from rq import Queue
+from rq.job import Job
+from rq.command import send_stop_job_command
+from rq.exceptions import InvalidJobOperation
 from flask_restful import Api
-from workers.work import km_work, km_work_all_vs_all, triple_miner_work, update_index_work, clear_mongo_cache
+from workers.work import km_work, km_work_all_vs_all, update_index_work, clear_mongo_cache
 import logging
 from flask_bcrypt import Bcrypt
 
@@ -114,15 +117,6 @@ def _post_skim_job():
 def _get_skim_job():
     return _get_generic(request)
 
-## ******** TripleMiner Post/Get ********
-@_app.route('/tripleminer/api/jobs/', methods=['POST'])
-def _post_tripleminer_job():
-    return _post_generic(triple_miner_work, request)
-
-@_app.route('/tripleminer/api/jobs/', methods=['GET'])
-def _get_tripleminer_job():
-    return _get_generic(request)
-
 ## ******** Update Index Post/Get ********
 @_app.route('/update_index/api/jobs/', methods=['POST'])
 def _post_update_index_job():
@@ -136,3 +130,33 @@ def _get_update_index_job():
 @_app.route('/clear_cache/api/jobs/', methods=['POST'])
 def _post_clear_cache_job():
     return _post_generic(clear_mongo_cache, request)
+
+## ******** Cancel Job Post ********
+@_app.route('/cancel_job/api/jobs/', methods=['POST'])
+def _post_cancel_job():
+    json_data = request.get_json(request.data)
+    job_id = json_data['id']
+    response = jsonify(dict())
+
+    job = Job.fetch(job_id, connection=_r)
+
+    if job:
+        job.cancel()
+        try:
+            send_stop_job_command(connection=_r, job_id=job_id)
+
+            # TODO: can't seem to get an error message to display in 
+            # rq-dashboard. probably should come back to this at some point.
+            
+            # job.exc_info = 'Job was canceled by request'
+            # job.save()
+        except InvalidJobOperation:
+            # probably tried to cancel a job that wasn't in progress. 
+            # just ignore the error message.
+            pass
+        status_code = 200
+    else:
+        status_code = 404
+
+    response.status_code = status_code
+    return response
