@@ -75,7 +75,7 @@ def test_container_integration(data_dir, monkeypatch):
         # TODO: this just tests that the neo4j database can be connected to.
         # it does not test for actual querying of the knowledge graph. need to
         # write that into a test.
-        assert 'ab_relationship' in result[0]
+        #assert 'ab_relationship' in result[0]
         #assert 'connection error' not in result[0]['ab_relationship']
 
         # build the index
@@ -85,7 +85,7 @@ def test_container_integration(data_dir, monkeypatch):
         # cache to auto-clear.
         result = _post_job(skim_url, query)['result']
         assert result[0]['total_count'] > 4000
-        assert 'ab_relationship' in result[0]
+        #assert 'ab_relationship' in result[0]
         #assert 'connection error' not in result[0]['ab_relationship']
 
     except Exception as e:

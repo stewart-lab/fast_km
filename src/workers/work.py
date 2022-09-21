@@ -55,128 +55,126 @@ def km_work(json: list):
     return return_val
 
 def km_work_all_vs_all(json: dict):
-    try:
-        _initialize_mongo_caching()
-        knowledge_graph = connect_to_neo4j()
+    _initialize_mongo_caching()
+    knowledge_graph = connect_to_neo4j()
 
-        return_val = []
-        km_only = False
+    return_val = []
+    km_only = False
 
-        a_terms = json['a_terms']
-        b_terms = json['b_terms']
+    a_terms = json['a_terms']
+    b_terms = json['b_terms']
 
-        if 'c_terms' in json:
-            # SKiM query
-            c_terms = json['c_terms']
+    if 'c_terms' in json:
+        # SKiM query
+        c_terms = json['c_terms']
 
+        top_n = json['top_n']
+        ab_fet_threshold = json['ab_fet_threshold']
+    else:
+        # KM query
+        km_only = True
+        c_terms = ['__KM_ONLY__'] # dummy variable
+
+        if 'top_n' in json:
             top_n = json['top_n']
+        else:
+            top_n = sys.maxsize
+
+        if 'ab_fet_threshold' in json:
             ab_fet_threshold = json['ab_fet_threshold']
         else:
-            # KM query
-            km_only = True
-            c_terms = ['__KM_ONLY__'] # dummy variable
+            ab_fet_threshold = math.inf
 
-            if 'top_n' in json:
-                top_n = json['top_n']
-            else:
-                top_n = sys.maxsize
+    censor_year = _get_censor_year(json)
 
-            if 'ab_fet_threshold' in json:
-                ab_fet_threshold = json['ab_fet_threshold']
-            else:
-                ab_fet_threshold = math.inf
+    return_pmids = False
+    if 'return_pmids' in json:
+        return_pmids = bool(json['return_pmids'])
 
-        censor_year = _get_censor_year(json)
+    query_kg = False
+    if 'query_knowledge_graph' in json:
+        query_kg = bool(json['query_knowledge_graph'])
 
-        return_pmids = False
-        if 'return_pmids' in json:
-            return_pmids = bool(json['return_pmids'])
+    if type(top_n) is str:
+        top_n = int(top_n)
 
-        query_kg = False
-        if 'query_knowledge_graph' in json:
-            query_kg = bool(json['query_knowledge_graph'])
+    _update_job_status('progress', 0)
 
-        if type(top_n) is str:
-            top_n = int(top_n)
+    for a_term_n, a_term in enumerate(a_terms):
+        ab_results = []
 
-        for a_term_n, a_term in enumerate(a_terms):
-            ab_results = []
+        for b_term_n, b_term in enumerate(b_terms):
+            res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids)
 
-            for b_term_n, b_term in enumerate(b_terms):
-                res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids)
+            if res['pvalue'] <= ab_fet_threshold:
+                ab_results.append(res)
 
-                if res['pvalue'] <= ab_fet_threshold:
-                    ab_results.append(res)
+            # report KM progress
+            if km_only:
+                numerator = a_term_n * len(b_terms) + b_term_n + 1
+                denom = len(a_terms) * len(b_terms)
+                progress = round((numerator / denom), 4)
+                _update_job_status('progress', min(progress, 0.9999))
 
-                # report KM progress - percentage of A-B pairs complete
-                if km_only:
-                    progress = round(((b_term_n + 1) / len(b_terms)), 4)
-                    _update_job_status('progress', min(progress, 0.9999))
+        # sort by prediction score, descending
+        ab_results.sort(key=lambda res: 
+            km.get_prediction_score(res['pvalue'], res['sort_ratio']), 
+            reverse=True)
 
-            # sort by prediction score, descending
-            ab_results.sort(key=lambda res: 
-                km.get_prediction_score(res['pvalue'], res['sort_ratio']), 
-                reverse=True)
+        ab_results = ab_results[:top_n]
 
-            ab_results = ab_results[:top_n]
+        # take top N per a-b pair and run b-terms against c-terms
+        for c_term_n, c_term in enumerate(c_terms):
+            for ab in ab_results:
+                abc_result = {
+                        'a_term': ab['a_term'],
+                        'b_term': ab['b_term'],
 
-            # take top N per a-b pair and run b-terms against c-terms
-            for c_term_n, c_term in enumerate(c_terms):
-                for ab in ab_results:
-                    abc_result = {
-                            'a_term': ab['a_term'],
-                            'b_term': ab['b_term'],
-
-                            'ab_pvalue': ab['pvalue'],
-                            'ab_sort_ratio': ab['sort_ratio'],
-                            'ab_pred_score': km.get_prediction_score(ab['pvalue'], ab['sort_ratio']),
-                            
-                            'a_count': ab['len(a_term_set)'],
-                            'b_count': ab['len(b_term_set)'],
-                            'ab_count': ab['len(a_b_intersect)'],
-                            'total_count': ab['n_articles']
-                        }
-
-                    if return_pmids:
-                        abc_result['ab_pmid_intersection'] = str(ab['pmid_intersection'])
-
-                    if query_kg and abc_result['ab_pvalue'] < rel_pvalue_cutoff:
-                        rel = knowledge_graph.query(abc_result['a_term'], abc_result['b_term'])
-                        abc_result['ab_relationship'] = rel
-
-                    # add c-terms and b-c term KM info (SKiM)
-                    if not km_only:
-                        b_term = ab['b_term']
-                        bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year, return_pmids)
-
-                        abc_result['c_term'] = c_term
-                        abc_result['bc_pvalue'] = bc['pvalue']
-                        abc_result['bc_sort_ratio'] = bc['sort_ratio']
-                        abc_result['bc_pred_score'] = km.get_prediction_score(bc['pvalue'], bc['sort_ratio'])
-                        abc_result['c_count'] = bc['len(b_term_set)']
-                        abc_result['bc_count'] = bc['len(a_b_intersect)']
+                        'ab_pvalue': ab['pvalue'],
+                        'ab_sort_ratio': ab['sort_ratio'],
+                        'ab_pred_score': km.get_prediction_score(ab['pvalue'], ab['sort_ratio']),
                         
-                        if return_pmids:
-                            abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
+                        'a_count': ab['len(a_term_set)'],
+                        'b_count': ab['len(b_term_set)'],
+                        'ab_count': ab['len(a_b_intersect)'],
+                        'total_count': ab['n_articles']
+                    }
 
-                        if query_kg and abc_result['bc_pvalue'] < rel_pvalue_cutoff:
-                            rel = knowledge_graph.query(abc_result['b_term'], abc_result['c_term'])
-                            abc_result['bc_relationship'] = rel
+                if return_pmids:
+                    abc_result['ab_pmid_intersection'] = str(ab['pmid_intersection'])
 
-                    return_val.append(abc_result)
+                if query_kg and abc_result['ab_pvalue'] < rel_pvalue_cutoff:
+                    rel = knowledge_graph.query(abc_result['a_term'], abc_result['b_term'])
+                    abc_result['ab_relationship'] = rel
 
+                # add c-terms and b-c term KM info (SKiM)
                 if not km_only:
-                    # report SKiM progress - percentage of C-terms complete
-                    progress = round(((c_term_n + 1) / len(c_terms)), 4)
-                    _update_job_status('progress', min(progress, 0.9999))
-                    
-        _update_job_status('progress', 1.0000)
-        return return_val
+                    b_term = ab['b_term']
+                    bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year, return_pmids)
 
-    except Exception as e:
-        # report back a reason for job failure
-        _update_job_status('message', repr(e))
-        return []
+                    abc_result['c_term'] = c_term
+                    abc_result['bc_pvalue'] = bc['pvalue']
+                    abc_result['bc_sort_ratio'] = bc['sort_ratio']
+                    abc_result['bc_pred_score'] = km.get_prediction_score(bc['pvalue'], bc['sort_ratio'])
+                    abc_result['c_count'] = bc['len(b_term_set)']
+                    abc_result['bc_count'] = bc['len(a_b_intersect)']
+                    
+                    if return_pmids:
+                        abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
+
+                    if query_kg and abc_result['bc_pvalue'] < rel_pvalue_cutoff:
+                        rel = knowledge_graph.query(abc_result['b_term'], abc_result['c_term'])
+                        abc_result['bc_relationship'] = rel
+
+                return_val.append(abc_result)
+
+            if not km_only:
+                # report SKiM progress - percentage of C-terms complete
+                progress = round(((c_term_n + 1) / len(c_terms)), 4)
+                _update_job_status('progress', min(progress, 0.9999))
+                
+    _update_job_status('progress', 1.0000)
+    return return_val
 
 def update_index_work(json: dict):
     indexing.index._connect_to_mongo()
