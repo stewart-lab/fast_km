@@ -79,21 +79,26 @@ def _get_generic(request):
         return 'Invalid password. do request.get(..., auth=(\'username\', \'password\'))', 401
 
     id = request.args['id']
-    job = _q.fetch_job(id)
-
     job_data = dict()
     job_data['id'] = id
-    job_data['status'] = job.get_status()
-    meta = job.get_meta()
 
-    if 'progress' in meta:
-        job_data['progress'] = meta['progress']
+    job = _q.fetch_job(id)
 
-    if job.result is not None:
-        job_data['result'] = job.result
-        status_code = 200
+    if job:
+        job_data['status'] = job.get_status()
+        meta = job.get_meta()
+
+        if 'progress' in meta:
+            job_data['progress'] = meta['progress']
+
+        if job.result is not None:
+            job_data['result'] = job.result
+            status_code = 200
+        else:
+            status_code = 202
     else:
-        status_code = 202
+        job_data['status'] = 'not_found'
+        status_code = 404
 
     response = jsonify(job_data)
     response.status_code = status_code
