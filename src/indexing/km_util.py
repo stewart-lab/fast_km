@@ -67,3 +67,6 @@ def get_offset_file(abstracts_dir: str) -> str:
 
 def get_cataloged_files(abstracts_dir: str) -> str:
     return os.path.join(get_index_dir(abstracts_dir), 'cataloged.txt')
+
+def get_knowledge_graph_node_id_index(abstracts_dir: str) -> str:
+    return os.path.join(get_index_dir(abstracts_dir), 'kg_node_ids.txt')

@@ -1,8 +1,9 @@
-from py2neo import Graph, Node, Relationship, NodeMatcher
-from py2neo.bulk import create_nodes, create_relationships, merge_relationships
+from py2neo import Graph
+from py2neo.bulk import create_nodes, merge_relationships
 from itertools import islice
 import indexing.km_util as util
 import indexing.index as index
+import workers.loaded_index as li
 
 uri="bolt://neo4j:7687"
 user = "neo4j"
@@ -14,12 +15,22 @@ min_pmids_for_rel = 3
 class KnowledgeGraph:
     def __init__(self):
         self.query_cache = dict()
+        self.node_ids = dict()
 
         try:
             self.graph = Graph(uri, auth=(user, password))
         except:
             self.graph = None
             print('Could not find a neo4j knowledge graph database')
+            return
+
+        try:
+            kg_ids = util.get_knowledge_graph_node_id_index(li.pubmed_path)
+            if kg_ids:
+                self.load_node_id_index(kg_ids)
+        except:
+            self.node_ids = dict()
+            print('Problem loading graph node IDs')
 
     def query(self, a_term: str, b_term: str):
         if not self.graph:
@@ -35,8 +46,13 @@ class KnowledgeGraph:
             return self.query_cache[(a_term_stripped, b_term_stripped)]
 
         # get nodes from the neo4j database
-        a_matches = self.graph.nodes.match(name=a_term_stripped).all()
-        b_matches = self.graph.nodes.match(name=b_term_stripped).all()
+        if self.node_ids:
+            a_matches = [self.graph.nodes.get(_id) for _id in self.node_ids.get(a_term_stripped, [])]
+            b_matches = [self.graph.nodes.get(_id) for _id in self.node_ids.get(b_term_stripped, [])]
+        else:
+            # this is ~50x slower than looking up by node ID but it will still work
+            a_matches = self.graph.nodes.match(name=a_term_stripped).all()
+            b_matches = self.graph.nodes.match(name=b_term_stripped).all()
 
         # get relationship(s) between a and b nodes
         relation_matches = []
@@ -70,6 +86,26 @@ class KnowledgeGraph:
 
         self.query_cache[(a_term_stripped, b_term_stripped)] = result
         return result
+
+    def write_node_id_index(self, path: str):
+        all_nodes = self.graph.nodes.match()
+        with open(path, 'w') as f:
+            for node in all_nodes:
+                name = node['name']
+                ident = node.identity
+                f.write(name + '\t' + str(ident) + '\n')
+
+    def load_node_id_index(self, path: str):
+        with open(path, 'r') as f:
+            for line in f:
+                spl = line.split('\t')
+                name = spl[0]
+                id = int(spl[1])
+
+                if name not in self.node_ids:
+                    self.node_ids[name] = []
+
+                self.node_ids[name].append(id)
 
     def populate(self, path_to_tsv_file: str):
         self.graph.delete_all()
