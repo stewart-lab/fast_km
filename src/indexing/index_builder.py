@@ -47,17 +47,21 @@ class IndexBuilder():
         os.replace(temp_index_path, util.get_index_file(self.path_to_pubmed_abstracts))
         os.replace(temp_offset_path, util.get_offset_file(self.path_to_pubmed_abstracts))
 
-    def _index_abstract(self, abstract: Abstract, hot_storage: dict):
+    def _index_abstract(self, abstract: Abstract, hot_storage: dict, n = 1):
         tokens = util.get_tokens(abstract.title)
         for i, token in enumerate(tokens):
-            self._place_token(token, i, abstract.pmid, hot_storage)
+            for k in range(i + 1, min(len(tokens) + 1, i + n + 1)):
+                ngram = str.join(' ', tokens[i:k])
+                self._place_token(ngram, i, abstract.pmid, hot_storage)
 
         if not tokens:
             i = 0
 
         tokens = util.get_tokens(abstract.text)
         for j, token in enumerate(tokens):
-            self._place_token(token, i + j + 2, abstract.pmid, hot_storage)
+            for k in range(j + 1, min(len(tokens) + 1, j + n + 1)):
+                ngram = str.join(' ', tokens[j:k])
+                self._place_token(ngram, i + j + 2, abstract.pmid, hot_storage)
 
     def _place_token(self, token: str, pos: int, id: int, hot_storage: dict) -> None:
         l_token = token.lower()
