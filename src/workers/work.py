@@ -68,35 +68,20 @@ def km_work_all_vs_all(json: dict):
         # SKiM query
         c_terms = json['c_terms']
 
-        top_n = json['top_n']
-        ab_fet_threshold = json['ab_fet_threshold']
+        top_n = _get_top_n(json)
+        ab_fet_threshold = _get_ab_fet_threshold(json, 1e-5)
+        bc_fet_threshold = _get_bc_fet_threshold(json, 0.9999)
     else:
         # KM query
         km_only = True
         c_terms = ['__KM_ONLY__'] # dummy variable
 
-        if 'top_n' in json:
-            top_n = json['top_n']
-        else:
-            top_n = sys.maxsize
-
-        if 'ab_fet_threshold' in json:
-            ab_fet_threshold = json['ab_fet_threshold']
-        else:
-            ab_fet_threshold = math.inf
+        top_n = _get_top_n(json, sys.maxsize)
+        ab_fet_threshold = _get_ab_fet_threshold(json, math.inf)
 
     censor_year = _get_censor_year(json)
-
-    return_pmids = False
-    if 'return_pmids' in json:
-        return_pmids = bool(json['return_pmids'])
-
-    query_kg = False
-    if 'query_knowledge_graph' in json:
-        query_kg = bool(json['query_knowledge_graph'])
-
-    if type(top_n) is str:
-        top_n = int(top_n)
+    return_pmids = bool(json.get('return_pmids', False))
+    query_kg = bool(json.get('query_knowledge_graph', False))
 
     _update_job_status('progress', 0)
 
@@ -111,10 +96,8 @@ def km_work_all_vs_all(json: dict):
 
             # report KM progress
             if km_only:
-                numerator = a_term_n * len(b_terms) + b_term_n + 1
-                denom = len(a_terms) * len(b_terms)
-                progress = round((numerator / denom), 4)
-                _update_job_status('progress', min(progress, 0.9999))
+                progress = _km_progress(a_term_n, b_term_n + 1, len(a_terms), len(b_terms))
+                _update_job_status('progress', progress)
 
         # sort by prediction score, descending
         ab_results.sort(key=lambda res: 
@@ -143,9 +126,12 @@ def km_work_all_vs_all(json: dict):
                 if return_pmids:
                     abc_result['ab_pmid_intersection'] = str(ab['pmid_intersection'])
 
-                if query_kg and abc_result['ab_pvalue'] < rel_pvalue_cutoff:
-                    rel = knowledge_graph.query(abc_result['a_term'], abc_result['b_term'])
-                    abc_result['ab_relationship'] = rel
+                if query_kg: # and abc_result['ab_pvalue'] < rel_pvalue_cutoff:
+                    if abc_result['ab_pvalue'] < rel_pvalue_cutoff:
+                        rel = knowledge_graph.query(abc_result['a_term'], abc_result['b_term'])
+                        abc_result['ab_relationship'] = rel
+                    else:
+                        abc_result['ab_relationship'] = None
 
                 # add c-terms and b-c term KM info (SKiM)
                 if not km_only:
@@ -162,16 +148,20 @@ def km_work_all_vs_all(json: dict):
                     if return_pmids:
                         abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
 
-                    if query_kg and abc_result['bc_pvalue'] < rel_pvalue_cutoff:
-                        rel = knowledge_graph.query(abc_result['b_term'], abc_result['c_term'])
-                        abc_result['bc_relationship'] = rel
+                    if query_kg:
+                        if abc_result['bc_pvalue'] < rel_pvalue_cutoff:
+                            rel = knowledge_graph.query(abc_result['b_term'], abc_result['c_term'])
+                            abc_result['bc_relationship'] = rel
+                        else:
+                            abc_result['bc_relationship'] = None
 
-                return_val.append(abc_result)
+                if km_only or (abc_result['bc_pvalue'] <= bc_fet_threshold):
+                    return_val.append(abc_result)
 
             if not km_only:
                 # report SKiM progress - percentage of C-terms complete
-                progress = round(((c_term_n + 1) / len(c_terms)), 4)
-                _update_job_status('progress', min(progress, 0.9999))
+                progress = _skim_progress(a_term_n, b_term_n, c_term_n + 1, len(a_terms), len(b_terms), len(c_terms))
+                _update_job_status('progress', progress)
                 
     _update_job_status('progress', 1.0000)
     return return_val
@@ -295,3 +285,24 @@ def _get_censor_year(item):
         censor_year = 0
 
     return censor_year
+
+def _get_top_n(the_dict: dict, default_val = 50):
+    return int(the_dict.get('top_n', default_val))
+
+def _get_ab_fet_threshold(the_dict: dict, default_val = 1e-5):
+    return float(the_dict.get('ab_fet_threshold', default_val))
+
+def _get_bc_fet_threshold(the_dict: dict, default_val = 0.9999):
+    return float(the_dict.get('bc_fet_threshold', default_val))
+
+def _km_progress(a_complete: int, b_complete: int, a_total: int, b_total: int):
+    numerator = a_complete * b_total + b_complete
+    denom = a_total * b_total
+    progress = round(numerator / denom, 4)
+    return min(progress, 0.9999)
+
+def _skim_progress(a_complete: int, b_complete: int, c_complete: int, a_total: int, b_total: int, c_total: int):
+    # numerator = (a_complete * b_complete) + c_complete + 1
+    # denom = a_total * b_total * c_total
+    progress = round(c_complete / c_total, 4)
+    return min(progress, 0.9999)

@@ -18,7 +18,7 @@ services:
       context: .
       dockerfile: ./src/workers/Dockerfile
     image: fast_km-worker:build
-    command: --workers 1
+    command: --workers 3
     volumes:
       - ${PUBMED_DIR}:/mnt/pubmed  # edit .env file to change pubmed dir
     depends_on:
