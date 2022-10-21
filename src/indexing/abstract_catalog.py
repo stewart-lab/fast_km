@@ -27,7 +27,7 @@ class AbstractCatalog():
         util.report_progress(0, len(abstract_files_to_catalog))
 
         for i, gzip_file in enumerate(abstract_files_to_catalog):
-            with gzip.open(gzip_file, 'rb') as xml_file:
+            with gzip.open(gzip_file, 'rb', encoding=util.encoding) as xml_file:
                 abstracts = _parse_xml(xml_file.read())
                 filename = os.path.basename(gzip_file)
 
