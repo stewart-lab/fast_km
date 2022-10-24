@@ -53,13 +53,13 @@ class AbstractCatalog():
             year = min(abstract.pub_year, old.pub_year)
 
             # use the new text, unless it is unavailable
-            if str.isspace(abstract.text):
+            if not abstract.text or str.isspace(abstract.text):
                 text = old.text
             else:
                 text = abstract.text
             
             # use the new title, unless it is unavailable
-            if str.isspace(abstract.title):
+            if not abstract.title or str.isspace(abstract.title):
                 title = old.title
             else:
                 title = abstract.title
