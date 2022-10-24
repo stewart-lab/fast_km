@@ -32,6 +32,7 @@ class Index():
         self._date_censored_pmids = dict()
         self._init_byte_info()
         self._open_connection()
+        self._ngram_n = self._get_ngram_n()
 
     def close_connection(self) -> None:
         self.connection.close()
@@ -178,6 +179,13 @@ class Index():
     def _query_disk(self, tokens: 'list[str]') -> 'set[int]':
         result = set()
 
+        if self._ngram_n > 1 and len(tokens) > 1:
+            ngrams = []
+            for i in range(0, len(tokens) - (self._ngram_n - 1)):
+                ngram = str.join(' ', tokens[i:i + self._ngram_n])
+                ngrams.append(ngram)
+            tokens = ngrams
+
         possible_pmids = set()
         for i, token in enumerate(tokens):
             # deserialize the tokens
@@ -243,6 +251,14 @@ class Index():
         self.connection.seek(byte_offset)
         stored_bytes = self.connection.read(byte_len)
         return stored_bytes
+
+    def _get_ngram_n(self) -> int:
+        n = 1
+        tmp_list = list(self._byte_offsets.keys())[:100]
+        for item in tmp_list:
+            spl = item.split(' ')
+            n = max(n, len(spl))
+        return n
 
     def _check_if_mongo_should_be_refreshed(self, terms_to_check: 'list[str]' = ['fever']):
         # the purpose of this function is to check a non-cached version of a token

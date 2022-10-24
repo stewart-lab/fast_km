@@ -47,7 +47,7 @@ class IndexBuilder():
         os.replace(temp_index_path, util.get_index_file(self.path_to_pubmed_abstracts))
         os.replace(temp_offset_path, util.get_offset_file(self.path_to_pubmed_abstracts))
 
-    def _index_abstract(self, abstract: Abstract, hot_storage: dict, n = 1):
+    def _index_abstract(self, abstract: Abstract, hot_storage: dict, n = 2):
         tokens = util.get_tokens(abstract.title)
         for i, token in enumerate(tokens):
             for k in range(i + 1, min(len(tokens) + 1, i + n + 1)):

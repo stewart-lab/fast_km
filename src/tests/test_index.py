@@ -10,12 +10,12 @@ def test_index_abstract(tmp_path):
 
     cataloger = AbstractCatalog(tmp_path)
     abs1 = Abstract(1000, 2020, "A Really Cool Pubmed Abstract",
-        "The quick brown fox jumped over the lazy dog.")
+        "The quick brown fox jumped are are over the lazy dog.")
 
     assert abs1.pmid == 1000
     assert abs1.pub_year == 2020
     assert abs1.title == "A Really Cool Pubmed Abstract"
-    assert abs1.text == "The quick brown fox jumped over the lazy dog."
+    assert abs1.text == "The quick brown fox jumped are are over the lazy dog."
 
     abs2 = Abstract(1001, 2021, "A Cool Title",
         "Some of the words are are repeated but some are-are-are not.")
