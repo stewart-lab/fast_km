@@ -10,6 +10,7 @@ import workers.kinderminer as km
 from indexing.index_builder import IndexBuilder
 import indexing.download_abstracts as downloader
 from knowledge_graph.knowledge_graph import KnowledgeGraph, rel_pvalue_cutoff
+import indexing.km_util as km_util
 
 _r = Redis(host='redis', port=6379)
 _q = Queue(connection=_r)
@@ -106,10 +107,28 @@ def km_work_all_vs_all(json: dict):
 
         ab_results = ab_results[:top_n]
 
+        # RAM efficiency stuff
         b_terms_used = set([x['b_term'] for x in ab_results])
         b_terms_not_used = [_b_term for _b_term in b_terms if _b_term not in b_terms_used]
         for _b_term in b_terms_not_used:
             li.the_index.decache_token(_b_term)
+
+        b_term_tokens = set()
+        for _b_term in b_terms_used:
+            for token in km_util.get_tokens(_b_term):
+                b_term_tokens.add(token)
+
+        c_term_token_dict = dict()
+        for c_term in c_terms:
+            c_tokens = km_util.get_tokens(c_term)
+            for c_token in c_tokens:
+                if c_token not in c_term_token_dict:
+                    c_term_token_dict[c_token] = []
+                c_term_token_dict[c_token].append(c_term)
+
+        for token in list(li.the_index._token_cache.keys()):
+            if token not in b_term_tokens and token not in c_term_token_dict:
+                li.the_index.decache_token(token)
 
         # take top N per a-b pair and run b-terms against c-terms
         for c_term_n, c_term in enumerate(c_terms):
@@ -163,12 +182,18 @@ def km_work_all_vs_all(json: dict):
                 if km_only or (abc_result['bc_pvalue'] <= bc_fet_threshold):
                     return_val.append(abc_result)
 
-            li.the_index.decache_token(c_term)
-
             if not km_only:
                 # report SKiM progress - percentage of C-terms complete
                 progress = _skim_progress(a_term_n, b_term_n, c_term_n + 1, len(a_terms), len(b_terms), len(c_terms))
                 _update_job_status('progress', progress)
+
+                li.the_index.decache_token(c_term)
+                c_tokens = km_util.get_tokens(c_term)
+                for c_token in c_tokens:
+                    query_terms = c_term_token_dict[c_token]
+                    query_terms.remove(c_term)
+                    if not query_terms:
+                        li.the_index.decache_token(c_token)
                 
     _update_job_status('progress', 1.0000)
     return return_val

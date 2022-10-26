@@ -8,6 +8,7 @@ import pymongo
 from pymongo import errors
 import indexing.km_util as util
 from indexing.abstract_catalog import AbstractCatalog
+from pympler import asizeof
 
 delim = '\t'
 logical_or = '/' # supports '/' to mean 'or'
@@ -39,6 +40,14 @@ class Index():
         self.file_obj.close()
 
     def construct_abstract_set(self, term: str) -> set:
+        # DEBUG
+        print('query cache size: ' + str(asizeof.asizeof(self._query_cache)))
+        print('token cache size: ' + str(asizeof.asizeof(self._token_cache)))
+        print('date censored query cache size: ' + str(asizeof.asizeof(self._date_censored_query_cache)))
+        # END DEBUG
+
+
+
         # TODO: support parenthesis for allowing OR and AND at the same time?
         # e.g., "(cancer/carcinoma) & BRCA1"
 
