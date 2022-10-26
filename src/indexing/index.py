@@ -106,7 +106,7 @@ class Index():
             return n_articles_censored
 
     def decache_token(self, token: str):
-        ltoken = token.lower()
+        ltoken = sanitize_term(token)
         if ltoken in self._token_cache:
             del self._token_cache[ltoken]
         if ltoken in self._query_cache:
