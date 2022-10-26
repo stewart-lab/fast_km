@@ -106,6 +106,11 @@ def km_work_all_vs_all(json: dict):
 
         ab_results = ab_results[:top_n]
 
+        b_terms_used = set([x['b_term'] for x in ab_results])
+        b_terms_not_used = [_b_term for _b_term in b_terms if _b_term not in b_terms_used]
+        for _b_term in b_terms_not_used:
+            li.the_index.decache_token(_b_term)
+
         # take top N per a-b pair and run b-terms against c-terms
         for c_term_n, c_term in enumerate(c_terms):
             for ab in ab_results:
@@ -157,6 +162,8 @@ def km_work_all_vs_all(json: dict):
 
                 if km_only or (abc_result['bc_pvalue'] <= bc_fet_threshold):
                     return_val.append(abc_result)
+
+            li.the_index.decache_token(c_term)
 
             if not km_only:
                 # report SKiM progress - percentage of C-terms complete
