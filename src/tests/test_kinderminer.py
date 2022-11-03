@@ -106,3 +106,18 @@ def test_kinderminer(data_dir):
     assert km_result['sort_ratio'] == pytest.approx(0.006644, abs=1e-6)
     assert km_result['n_articles'] == 4139
     assert km_result['pmid_intersection'] == {34580336, 34582109}
+
+def test_prediction_score():
+    total_n = 33810017
+    a_and_b = 437
+    b_not_a = 1058 - a_and_b
+    a_not_b = 1270220
+    not_a_not_b = total_n - a_and_b - b_not_a - a_not_b
+
+    table = [[a_and_b, a_not_b],
+            [b_not_a, not_a_not_b]]
+
+    fet = km.fisher_exact(table)
+    ratio = km.get_sort_ratio(table)
+    pred_score = km.get_prediction_score(fet, ratio)
+    assert pred_score == 2.0
