@@ -29,9 +29,9 @@ def test_text_sanitation():
     sanitized_text = index.sanitize_term(text)
     assert sanitized_text == 'testing123'
 
-    text = 'The quick brown fox / jumped over the lazy dog.'
+    text = 'The quick brown fox ' + index.logical_or + ' jumped over the lazy dog.'
     sanitized_text = index.sanitize_term(text)
-    assert sanitized_text == 'jumped over the lazy dog/the quick brown fox'
+    assert sanitized_text == 'jumped over the lazy dog' + index.logical_or + 'the quick brown fox'
 
     text = 'This&is&a&test.'
     sanitized_text = index.sanitize_term(text)
@@ -91,7 +91,7 @@ def test_kinderminer(data_dir):
     assert len(km_result['pmid_intersection']) == 11
 
     # test 'and', 'or' logical operators
-    km_result = km.kinderminer_search('skin', 'cancer/carcinoma', idx, return_pmids=True)
+    km_result = km.kinderminer_search('skin', 'cancer' + index.logical_or + 'carcinoma', idx, return_pmids=True)
     assert km_result['pvalue'] == pytest.approx(0.748696, abs=1e-6)
     assert km_result['len(a_term_set)'] == 76
     assert km_result['len(b_term_set)'] == 335
@@ -99,7 +99,7 @@ def test_kinderminer(data_dir):
     assert km_result['n_articles'] == 4139
     assert km_result['pmid_intersection'] == {34579370, 34580336, 34581683, 34579963, 34582109}
 
-    km_result = km.kinderminer_search('skin&treatment', 'cancer', idx, return_pmids=True)
+    km_result = km.kinderminer_search('skin' + index.logical_and + 'treatment', 'cancer', idx, return_pmids=True)
     assert km_result['pvalue'] == pytest.approx(0.326369, abs=1e-6)
     assert km_result['len(a_term_set)'] == 16
     assert km_result['len(b_term_set)'] == 301

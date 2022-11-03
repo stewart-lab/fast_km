@@ -127,7 +127,7 @@ class IndexBuilder():
         temp_index_path = util.get_index_file(self.path_to_pubmed_abstracts) + '.tmp'
 
         with open(temp_index_path, 'wb') as f:
-            with cdblib.Writer(f) as writer:
+            with cdblib.Writer64(f) as writer:
                 writer.put('ABSTRACT_PUBLICATION_YEARS', quickle.dumps(self.abstract_years))
 
                 for token in cold_storage:
