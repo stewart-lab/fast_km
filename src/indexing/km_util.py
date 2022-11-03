@@ -60,10 +60,7 @@ def get_abstract_catalog(abstracts_dir: str) -> str:
     return os.path.join(get_index_dir(abstracts_dir), 'abstracts.txt.gzip')
 
 def get_index_file(abstracts_dir: str) -> str:
-    return os.path.join(get_index_dir(abstracts_dir), 'index.bin')
-
-def get_offset_file(abstracts_dir: str) -> str:
-    return os.path.join(get_index_dir(abstracts_dir), 'index_offsets.txt')
+    return os.path.join(get_index_dir(abstracts_dir), 'index.cdb')
 
 def get_cataloged_files(abstracts_dir: str) -> str:
     return os.path.join(get_index_dir(abstracts_dir), 'cataloged.txt')
