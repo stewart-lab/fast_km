@@ -22,6 +22,10 @@ def data_dir():
     return os.path.join(os.getcwd(), "src", "tests", "test_data", "indexer")
 
 def test_container_integration(data_dir, monkeypatch):
+    # you can uncomment this pytest.skip if you want to test container 
+    # integration on your local machine
+    pytest.skip('skipped; CI pipeline tests containers')
+
     # set the pubmed dir for this test
     monkeypatch.setenv(name='PUBMED_DIR', value=data_dir.replace(os.getcwd(), '.'))
 
