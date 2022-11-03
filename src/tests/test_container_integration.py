@@ -5,9 +5,6 @@ import os
 import shutil
 from subprocess import check_output
 from indexing import km_util as util
-# the tests in this file test the Docker container communication, job
-# queuing, mongoDB caching, etc. They require that the API server and workers
-# be running with supporting containers in a docker-compose environment.
 
 flask_port = '5099'
 api_url = 'http://localhost:' + flask_port
@@ -97,6 +94,39 @@ def test_container_integration(data_dir, monkeypatch):
 
     finally:
         cmd_output = check_output(docker_compose + ' down', shell=True)
+
+@pytest.mark.ci
+def test_container_integration_on_running_containers_ci(data_dir):
+    # you can uncomment this pytest.skip if you want to test container 
+    # integration on your local machine. you must have the containers
+    # already running with the test index folder as the PUBMED_DIR env var
+    # to run this unit test properly.
+    #pytest.skip('skipped; CI pipeline tests containers')
+
+    # fail the test if the index has already been built
+    index_dir = util.get_index_dir(data_dir)
+    assert not os.path.exists(index_dir)
+
+    # run query WITHOUT the index being built
+    skim_url = api_url + skim_append
+    query = {'a_terms': ['cancer'], 'b_terms': ['coffee'], 'c_terms': ['water'], 'ab_fet_threshold': 1, 'top_n': 50}
+    job_info = _post_job(skim_url, query)
+
+    if job_info['status'] == 'failed':
+        if 'message' in job_info:
+            raise RuntimeError('the job failed because: ' + job_info['message'])
+        raise RuntimeError('the job failed without an annotated reason')
+    
+    result = job_info['result']
+    assert result[0]['total_count'] == 0
+
+    # build the index (but don't download any new files)
+    _post_job(api_url + update_index_append, {'n_files': 0, 'clear_cache': False})
+
+    # run query. the new (built) index should be detected, causing the 
+    # cache to auto-clear.
+    result = _post_job(skim_url, query)['result']
+    assert result[0]['total_count'] > 4000
 
 def _post_job(url, json):
     job_id = requests.post(url=url, json=json, auth=the_auth).json()['id']
