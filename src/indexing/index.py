@@ -12,7 +12,7 @@ delim = '\t'
 logical_or = '|' # supports '|' to mean 'or'
 logical_and = '&' # supports '&' to mean 'and'
 mongo_cache = None
-bytes_decached_counter = 0
+bytes_deserialized_counter = 0
 
 class Index():
     def __init__(self, pubmed_abstract_dir: str):
@@ -234,7 +234,6 @@ class Index():
             gc.disable()
             deserialized_dict = quickle.loads(stored_bytes)
             gc.enable()
-            del stored_bytes
 
             self._token_cache[token] = deserialized_dict
 
@@ -244,13 +243,13 @@ class Index():
         token_bytes = self.connection.get(token)
 
         if token_bytes:
-            global bytes_decached_counter
-            bytes_decached_counter += len(token_bytes)
+            global bytes_deserialized_counter
+            bytes_deserialized_counter += len(token_bytes)
 
-        if bytes_decached_counter > 1000000000:
+        if bytes_deserialized_counter > 1000000000:
             self.connection.close()
             self._open_mmap_connection()
-            bytes_decached_counter = 0
+            bytes_deserialized_counter = 0
 
         return token_bytes
 
