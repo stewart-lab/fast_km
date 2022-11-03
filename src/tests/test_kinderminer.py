@@ -120,4 +120,4 @@ def test_prediction_score():
     fet = km.fisher_exact(table)
     ratio = km.get_sort_ratio(table)
     pred_score = km.get_prediction_score(fet, ratio)
-    assert pred_score <= 2.0
+    assert pred_score == 2.0
