@@ -79,7 +79,7 @@ def get_prediction_score(fet, ratio):
     if fet == 0.0:
         log_fet_p_value = max_score
     else:
-        log_fet_p_value = -math.log10(float(fet))
+        log_fet_p_value = min(max_score, -math.log10(float(fet)))
 
     if ratio == 1:
         log_ratio = max_score  # Same max as log_fet_p_value.
