@@ -118,7 +118,7 @@ def test_container_integration_on_running_containers_ci(data_dir):
         raise RuntimeError('the job failed without an annotated reason')
     
     result = job_info['result']
-    assert result[0]['total_count'] == 0
+    assert not result
 
     # build the index (but don't download any new files)
     _post_job(api_url + update_index_append, {'n_files': 0, 'clear_cache': False})
