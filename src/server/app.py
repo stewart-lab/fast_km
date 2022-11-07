@@ -13,7 +13,7 @@ from flask_bcrypt import Bcrypt
 import indexing.km_util as km_util
 
 _r = Redis(host=km_util.redis_host, port=6379)
-_q = Queue(connection=_r)
+_queues = {p.name : Queue(connection=_r, name=p.name) for p in km_util.JobPriority}
 _app = Flask(__name__)
 _api = Api(_app)
 _bcrypt = Bcrypt(_app)
@@ -49,6 +49,35 @@ def _authenticate(request):
 
     return _bcrypt.check_password_hash(_pw_hash, candidate)
 
+def _queue_job(work, json_data, job_timeout):
+    requested_id = json_data.get('id', None)
+
+    if 'priority' in json_data:
+        job_priority = json_data['priority']
+
+        if job_priority not in _queues:
+            job_priority = km_util.JobPriority.MEDIUM.name
+    else:
+        try:
+            job_size = 1000 # default
+
+            if 'c_terms' in json_data:
+                job_size = len(json_data['a_terms']) + len(json_data['b_terms']) + len(json_data['c_terms'])
+            elif 'b_terms' in json_data:
+                job_size = len(json_data['a_terms']) + len(json_data['b_terms'])
+            
+            if job_size < 50:
+                # small KM/SKiM jobs get high priority
+                job_priority = km_util.JobPriority.HIGH.name
+        except:
+            job_priority = km_util.JobPriority.MEDIUM.name
+
+    the_queue = _queues[job_priority]
+
+    job = the_queue.enqueue(work, json_data, job_timeout=job_timeout, job_id=requested_id)
+
+    return job
+
 ## ******** Generic Post/Get ********
 def _post_generic(work, request, job_timeout = 43200):
     if request.content_type != 'application/json':
@@ -61,11 +90,7 @@ def _post_generic(work, request, job_timeout = 43200):
     if not _authenticate(request):
         return 'Invalid password. do request.post(..., auth=(\'username\', \'password\'))', 401
 
-    # If the job is posted with an id lets use it
-    if 'id' in json_data:
-        job = _q.enqueue(work, json_data, job_timeout=job_timeout, job_id=json_data['id'])
-    else:
-        job = _q.enqueue(work, json_data, job_timeout=job_timeout)
+    job = _queue_job(work, json_data, job_timeout)
 
     job_data = dict()
     job_data['id'] = job.id
@@ -83,7 +108,7 @@ def _get_generic(request):
     job_data = dict()
     job_data['id'] = id
 
-    job = _q.fetch_job(id)
+    job = Job.fetch(id, connection=_r)
 
     if job:
         job_data['status'] = job.get_status()

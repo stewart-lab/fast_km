@@ -1,11 +1,17 @@
 import os
 import nltk
+from enum import Enum
 
 redis_host = 'redis'
 mongo_host = 'mongo'
 neo4j_host = 'neo4j'
 tokenizer = nltk.RegexpTokenizer(r"\w+")
 encoding = 'utf-8'
+
+class JobPriority(Enum):
+    HIGH = 1
+    MEDIUM = 2
+    LOW = 3
 
 def report_progress(completed: float, total: float) -> None:
     """Shows a progress bar. Adapted from: 
