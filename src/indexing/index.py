@@ -162,12 +162,16 @@ class Index():
     def _open_mmap_connection(self) -> None:
         if not os.path.exists(self._bin_path):
             print('warning: index does not exist and needs to be built')
+            self.connection = None
             return
 
         self.connection = cdblib.Reader64.from_file_path(self._bin_path)
 
     def _init_pub_years(self) -> None:
-        pub_bytes = self._read_bytes_from_disk('ABSTRACT_PUBLICATION_YEARS')
+        if self.connection:
+            pub_bytes = self._read_bytes_from_disk('ABSTRACT_PUBLICATION_YEARS')
+        else:
+            return
 
         if pub_bytes:
             self._publication_years = quickle.loads(pub_bytes)
@@ -240,6 +244,9 @@ class Index():
         return self._token_cache[token]
 
     def _read_bytes_from_disk(self, token: str) -> bytes:
+        if not self.connection:
+            return None
+
         token_bytes = self.connection.get(token)
 
         if token_bytes:
@@ -255,6 +262,10 @@ class Index():
 
     def _get_ngram_n(self) -> int:
         n = 1
+
+        if not self.connection:
+            return n
+
         for i, key in enumerate(self.connection.iterkeys()):
             spl = str(key).split(' ')
             n = max(n, len(spl))
@@ -336,7 +347,7 @@ def _connect_to_mongo() -> None:
     # mongo_cache.create_index('query', unique=True) #expireafterseconds=72 * 60 * 60, 
     global mongo_cache
     try:
-        loc = 'mongo'
+        loc = util.mongo_host
         client = pymongo.MongoClient(loc, 27017, serverSelectionTimeoutMS = 500, connectTimeoutMS = 500)
         db = client["query_cache_db"]
         mongo_cache = db["query_cache"]

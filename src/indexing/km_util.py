@@ -1,6 +1,9 @@
 import os
 import nltk
 
+redis_host = 'redis'
+mongo_host = 'mongo'
+neo4j_host = 'neo4j'
 tokenizer = nltk.RegexpTokenizer(r"\w+")
 encoding = 'utf-8'
 

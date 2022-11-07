@@ -109,7 +109,7 @@ def test_container_integration_on_running_containers_ci(data_dir):
 
     # run query WITHOUT the index being built
     skim_url = api_url + skim_append
-    query = {'a_terms': ['cancer'], 'b_terms': ['coffee'], 'c_terms': ['water'], 'ab_fet_threshold': 1, 'top_n': 50}
+    query = {'a_terms': ['cancer'], 'b_terms': ['test'], 'c_terms': ['coffee'], 'top_n': 50, 'ab_fet_threshold': 0.8}
     job_info = _post_job(skim_url, query)
 
     if job_info['status'] == 'failed':
@@ -126,9 +126,25 @@ def test_container_integration_on_running_containers_ci(data_dir):
     # run query. the new (built) index should be detected, causing the 
     # cache to auto-clear.
     result = _post_job(skim_url, query)['result']
-    assert result[0]['total_count'] > 4000
+    assert len(result) == 1
+    assert result[0]['a_term'] == 'cancer'
+    assert result[0]['b_term'] == 'test'
+    assert result[0]['ab_pvalue'] == pytest.approx(0.744, abs=0.001)
+    assert result[0]['ab_sort_ratio'] == pytest.approx(0.064, abs=0.001)
+    assert result[0]['ab_pred_score'] == pytest.approx(0.222, abs=0.001)
+    assert result[0]['a_count'] == 301
+    assert result[0]['b_count'] == 250
+    assert result[0]['ab_count'] == 16
+    assert result[0]['total_count'] == 4139
+    assert result[0]['c_term'] == 'coffee'
+    assert result[0]['bc_pvalue'] == pytest.approx(0.118, abs=0.001)
+    assert result[0]['bc_sort_ratio'] == pytest.approx(0.2, abs=0.001)
+    assert result[0]['bc_pred_score'] == pytest.approx(0.752, abs=0.001)
+    assert result[0]['c_count'] == 10
+    assert result[0]['bc_count'] == 2
 
 def _post_job(url, json):
+    total_sleep_time = 0
     job_id = requests.post(url=url, json=json, auth=the_auth).json()['id']
 
     get_response = requests.get(url + '?id=' + job_id, auth=the_auth).json()
@@ -136,7 +152,11 @@ def _post_job(url, json):
 
     while job_status == 'queued' or job_status == 'started':
         time.sleep(1)
+        total_sleep_time += 1
         get_response = requests.get(url + '?id=' + job_id, auth=the_auth).json()
         job_status = get_response['status']
+
+        if total_sleep_time > 300:
+            raise RuntimeError('the job timed out after 5 min')
 
     return get_response

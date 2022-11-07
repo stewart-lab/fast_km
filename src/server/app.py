@@ -10,8 +10,9 @@ from flask_restful import Api
 from workers.work import km_work, km_work_all_vs_all, update_index_work, clear_mongo_cache
 import logging
 from flask_bcrypt import Bcrypt
+import indexing.km_util as km_util
 
-_r = Redis(host='redis', port=6379)
+_r = Redis(host=km_util.redis_host, port=6379)
 _q = Queue(connection=_r)
 _app = Flask(__name__)
 _api = Api(_app)
@@ -35,7 +36,7 @@ def start_server(pw_hash: str):
 def _set_up_rq_dashboard():
     _app.config.from_object(rq_dashboard.default_settings)
     _app.register_blueprint(rq_dashboard.blueprint, url_prefix="/rq")
-    _app.config['RQ_DASHBOARD_REDIS_URL'] = 'redis://redis:6379'
+    _app.config['RQ_DASHBOARD_REDIS_URL'] = 'redis://' + km_util.redis_host + ':6379'
 
 def _authenticate(request):
     if _pw_hash == 'none':
@@ -79,21 +80,26 @@ def _get_generic(request):
         return 'Invalid password. do request.get(..., auth=(\'username\', \'password\'))', 401
 
     id = request.args['id']
-    job = _q.fetch_job(id)
-
     job_data = dict()
     job_data['id'] = id
-    job_data['status'] = job.get_status()
-    meta = job.get_meta()
 
-    if 'progress' in meta:
-        job_data['progress'] = meta['progress']
+    job = _q.fetch_job(id)
 
-    if job.result is not None:
-        job_data['result'] = job.result
-        status_code = 200
+    if job:
+        job_data['status'] = job.get_status()
+        meta = job.get_meta()
+
+        if 'progress' in meta:
+            job_data['progress'] = meta['progress']
+
+        if job.result is not None:
+            job_data['result'] = job.result
+            status_code = 200
+        else:
+            status_code = 202
     else:
-        status_code = 202
+        job_data['status'] = 'not_found'
+        status_code = 404
 
     response = jsonify(job_data)
     response.status_code = status_code

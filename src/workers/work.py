@@ -13,7 +13,7 @@ from knowledge_graph.knowledge_graph import KnowledgeGraph, rel_pvalue_cutoff
 import indexing.km_util as km_util
 import indexing.index as index
 
-_r = Redis(host='redis', port=6379)
+_r = Redis(host=km_util.redis_host, port=6379)
 _q = Queue(connection=_r)
 
 def km_work(json: list):

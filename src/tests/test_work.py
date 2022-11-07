@@ -25,17 +25,35 @@ def test_skim_work(data_dir):
     li.pubmed_path = data_dir
     li.the_index = idx
 
-    # test SKiM with only A-B terms
+    # test with only A-B terms
     result = work.km_work_all_vs_all({'a_terms': ['cancer'], 'b_terms': ['test']})
     assert len(result) == 1
     assert 'c_term' not in result[0]
-    assert result[0]['ab_count'] > 0
+    assert result[0]['a_term'] == 'cancer'
+    assert result[0]['b_term'] == 'test'
+    assert result[0]['ab_pvalue'] == pytest.approx(0.744, abs=0.001)
+    assert result[0]['ab_sort_ratio'] == pytest.approx(0.064, abs=0.001)
+    assert result[0]['ab_pred_score'] == pytest.approx(0.222, abs=0.001)
+    assert result[0]['a_count'] == 301
+    assert result[0]['b_count'] == 250
+    assert result[0]['ab_count'] == 16
+    assert result[0]['total_count'] == 4139
 
-    # test SKiM with A-B-C terms
-    result = work.km_work_all_vs_all({'a_terms': ['cancer'], 'b_terms': ['test'], 'c_terms': ['coffee'], 'top_n': 50, 'ab_fet_threshold': 0.8, 'query_knowledge_graph': True})
+    # test with A-B-C terms
+    result = work.km_work_all_vs_all({'a_terms': ['cancer'], 'b_terms': ['test'], 'c_terms': ['coffee'], 'top_n': 50, 'ab_fet_threshold': 0.8})
     assert len(result) == 1
+    assert result[0]['a_term'] == 'cancer'
+    assert result[0]['b_term'] == 'test'
+    assert result[0]['ab_pvalue'] == pytest.approx(0.744, abs=0.001)
+    assert result[0]['ab_sort_ratio'] == pytest.approx(0.064, abs=0.001)
+    assert result[0]['ab_pred_score'] == pytest.approx(0.222, abs=0.001)
+    assert result[0]['a_count'] == 301
+    assert result[0]['b_count'] == 250
+    assert result[0]['ab_count'] == 16
+    assert result[0]['total_count'] == 4139
     assert result[0]['c_term'] == 'coffee'
-    assert result[0]['ab_count'] > 0
-    assert result[0]['bc_count'] > 0
-    #assert result[0]['ab_relationship'] == 'neo4j connection error'
-    #assert result[0]['bc_relationship'] == 'neo4j connection error'
+    assert result[0]['bc_pvalue'] == pytest.approx(0.118, abs=0.001)
+    assert result[0]['bc_sort_ratio'] == pytest.approx(0.2, abs=0.001)
+    assert result[0]['bc_pred_score'] == pytest.approx(0.752, abs=0.001)
+    assert result[0]['c_count'] == 10
+    assert result[0]['bc_count'] == 2
