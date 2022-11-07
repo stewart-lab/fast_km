@@ -50,8 +50,6 @@ def _authenticate(request):
     return _bcrypt.check_password_hash(_pw_hash, candidate)
 
 def _queue_job(work, json_data, job_timeout):
-    requested_id = json_data.get('id', None)
-
     if 'priority' in json_data:
         job_priority = json_data['priority']
 
@@ -74,7 +72,10 @@ def _queue_job(work, json_data, job_timeout):
 
     the_queue = _queues[job_priority]
 
-    job = the_queue.enqueue(work, json_data, job_timeout=job_timeout, job_id=requested_id)
+    if 'id' in json_data:
+        job = the_queue.enqueue(work, json_data, job_timeout=job_timeout, job_id=json_data['id'])
+    else:
+        job = the_queue.enqueue(work, json_data, job_timeout=job_timeout)
 
     return job
 
