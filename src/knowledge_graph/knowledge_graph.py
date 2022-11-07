@@ -5,7 +5,7 @@ import indexing.km_util as util
 import indexing.index as index
 import workers.loaded_index as li
 
-uri="bolt://neo4j:7687"
+uri="bolt://" + util.neo4j_host + ":7687"
 user = "neo4j"
 password = "mypass"
 

@@ -1,18 +1,18 @@
-import mmap
-import pickle
+import quickle
 import math
 import os
 import gc
-import time
 import pymongo
+import cdblib
 from pymongo import errors
 import indexing.km_util as util
 from indexing.abstract_catalog import AbstractCatalog
 
 delim = '\t'
-logical_or = '/' # supports '/' to mean 'or'
+logical_or = '|' # supports '|' to mean 'or'
 logical_and = '&' # supports '&' to mean 'and'
 mongo_cache = None
+bytes_deserialized_counter = 0
 
 class Index():
     def __init__(self, pubmed_abstract_dir: str):
@@ -25,17 +25,12 @@ class Index():
 
         self._pubmed_dir = pubmed_abstract_dir
         self._bin_path = util.get_index_file(pubmed_abstract_dir)
-        self._offsets_path = util.get_offset_file(pubmed_abstract_dir)
         self._abstract_catalog = util.get_abstract_catalog(pubmed_abstract_dir)
-        self._byte_offsets = dict()
         self._publication_years = dict()
         self._date_censored_pmids = dict()
-        self._init_byte_info()
-        self._open_connection()
-
-    def close_connection(self) -> None:
-        self.connection.close()
-        self.file_obj.close()
+        self._open_mmap_connection()
+        self._init_pub_years()
+        self._ngram_n = self._get_ngram_n()
 
     def construct_abstract_set(self, term: str) -> set:
         # TODO: support parenthesis for allowing OR and AND at the same time?
@@ -48,12 +43,12 @@ class Index():
             return pmid_set
 
         if logical_or in term:
-            terms = term.split(logical_or)
+            terms = get_subterms(term)
             pmid_set = set()
             for synonym in terms:
                 pmid_set.update(self._query_index(synonym))
         elif logical_and in term:
-            terms = term.split(logical_and)
+            terms = get_subterms(term)
             pmid_set = self._query_index(terms[0])
             for t in terms[1:]:
                 pmid_set.intersection_update(self._query_index(t))
@@ -105,15 +100,20 @@ class Index():
             return n_articles_censored
 
     def decache_token(self, token: str):
-        ltoken = token.lower()
+        ltoken = sanitize_term(token)
         if ltoken in self._token_cache:
             del self._token_cache[ltoken]
         if ltoken in self._query_cache:
             del self._query_cache[ltoken]
+        if ltoken in self._date_censored_query_cache:
+            del self._date_censored_query_cache[ltoken]
 
     def check_caches_for_term(self, term: str):
         if term in self._query_cache:
             # check RAM cache
+            return (True, self._query_cache[term])
+        elif term in self._token_cache:
+            self._query_cache[term] = set(self._token_cache[term].keys())
             return (True, self._query_cache[term])
         else:
             # check mongoDB cache
@@ -123,6 +123,16 @@ class Index():
                 return (True, result)
 
         return (False, None)
+
+    def get_ngrams(self, tokens: 'list[str]') -> 'list[str]':
+        if self._ngram_n > 1 and len(tokens) > 1:
+            ngrams = []
+            for i in range(0, len(tokens) - (self._ngram_n - 1)):
+                ngram = str.join(' ', tokens[i:i + self._ngram_n])
+                ngrams.append(ngram)
+            return ngrams
+        else:
+            return tokens
 
     def _query_index(self, query: str) -> 'set[int]':
         query = util.sanitize_text(query)
@@ -149,34 +159,33 @@ class Index():
 
         return result
 
-    def _open_connection(self) -> None:
+    def _open_mmap_connection(self) -> None:
         if not os.path.exists(self._bin_path):
             print('warning: index does not exist and needs to be built')
+            self.connection = None
             return
 
-        self.file_obj = open(self._bin_path, mode='rb')
-        self.connection = mmap.mmap(self.file_obj.fileno(), length=0, access=mmap.ACCESS_READ)
+        self.connection = cdblib.Reader64.from_file_path(self._bin_path)
 
-    def _init_byte_info(self) -> None:
-        if not os.path.exists(self._offsets_path):
+    def _init_pub_years(self) -> None:
+        if self.connection:
+            pub_bytes = self._read_bytes_from_disk('ABSTRACT_PUBLICATION_YEARS')
+        else:
             return
 
-        with open(self._offsets_path, 'r', encoding=util.encoding) as t:
-            for index, line in enumerate(t):
-                split = line.split(sep=delim)
-                key = split[0]
-                byte_offset = int(split[1].strip())
-                byte_len = int(split[2].strip())
+        if pub_bytes:
+            self._publication_years = quickle.loads(pub_bytes)
 
-                self._byte_offsets[key] = (byte_offset, byte_len)
-
-        catalog = AbstractCatalog(self._pubmed_dir)
-        cat_path = util.get_abstract_catalog(self._pubmed_dir)
-        for abs in catalog.stream_existing_catalog(cat_path):
-            self._publication_years[abs.pmid] = abs.pub_year
+        if not self._publication_years:
+            catalog = AbstractCatalog(self._pubmed_dir)
+            cat_path = util.get_abstract_catalog(self._pubmed_dir)
+            for abs in catalog.stream_existing_catalog(cat_path):
+                self._publication_years[abs.pmid] = abs.pub_year
 
     def _query_disk(self, tokens: 'list[str]') -> 'set[int]':
         result = set()
+
+        tokens = self.get_ngrams(tokens)
 
         possible_pmids = set()
         for i, token in enumerate(tokens):
@@ -220,15 +229,14 @@ class Index():
         return result
 
     def _read_token_from_disk(self, token: str) -> dict:
-        if token not in self._byte_offsets:
+        stored_bytes = self._read_bytes_from_disk(token)
+        if not stored_bytes:
             self._token_cache[token] = dict()
-        elif token not in self._token_cache:
-            stored_bytes = self._read_bytes_from_disk(token)
-
+        else:
             # disabling garbage collection speeds up the 
             # deserialization process by 2-3x
             gc.disable()
-            deserialized_dict = pickle.loads(stored_bytes)
+            deserialized_dict = quickle.loads(stored_bytes)
             gc.enable()
 
             self._token_cache[token] = deserialized_dict
@@ -236,13 +244,34 @@ class Index():
         return self._token_cache[token]
 
     def _read_bytes_from_disk(self, token: str) -> bytes:
-        byte_info = self._byte_offsets[token]
-        byte_offset = byte_info[0]
-        byte_len = byte_info[1]
+        if not self.connection:
+            return None
 
-        self.connection.seek(byte_offset)
-        stored_bytes = self.connection.read(byte_len)
-        return stored_bytes
+        token_bytes = self.connection.get(token)
+
+        if token_bytes:
+            global bytes_deserialized_counter
+            bytes_deserialized_counter += len(token_bytes)
+
+        if bytes_deserialized_counter > 1000000000:
+            self.connection.close()
+            self._open_mmap_connection()
+            bytes_deserialized_counter = 0
+
+        return token_bytes
+
+    def _get_ngram_n(self) -> int:
+        n = 1
+
+        if not self.connection:
+            return n
+
+        for i, key in enumerate(self.connection.iterkeys()):
+            spl = str(key).split(' ')
+            n = max(n, len(spl))
+            if i > 100:
+                break
+        return n
 
     def _check_if_mongo_should_be_refreshed(self, terms_to_check: 'list[str]' = ['fever']):
         # the purpose of this function is to check a non-cached version of a token
@@ -288,6 +317,16 @@ def sanitize_term(term: str) -> str:
 
     return sanitized_term
 
+def get_subterms(term: str) -> 'list[str]':
+    if logical_or in term:
+        terms = term.split(logical_or)
+        return terms
+    elif logical_and in term:
+        terms = term.split(logical_and)
+        return terms
+    else:
+        return [term]
+
 def _intersect_dict_keys(dicts: 'list[dict]') -> None:
     lowest_n_keys = sorted(dicts, key=lambda x: len(x))[0]
     key_intersect = set(lowest_n_keys.keys())
@@ -308,7 +347,7 @@ def _connect_to_mongo() -> None:
     # mongo_cache.create_index('query', unique=True) #expireafterseconds=72 * 60 * 60, 
     global mongo_cache
     try:
-        loc = 'mongo'
+        loc = util.mongo_host
         client = pymongo.MongoClient(loc, 27017, serverSelectionTimeoutMS = 500, connectTimeoutMS = 500)
         db = client["query_cache_db"]
         mongo_cache = db["query_cache"]

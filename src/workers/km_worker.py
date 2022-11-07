@@ -3,6 +3,7 @@ from rq import Worker, Queue, Connection
 from indexing.index import Index
 import workers.loaded_index as li
 import time
+import indexing.km_util as km_util
 
 class KmWorker(Worker):
     def __init__(self, queues=None, *args, **kwargs):
@@ -16,7 +17,7 @@ def start_worker():
 
     _load_index()
 
-    _r = Redis(host='redis', port=6379)
+    _r = Redis(host=km_util.redis_host, port=6379)
     _q = Queue(connection=_r)
 
     with Connection(connection=_r):

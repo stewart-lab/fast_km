@@ -10,8 +10,10 @@ import workers.kinderminer as km
 from indexing.index_builder import IndexBuilder
 import indexing.download_abstracts as downloader
 from knowledge_graph.knowledge_graph import KnowledgeGraph, rel_pvalue_cutoff
+import indexing.km_util as km_util
+import indexing.index as index
 
-_r = Redis(host='redis', port=6379)
+_r = Redis(host=km_util.redis_host, port=6379)
 _q = Queue(connection=_r)
 
 def km_work(json: list):
@@ -68,37 +70,24 @@ def km_work_all_vs_all(json: dict):
         # SKiM query
         c_terms = json['c_terms']
 
-        top_n = json['top_n']
-        ab_fet_threshold = json['ab_fet_threshold']
+        top_n = _get_top_n(json)
+        ab_fet_threshold = _get_ab_fet_threshold(json, 1e-5)
+        bc_fet_threshold = _get_bc_fet_threshold(json, 0.9999)
     else:
         # KM query
         km_only = True
         c_terms = ['__KM_ONLY__'] # dummy variable
 
-        if 'top_n' in json:
-            top_n = json['top_n']
-        else:
-            top_n = sys.maxsize
-
-        if 'ab_fet_threshold' in json:
-            ab_fet_threshold = json['ab_fet_threshold']
-        else:
-            ab_fet_threshold = math.inf
+        top_n = _get_top_n(json, sys.maxsize)
+        ab_fet_threshold = _get_ab_fet_threshold(json, math.inf)
 
     censor_year = _get_censor_year(json)
-
-    return_pmids = False
-    if 'return_pmids' in json:
-        return_pmids = bool(json['return_pmids'])
-
-    query_kg = False
-    if 'query_knowledge_graph' in json:
-        query_kg = bool(json['query_knowledge_graph'])
-
-    if type(top_n) is str:
-        top_n = int(top_n)
+    return_pmids = bool(json.get('return_pmids', False))
+    query_kg = bool(json.get('query_knowledge_graph', False))
 
     _update_job_status('progress', 0)
+
+    b_term_token_dict = _get_token_dict(b_terms)
 
     for a_term_n, a_term in enumerate(a_terms):
         ab_results = []
@@ -108,13 +97,16 @@ def km_work_all_vs_all(json: dict):
 
             if res['pvalue'] <= ab_fet_threshold:
                 ab_results.append(res)
+            else:
+                # RAM efficiency. decache unneeded tokens/terms
+                li.the_index.decache_token(b_term)
+
+            _remove_from_token_dict(b_term, b_term_token_dict)
 
             # report KM progress
             if km_only:
-                numerator = a_term_n * len(b_terms) + b_term_n + 1
-                denom = len(a_terms) * len(b_terms)
-                progress = round((numerator / denom), 4)
-                _update_job_status('progress', min(progress, 0.9999))
+                progress = _km_progress(a_term_n, b_term_n + 1, len(a_terms), len(b_terms))
+                _update_job_status('progress', progress)
 
         # sort by prediction score, descending
         ab_results.sort(key=lambda res: 
@@ -122,6 +114,17 @@ def km_work_all_vs_all(json: dict):
             reverse=True)
 
         ab_results = ab_results[:top_n]
+
+        # RAM efficiency. decache unneeded tokens/terms
+        b_terms_used = set([ab_res['b_term'] for ab_res in ab_results])
+        c_term_token_dict = _get_token_dict(c_terms)
+
+        _items = list(li.the_index._token_cache.keys())
+        _items.extend(list(li.the_index._query_cache.keys()))
+
+        for token in _items:
+            if token not in b_terms_used:
+                li.the_index.decache_token(token)
 
         # take top N per a-b pair and run b-terms against c-terms
         for c_term_n, c_term in enumerate(c_terms):
@@ -143,9 +146,12 @@ def km_work_all_vs_all(json: dict):
                 if return_pmids:
                     abc_result['ab_pmid_intersection'] = str(ab['pmid_intersection'])
 
-                if query_kg and abc_result['ab_pvalue'] < rel_pvalue_cutoff:
-                    rel = knowledge_graph.query(abc_result['a_term'], abc_result['b_term'])
-                    abc_result['ab_relationship'] = rel
+                if query_kg: # and abc_result['ab_pvalue'] < rel_pvalue_cutoff:
+                    if abc_result['ab_pvalue'] < rel_pvalue_cutoff:
+                        rel = knowledge_graph.query(abc_result['a_term'], abc_result['b_term'])
+                        abc_result['ab_relationship'] = rel
+                    else:
+                        abc_result['ab_relationship'] = None
 
                 # add c-terms and b-c term KM info (SKiM)
                 if not km_only:
@@ -162,17 +168,24 @@ def km_work_all_vs_all(json: dict):
                     if return_pmids:
                         abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
 
-                    if query_kg and abc_result['bc_pvalue'] < rel_pvalue_cutoff:
-                        rel = knowledge_graph.query(abc_result['b_term'], abc_result['c_term'])
-                        abc_result['bc_relationship'] = rel
+                    if query_kg:
+                        if abc_result['bc_pvalue'] < rel_pvalue_cutoff:
+                            rel = knowledge_graph.query(abc_result['b_term'], abc_result['c_term'])
+                            abc_result['bc_relationship'] = rel
+                        else:
+                            abc_result['bc_relationship'] = None
 
-                return_val.append(abc_result)
+                if km_only or (abc_result['bc_pvalue'] <= bc_fet_threshold):
+                    return_val.append(abc_result)
 
             if not km_only:
                 # report SKiM progress - percentage of C-terms complete
-                progress = round(((c_term_n + 1) / len(c_terms)), 4)
-                _update_job_status('progress', min(progress, 0.9999))
-                
+                progress = _skim_progress(a_term_n, b_term_n, c_term_n + 1, len(a_terms), len(b_terms), len(c_terms))
+                _update_job_status('progress', progress)
+
+                # RAM efficiency. decache unneeded tokens/terms
+                _remove_from_token_dict(c_term, c_term_token_dict)
+
     _update_job_status('progress', 1.0000)
     return return_val
 
@@ -295,3 +308,63 @@ def _get_censor_year(item):
         censor_year = 0
 
     return censor_year
+
+def _get_top_n(the_dict: dict, default_val = 50):
+    return int(the_dict.get('top_n', default_val))
+
+def _get_ab_fet_threshold(the_dict: dict, default_val = 1e-5):
+    return float(the_dict.get('ab_fet_threshold', default_val))
+
+def _get_bc_fet_threshold(the_dict: dict, default_val = 0.9999):
+    return float(the_dict.get('bc_fet_threshold', default_val))
+
+def _km_progress(a_complete: int, b_complete: int, a_total: int, b_total: int):
+    numerator = a_complete * b_total + b_complete
+    denom = a_total * b_total
+    progress = round(numerator / denom, 4)
+    return min(progress, 0.9999)
+
+def _skim_progress(a_complete: int, b_complete: int, c_complete: int, a_total: int, b_total: int, c_total: int):
+    # numerator = (a_complete * b_complete) + c_complete + 1
+    # denom = a_total * b_total * c_total
+    progress = round(c_complete / c_total, 4)
+    return min(progress, 0.9999)
+
+def _get_token_dict(c_terms: 'list[str]'):
+    c_term_token_dict = dict()
+    for c_term in c_terms:
+        subterms = index.get_subterms(c_term)
+
+        for subterm in subterms:
+            # add the tokens
+            c_tokens = km_util.get_tokens(subterm)
+            c_tokens = li.the_index.get_ngrams(c_tokens)
+            for c_token in c_tokens:
+                if c_token not in c_term_token_dict:
+                    c_term_token_dict[c_token] = []
+                c_term_token_dict[c_token].append(c_term)
+
+            # add the subterm
+            if subterm not in c_term_token_dict:
+                c_term_token_dict[subterm] = []
+            c_term_token_dict[subterm].append(c_term)
+    
+    return c_term_token_dict
+
+def _remove_from_token_dict(term: str, token_dict):
+    li.the_index.decache_token(term)
+    subterms = index.get_subterms(term)
+
+    for subterm in subterms:
+        c_tokens = km_util.get_tokens(subterm)
+        c_tokens = li.the_index.get_ngrams(c_tokens)
+        for c_token in c_tokens:
+            query_terms = token_dict[c_token]
+            query_terms.remove(term)
+            if not query_terms:
+                li.the_index.decache_token(c_token)
+
+        query_terms = token_dict[subterm]
+        query_terms.remove(term)
+        if not query_terms:
+            li.the_index.decache_token(subterm)
