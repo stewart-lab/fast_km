@@ -7,7 +7,7 @@ from rq.job import Job
 from rq.command import send_stop_job_command
 from rq.exceptions import InvalidJobOperation
 from flask_restful import Api
-from workers.work import km_work, km_work_all_vs_all, update_index_work, clear_mongo_cache
+from workers.work import km_work, km_work_all_vs_all, update_index_work, clear_mongo_cache, restart_workers
 import logging
 from flask_bcrypt import Bcrypt
 import indexing.km_util as km_util
@@ -51,7 +51,7 @@ def _authenticate(request):
 
 def _queue_job(work, json_data, job_timeout):
     if 'priority' in json_data:
-        job_priority = json_data['priority']
+        job_priority = str(json_data['priority']).upper()
 
         if job_priority not in _queues:
             job_priority = km_util.JobPriority.MEDIUM.name
@@ -67,9 +67,12 @@ def _queue_job(work, json_data, job_timeout):
             if job_size < 50:
                 # small KM/SKiM jobs get high priority
                 job_priority = km_util.JobPriority.HIGH.name
+            else:
+                job_priority = km_util.JobPriority.MEDIUM.name
         except:
             job_priority = km_util.JobPriority.MEDIUM.name
 
+    json_data['priority'] = job_priority
     the_queue = _queues[job_priority]
 
     if 'id' in json_data:
@@ -190,5 +193,14 @@ def _post_cancel_job():
     else:
         status_code = 404
 
+    response.status_code = status_code
+    return response
+
+## ******** Restart Workers Post ********
+@_app.route('/restart_workers/api/jobs/', methods=['POST'])
+def _restart_workers(json):
+    restart_workers()
+    response = jsonify(dict())
+    status_code = 200
     response.status_code = status_code
     return response
