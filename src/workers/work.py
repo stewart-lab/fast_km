@@ -90,8 +90,13 @@ def km_work_all_vs_all(json: dict):
 
     for a_term_n, a_term in enumerate(a_terms):
         ab_results = []
+        b_term_set = list(b_terms)
+        b_term_n = 0
 
-        for b_term_n, b_term in enumerate(b_terms):
+        while b_term_set:
+            b_term = li.the_index.get_highest_priority_term(b_term_set, b_term_token_dict)
+            b_term_set.remove(b_term)
+
             res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids)
 
             if res['pvalue'] <= ab_fet_threshold:
@@ -106,6 +111,8 @@ def km_work_all_vs_all(json: dict):
             if km_only:
                 progress = _km_progress(a_term_n, b_term_n + 1, len(a_terms), len(b_terms))
                 _update_job_status('progress', progress)
+
+            b_term_n += 1
 
         # sort by prediction score, descending
         ab_results.sort(key=lambda res: 
@@ -126,7 +133,13 @@ def km_work_all_vs_all(json: dict):
                 li.the_index.decache_token(token)
 
         # take top N per a-b pair and run b-terms against c-terms
-        for c_term_n, c_term in enumerate(c_terms):
+        c_term_set = list(c_terms)
+        c_term_n = 0
+
+        while c_term_set:
+            c_term = li.the_index.get_highest_priority_term(c_term_set, c_term_token_dict)
+            c_term_set.remove(c_term)
+
             for ab in ab_results:
                 abc_result = {
                         'a_term': ab['a_term'],
@@ -184,6 +197,8 @@ def km_work_all_vs_all(json: dict):
 
                 # RAM efficiency. decache unneeded tokens/terms
                 _remove_from_token_dict(c_term, c_term_token_dict)
+
+            c_term_n += 1
 
     _update_job_status('progress', 1.0000)
     return return_val
