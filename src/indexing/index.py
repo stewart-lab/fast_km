@@ -32,8 +32,11 @@ class Index():
         self._open_mmap_connection()
         self.n_articles() # precalculate total N articles
         self._ngram_n = self._get_ngram_n()
-        self.connection.close()
-        self._open_mmap_connection()
+
+        if self.connection:
+            self.connection.close()
+            self._open_mmap_connection()
+            
         self.ngram_cache = dict()
 
     def construct_abstract_set(self, term: str) -> set:
