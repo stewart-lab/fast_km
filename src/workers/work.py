@@ -14,7 +14,6 @@ import indexing.km_util as km_util
 import indexing.index as index
 
 _r = Redis(host=km_util.redis_host, port=6379)
-_q = Queue(connection=_r)
 
 def km_work(json: list):
     _initialize_mongo_caching()
@@ -226,7 +225,7 @@ def update_index_work(json: dict):
 
     # restart the workers (TODO: except this one)
     _update_job_status('progress', 'restarting workers')
-    interrupted_jobs = _restart_workers(requeue_interrupted_jobs=False)
+    interrupted_jobs = restart_workers(requeue_interrupted_jobs=False)
 
     # remove the old index
     index_builder.overwrite_old_index()
@@ -243,19 +242,7 @@ def clear_mongo_cache(json):
     indexing.index._connect_to_mongo()
     indexing.index._empty_mongo()
 
-def _initialize_mongo_caching():
-    indexing.index._connect_to_mongo()
-    if li.the_index._check_if_mongo_should_be_refreshed():
-        clear_mongo_cache([])
-
-        # this second call looks weird, but it's to cache the terms_to_check
-        # such as 'fever' to save the current state of the index
-        li.the_index._check_if_mongo_should_be_refreshed()
-
-def connect_to_neo4j():
-    return KnowledgeGraph()
-
-def _restart_workers(requeue_interrupted_jobs = True):
+def restart_workers(requeue_interrupted_jobs = True):
     print('restarting workers...')
     workers = Worker.all(_r)
 
@@ -266,7 +253,7 @@ def _restart_workers(requeue_interrupted_jobs = True):
         # stop any currently-running job
         job = worker.get_current_job()
 
-        if job and str(job.id) != str(this_job.id):
+        if job and (not this_job or (str(job.id) != str(this_job.id))):
             print('canceling job: ' + str(job.id))
             interrupted_jobs.append(job)
 
@@ -281,9 +268,26 @@ def _restart_workers(requeue_interrupted_jobs = True):
 
     return interrupted_jobs
 
+def _initialize_mongo_caching():
+    indexing.index._connect_to_mongo()
+    if li.the_index._check_if_mongo_should_be_refreshed():
+        clear_mongo_cache([])
+
+        # this second call looks weird, but it's to cache the terms_to_check
+        # such as 'fever' to save the current state of the index
+        li.the_index._check_if_mongo_should_be_refreshed()
+
+def connect_to_neo4j():
+    return KnowledgeGraph()
+
 def _queue_jobs(jobs):
     for job in jobs:
         print('restarting job: ' + str(job))
+        if 'priority' in job:
+            job_priority = job['priority']
+        else:
+            job_priority = km_util.JobPriority.MEDIUM.name
+        _q = Queue(name=job_priority, connection=_r)
         _q.enqueue_job(job)
 
 def _update_job_status(key, value):

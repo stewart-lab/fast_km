@@ -9,7 +9,7 @@ class KmWorker(Worker):
     def __init__(self, queues=None, *args, **kwargs):
         super().__init__(queues, *args, **kwargs)
 
-def start_worker():
+def start_worker(queues: 'list[str]' = [km_util.JobPriority.MEDIUM.name]):
     print('worker sleeping for 5 sec before starting...')
     time.sleep(5)
 
@@ -18,10 +18,12 @@ def start_worker():
     _load_index()
 
     _r = Redis(host=km_util.redis_host, port=6379)
-    _q = Queue(connection=_r)
+    _qs = []
+    for queue_name in queues:
+        _qs.append(Queue(name=queue_name, connection=_r))
 
     with Connection(connection=_r):
-        w = KmWorker(queues=_q)
+        w = KmWorker(queues=_qs)
         w.work()
 
 def _load_index():

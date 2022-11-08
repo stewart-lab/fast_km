@@ -7,13 +7,13 @@ from rq.job import Job
 from rq.command import send_stop_job_command
 from rq.exceptions import InvalidJobOperation
 from flask_restful import Api
-from workers.work import km_work, km_work_all_vs_all, update_index_work, clear_mongo_cache
+from workers.work import km_work, km_work_all_vs_all, update_index_work, clear_mongo_cache, restart_workers
 import logging
 from flask_bcrypt import Bcrypt
 import indexing.km_util as km_util
 
 _r = Redis(host=km_util.redis_host, port=6379)
-_q = Queue(connection=_r)
+_queues = {p.name : Queue(connection=_r, name=p.name) for p in km_util.JobPriority}
 _app = Flask(__name__)
 _api = Api(_app)
 _bcrypt = Bcrypt(_app)
@@ -49,6 +49,39 @@ def _authenticate(request):
 
     return _bcrypt.check_password_hash(_pw_hash, candidate)
 
+def _queue_job(work, json_data, job_timeout):
+    if 'priority' in json_data:
+        job_priority = str(json_data['priority']).upper()
+
+        if job_priority not in _queues:
+            job_priority = km_util.JobPriority.MEDIUM.name
+    else:
+        try:
+            job_size = 1000 # default
+
+            if 'c_terms' in json_data:
+                job_size = len(json_data['a_terms']) + len(json_data['b_terms']) + len(json_data['c_terms'])
+            elif 'b_terms' in json_data:
+                job_size = len(json_data['a_terms']) + len(json_data['b_terms'])
+            
+            if job_size < 50:
+                # small KM/SKiM jobs get high priority
+                job_priority = km_util.JobPriority.HIGH.name
+            else:
+                job_priority = km_util.JobPriority.MEDIUM.name
+        except:
+            job_priority = km_util.JobPriority.MEDIUM.name
+
+    json_data['priority'] = job_priority
+    the_queue = _queues[job_priority]
+
+    if 'id' in json_data:
+        job = the_queue.enqueue(work, json_data, job_timeout=job_timeout, job_id=json_data['id'])
+    else:
+        job = the_queue.enqueue(work, json_data, job_timeout=job_timeout)
+
+    return job
+
 ## ******** Generic Post/Get ********
 def _post_generic(work, request, job_timeout = 43200):
     if request.content_type != 'application/json':
@@ -61,11 +94,7 @@ def _post_generic(work, request, job_timeout = 43200):
     if not _authenticate(request):
         return 'Invalid password. do request.post(..., auth=(\'username\', \'password\'))', 401
 
-    # If the job is posted with an id lets use it
-    if 'id' in json_data:
-        job = _q.enqueue(work, json_data, job_timeout=job_timeout, job_id=json_data['id'])
-    else:
-        job = _q.enqueue(work, json_data, job_timeout=job_timeout)
+    job = _queue_job(work, json_data, job_timeout)
 
     job_data = dict()
     job_data['id'] = job.id
@@ -83,7 +112,7 @@ def _get_generic(request):
     job_data = dict()
     job_data['id'] = id
 
-    job = _q.fetch_job(id)
+    job = Job.fetch(id, connection=_r)
 
     if job:
         job_data['status'] = job.get_status()
@@ -164,5 +193,14 @@ def _post_cancel_job():
     else:
         status_code = 404
 
+    response.status_code = status_code
+    return response
+
+## ******** Restart Workers Post ********
+@_app.route('/restart_workers/api/jobs/', methods=['POST'])
+def _restart_workers(json):
+    restart_workers()
+    response = jsonify(dict())
+    status_code = 200
     response.status_code = status_code
     return response
