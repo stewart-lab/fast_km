@@ -36,6 +36,7 @@ def test_index_abstract(tmp_path):
     indexer._write_index_to_disk(cold_storage)
 
     the_index = Index(tmp_path)
+    the_index._init_pub_years()
 
     query = the_index._query_index("the")
     assert query == set([abs1.pmid, abs2.pmid])

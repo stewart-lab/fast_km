@@ -4,6 +4,7 @@ import os
 import gc
 import pymongo
 import cdblib
+import sys
 from pymongo import errors
 import indexing.km_util as util
 from indexing.abstract_catalog import AbstractCatalog
@@ -29,8 +30,14 @@ class Index():
         self._publication_years = dict()
         self._date_censored_pmids = dict()
         self._open_mmap_connection()
-        self._init_pub_years()
+        self.n_articles() # precalculate total N articles
         self._ngram_n = self._get_ngram_n()
+
+        if self.connection:
+            self.connection.close()
+            self._open_mmap_connection()
+            
+        self.ngram_cache = dict()
 
     def construct_abstract_set(self, term: str) -> set:
         # TODO: support parenthesis for allowing OR and AND at the same time?
@@ -63,6 +70,9 @@ class Index():
 
     def censor_by_year(self, pmids: 'set[int]', censor_year: int, term: str) -> 'set[int]':
         if censor_year not in self._date_censored_pmids:
+            if not self._publication_years:
+                self._init_pub_years()
+
             censored_set = set()
 
             for pmid, year in self._publication_years.items():
@@ -76,19 +86,21 @@ class Index():
         date_censored_pmid_set = self._date_censored_pmids[censor_year] & pmids
         self._date_censored_query_cache[(term, censor_year)] = date_censored_pmid_set
 
+        self._publication_years = dict()
         return date_censored_pmid_set
 
     def n_articles(self, censor_year = math.inf) -> int:
         """Returns the number of indexed abstracts, given an optional 
         censor year."""
         # year <0 and >2100 are excluded to prevent abuse...
-        if censor_year == math.inf or censor_year > 2100:
-            return len(self._publication_years)
-        elif censor_year < 0:
+        if censor_year < 0:
             return 0
         else:
             if censor_year in self._n_articles_by_pub_year:
                 return self._n_articles_by_pub_year[censor_year]
+
+            if not self._publication_years:
+                self._init_pub_years()
 
             n_articles_censored = 0
 
@@ -97,6 +109,8 @@ class Index():
                     n_articles_censored += 1
 
             self._n_articles_by_pub_year[censor_year] = n_articles_censored
+
+            self._publication_years = dict()
             return n_articles_censored
 
     def decache_token(self, token: str):
@@ -133,6 +147,55 @@ class Index():
             return ngrams
         else:
             return tokens
+
+    def get_highest_priority_term(self, list_of_terms: 'list[str]', token_dict: dict):
+        if self._token_cache:
+            highest_priority = -1
+            highest_priority_term = list_of_terms[0]
+
+            for token in self._token_cache:
+                if token in token_dict:
+                    terms_for_token = token_dict[token]
+
+                    for term in terms_for_token:
+                        priority = self._get_term_priority(term)
+
+                        if priority > highest_priority:
+                            highest_priority = priority
+                            highest_priority_term = term
+        else:
+            highest_priority_term = list_of_terms[0]
+
+        return highest_priority_term
+
+    def _get_term_priority(self, term: str):
+        if term in self.ngram_cache:
+            ngrams = self.ngram_cache[term]
+        else:
+            subterms = get_subterms(term)
+            all_ngrams = []
+            for subterm in subterms:
+                tokens = util.get_tokens(subterm)
+                ngrams = self.get_ngrams(tokens)
+                all_ngrams.extend(ngrams)
+            self.ngram_cache[term] = all_ngrams
+            ngrams = all_ngrams
+
+        priority = 0
+        n_cached_tokens = 0
+
+        for ngram in ngrams:
+            if ngram in self._token_cache:
+                priority += len(self._token_cache[ngram])
+                n_cached_tokens += 1
+
+        if n_cached_tokens == len(ngrams):
+            if priority < 100000:
+                priority = sys.maxsize - 1
+            else:
+                priority = sys.maxsize
+
+        return priority
 
     def _query_index(self, query: str) -> 'set[int]':
         query = util.sanitize_text(query)
@@ -253,7 +316,7 @@ class Index():
             global bytes_deserialized_counter
             bytes_deserialized_counter += len(token_bytes)
 
-        if bytes_deserialized_counter > 1000000000:
+        if bytes_deserialized_counter > 100000000:
             self.connection.close()
             self._open_mmap_connection()
             bytes_deserialized_counter = 0
