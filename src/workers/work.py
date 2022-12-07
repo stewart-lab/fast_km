@@ -379,11 +379,13 @@ def _remove_from_token_dict(term: str, token_dict):
         c_tokens = li.the_index.get_ngrams(c_tokens)
         for c_token in c_tokens:
             query_terms = token_dict[c_token]
-            query_terms.remove(term)
+            if term in query_terms:
+                query_terms.remove(term)
             if not query_terms:
                 li.the_index.decache_token(c_token)
 
         query_terms = token_dict[subterm]
-        query_terms.remove(term)
+        if term in query_terms:
+            query_terms.remove(term)
         if not query_terms:
             li.the_index.decache_token(subterm)
