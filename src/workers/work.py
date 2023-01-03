@@ -160,7 +160,7 @@ def km_work_all_vs_all(json: dict):
 
                 if query_kg: # and abc_result['ab_pvalue'] < rel_pvalue_cutoff:
                     if abc_result['ab_pvalue'] < rel_pvalue_cutoff:
-                        rel = knowledge_graph.query(abc_result['a_term'], abc_result['b_term'])
+                        rel = knowledge_graph.query(abc_result['a_term'], abc_result['b_term'], censor_year)
                         abc_result['ab_relationship'] = rel
                     else:
                         abc_result['ab_relationship'] = None
@@ -182,7 +182,7 @@ def km_work_all_vs_all(json: dict):
 
                     if query_kg:
                         if abc_result['bc_pvalue'] < rel_pvalue_cutoff:
-                            rel = knowledge_graph.query(abc_result['b_term'], abc_result['c_term'])
+                            rel = knowledge_graph.query(abc_result['b_term'], abc_result['c_term'], censor_year)
                             abc_result['bc_relationship'] = rel
                         else:
                             abc_result['bc_relationship'] = None
