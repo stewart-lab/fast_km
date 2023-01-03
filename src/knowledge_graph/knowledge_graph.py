@@ -1,3 +1,4 @@
+import os
 from py2neo import Graph
 from py2neo.bulk import create_nodes, merge_relationships
 from itertools import islice
@@ -5,7 +6,7 @@ import indexing.km_util as util
 import indexing.index as index
 import workers.loaded_index as li
 
-uri="bolt://" + util.neo4j_host + ":7687"
+neo4j_port = "7687"
 user = "neo4j"
 password = "mypass"
 
@@ -19,6 +20,7 @@ class KnowledgeGraph:
         self.node_ids = dict()
 
         try:
+            uri="bolt://" + util.neo4j_host + ":" + neo4j_port
             self.graph = Graph(uri, auth=(user, password))
         except:
             self.graph = None
@@ -89,7 +91,7 @@ class KnowledgeGraph:
             
             relationship = str(type(relation)).replace("'", "").replace(">", "").split('.')[2]
 
-            if censor_year:
+            if censor_year and censor_year < 3000:
                 if censor_year not in li.the_index._date_censored_pmids:
                     if not li.the_index._publication_years:
                         li.the_index._init_pub_years()
@@ -120,6 +122,11 @@ class KnowledgeGraph:
         return result
 
     def write_node_id_index(self, path: str):
+        dir = os.path.dirname(path)
+        
+        if not os.path.exists(dir):
+            os.mkdir(dir)
+
         all_nodes = self.graph.nodes.match()
         with open(path, 'w') as f:
             for node in all_nodes:
@@ -159,13 +166,13 @@ class KnowledgeGraph:
 
                 spl = line.strip().split('\t')
 
-                node1_name = _sanitize_txt(spl[0])
+                node1_name = _sanitize_txt(spl[0])[0]
                 node1_type = spl[1]
                 rel_txt = spl[2]
-                node2_name = _sanitize_txt(spl[3])
+                node2_name = _sanitize_txt(spl[3])[0]
                 node2_type = spl[4]
 
-                pmids = spl[len(spl) - 1].strip('}').strip('{')
+                pmids = spl[len(spl) - 1].strip('"').strip('}').strip('{')
                 pmids = [int(x.strip()) for x in pmids.split(',')]
 
                 if len(pmids) < min_pmids_for_rel:
@@ -192,13 +199,13 @@ class KnowledgeGraph:
 
                 spl = line.strip().split('\t')
 
-                node1_name = _sanitize_txt(spl[0])
+                node1_name = _sanitize_txt(spl[0])[0]
                 node1_type = spl[1]
                 rel_txt = spl[2]
-                node2_name = _sanitize_txt(spl[3])
+                node2_name = _sanitize_txt(spl[3])[0]
                 node2_type = spl[4]
 
-                pmids = spl[len(spl) - 1].strip('}').strip('{')
+                pmids = spl[len(spl) - 1].strip('"').strip('}').strip('{')
                 pmids = [int(x.strip()) for x in pmids.split(',')]
 
                 if len(pmids) < min_pmids_for_rel:
@@ -230,7 +237,7 @@ class KnowledgeGraph:
                 merge_relationships(self.graph.auto(), batch, r_type, start_node_key=(n1_type, "name"), end_node_key=(n2_type, "name"))
 
     def _null_rel_response(self, a_term, b_term):
-        {'a_term': a_term, 'a_type': '', 'relationship': '', 'b_term': b_term, 'b_type': '', 'pmids': []}
+        return {'a_term': a_term, 'a_type': '', 'relationship': '', 'b_term': b_term, 'b_type': '', 'pmids': []}
 
 def _sanitize_txt(term: str):
     subterms = set()

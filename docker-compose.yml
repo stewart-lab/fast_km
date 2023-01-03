@@ -41,6 +41,7 @@ services:
     image: neo4j
     environment:
       NEO4J_AUTH: neo4j/mypass
+      NEO4J_dbms_security_auth__minimum__password__length: 1
     volumes:
       - ${NEO4J_DIR}/data:/data
       - ${NEO4J_DIR}/logs:/logs
