@@ -33,7 +33,7 @@ def test_container_integration_on_running_containers_ci(data_dir):
     assert not os.path.exists(index_dir)
 
     # populate/query the knowledge graph
-    util.neo4j_host = 'localhost'
+    # util.neo4j_host = 'localhost'
     kg.rel_pvalue_cutoff = 1.1
     test_kg = KnowledgeGraph()
     test_kg.populate(os.path.join(data_dir, 'relations.tsv'))
