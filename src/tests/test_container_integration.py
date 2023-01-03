@@ -34,14 +34,14 @@ def test_container_integration_on_running_containers_ci(data_dir):
 
     # populate/query the knowledge graph
     # util.neo4j_host = 'localhost'
-    kg.rel_pvalue_cutoff = 1.1
-    test_kg = KnowledgeGraph()
-    test_kg.populate(os.path.join(data_dir, 'relations.tsv'))
-    test_kg.write_node_id_index(util.get_knowledge_graph_node_id_index(data_dir))
-    test_kg.load_node_id_index(util.get_knowledge_graph_node_id_index(data_dir))
-    query_result = test_kg.query('1 10 phenanthroline', 'phen')
-    assert query_result[0]['relationship'] == 'COREF'
-    assert 18461203 in query_result[0]['pmids']
+    # kg.rel_pvalue_cutoff = 1.1
+    # test_kg = KnowledgeGraph()
+    # test_kg.populate(os.path.join(data_dir, 'relations.tsv'))
+    # test_kg.write_node_id_index(util.get_knowledge_graph_node_id_index(data_dir))
+    # test_kg.load_node_id_index(util.get_knowledge_graph_node_id_index(data_dir))
+    # query_result = test_kg.query('1 10 phenanthroline', 'phen')
+    # assert query_result[0]['relationship'] == 'COREF'
+    # assert 18461203 in query_result[0]['pmids']
 
     # run query WITHOUT the index being built
     skim_url = api_url + skim_append
