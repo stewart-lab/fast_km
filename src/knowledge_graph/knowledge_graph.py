@@ -42,9 +42,10 @@ class KnowledgeGraph:
 
         a_term_stripped = _sanitize_txt(a_term)[:max_synonyms]
         b_term_stripped = _sanitize_txt(b_term)[:max_synonyms]
+        sanitized_ab_tuple = (str.join(index.logical_or, a_term_stripped), str.join(index.logical_or, b_term_stripped))
 
-        if (str.join(index.logical_or, a_term_stripped), str.join(index.logical_or, b_term_stripped)) in self.query_cache:
-            return self.query_cache[str.join(index.logical_or, a_term_stripped), str.join(index.logical_or, b_term_stripped)]
+        if sanitized_ab_tuple in self.query_cache:
+            return self.query_cache[sanitized_ab_tuple]
 
         # get nodes from the neo4j database
         a_matches = []
@@ -115,7 +116,7 @@ class KnowledgeGraph:
         if not result:
             result.append(self._null_rel_response(a_term, b_term))
 
-        self.query_cache[str.join(index.logical_or, a_term_stripped), str.join(index.logical_or, b_term_stripped)] = result
+        self.query_cache[sanitized_ab_tuple] = result
         return result
 
     def write_node_id_index(self, path: str):
