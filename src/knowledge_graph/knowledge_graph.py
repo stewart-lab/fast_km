@@ -8,7 +8,7 @@ import workers.loaded_index as li
 
 neo4j_port = "7687"
 user = "neo4j"
-password = "mypass"
+password = "mypassword"
 
 rel_pvalue_cutoff = 1e-5
 min_pmids_for_rel = 3
