@@ -1,8 +1,17 @@
 import os
 import nltk
+from enum import Enum
 
+redis_host = 'redis'
+mongo_host = 'mongo'
+neo4j_host = 'neo4j'
 tokenizer = nltk.RegexpTokenizer(r"\w+")
 encoding = 'utf-8'
+
+class JobPriority(Enum):
+    HIGH = 1
+    MEDIUM = 2
+    LOW = 3
 
 def report_progress(completed: float, total: float) -> None:
     """Shows a progress bar. Adapted from: 
@@ -50,6 +59,9 @@ def get_tokens(text: str) -> 'list[str]':
     tokens = tokenizer.tokenize(l_text)
     return tokens
 
+def sanitize_text(text: str) -> str:
+    return str.join(' ', get_tokens(text))
+
 def get_index_dir(abstracts_dir: str) -> str:
     return os.path.join(abstracts_dir, 'Index')
 
@@ -57,13 +69,13 @@ def get_abstract_catalog(abstracts_dir: str) -> str:
     return os.path.join(get_index_dir(abstracts_dir), 'abstracts.txt.gzip')
 
 def get_index_file(abstracts_dir: str) -> str:
-    return os.path.join(get_index_dir(abstracts_dir), 'index.bin')
-
-def get_offset_file(abstracts_dir: str) -> str:
-    return os.path.join(get_index_dir(abstracts_dir), 'index_offsets.txt')
+    return os.path.join(get_index_dir(abstracts_dir), 'index.cdb')
 
 def get_cataloged_files(abstracts_dir: str) -> str:
     return os.path.join(get_index_dir(abstracts_dir), 'cataloged.txt')
 
+def get_knowledge_graph_node_id_index(abstracts_dir: str) -> str:
+    return os.path.join(get_index_dir(abstracts_dir), 'kg_node_ids.txt')
+    
 def get_icite_file(abstracts_dir: str) -> str:
     return os.path.join(get_index_dir(abstracts_dir), 'icite.json')

@@ -8,7 +8,7 @@ WORKDIR /fast-km/
 
 ## install python package requirements
 RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+RUN pip install -q -r requirements.txt
 
 ## Default command on running the container
 ENTRYPOINT ["python", "-u", "src/run_worker.py"]

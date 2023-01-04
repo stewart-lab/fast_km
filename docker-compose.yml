@@ -18,7 +18,7 @@ services:
       context: .
       dockerfile: ./src/workers/Dockerfile
     image: fast_km-worker:build
-    command: --workers 1
+    command: --workers 2 --high_priority 1 --medium_priority 0 --low_priority 0
     volumes:
       - ${PUBMED_DIR}:/mnt/pubmed  # edit .env file to change pubmed dir
     depends_on:
@@ -34,6 +34,19 @@ services:
 
   redis:
     image: redis
+    networks:
+      - fast_km-network
+
+  neo4j:
+    image: neo4j:4.4
+    environment:
+      NEO4J_AUTH: neo4j/mypassword
+    volumes:
+      - ${NEO4J_DIR}/data:/data
+      - ${NEO4J_DIR}/logs:/logs
+    ports:
+      - "7474:7474"
+      - "7687:7687"
     networks:
       - fast_km-network
 
