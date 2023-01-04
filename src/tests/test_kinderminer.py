@@ -97,7 +97,7 @@ def test_kinderminer(data_dir):
     assert km_result['len(b_term_set)'] == 335
     assert km_result['sort_ratio'] == pytest.approx(0.0149253, abs=1e-6)
     assert km_result['n_articles'] == 4139
-    assert km_result['pmid_intersection'] == {34579370, 34580336, 34581683, 34579963, 34582109}
+    assert km_result['pmid_intersection'] == [34579370, 34580336, 34581683, 34579963, 34582109]
 
     km_result = km.kinderminer_search('skin' + index.logical_and + 'treatment', 'cancer', idx, return_pmids=True)
     assert km_result['pvalue'] == pytest.approx(0.326369, abs=1e-6)
@@ -105,7 +105,7 @@ def test_kinderminer(data_dir):
     assert km_result['len(b_term_set)'] == 301
     assert km_result['sort_ratio'] == pytest.approx(0.006644, abs=1e-6)
     assert km_result['n_articles'] == 4139
-    assert km_result['pmid_intersection'] == {34580336, 34582109}
+    assert km_result['pmid_intersection'] == [34580336, 34582109]
 
 def test_prediction_score():
     total_n = 33810017

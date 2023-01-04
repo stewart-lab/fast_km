@@ -84,7 +84,7 @@ def km_work_all_vs_all(json: dict):
     return_pmids = bool(json.get('return_pmids', False))
     query_kg = bool(json.get('query_knowledge_graph', False))
     _rel_pvalue_cutoff = float(json.get('rel_pvalue_cutoff', rel_pvalue_cutoff))
-    top_n_articles = float(json.get('top_n_articles', 10))
+    top_n_articles = int(json.get('top_n_articles', 10))
 
     _update_job_status('progress', 0)
 
@@ -158,7 +158,7 @@ def km_work_all_vs_all(json: dict):
                     }
 
                 if return_pmids:
-                    abc_result['ab_pmid_intersection'] = str(ab['pmid_intersection'])
+                    abc_result['ab_pmid_intersection'] = ab['pmid_intersection']
 
                 if query_kg:
                     if abc_result['ab_pvalue'] < _rel_pvalue_cutoff:
@@ -180,7 +180,7 @@ def km_work_all_vs_all(json: dict):
                     abc_result['bc_count'] = bc['len(a_b_intersect)']
                     
                     if return_pmids:
-                        abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
+                        abc_result['bc_pmid_intersection'] = bc['pmid_intersection']
 
                     if query_kg:
                         if abc_result['bc_pvalue'] < _rel_pvalue_cutoff:

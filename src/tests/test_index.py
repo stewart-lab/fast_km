@@ -90,4 +90,4 @@ def test_citation_count(tmp_path):
     li.the_index = the_index
 
     result = li.the_index.top_n_by_citation_count({34578002, 34577999, 1, 2, 3, 4, 5}, 2)
-    assert result == {34578002, 34577999}
+    assert result == [34578002, 34577999]

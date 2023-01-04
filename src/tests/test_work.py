@@ -20,13 +20,17 @@ def test_skim_work(data_dir):
     # build the index
     indexer = IndexBuilder(data_dir)
     indexer.build_index()
-    idx = Index(data_dir)
 
+    # copy the citation count file into the correct directory (icite.json)
+    shutil.copy(os.path.join(data_dir, 'icite.json'), util.get_icite_file(data_dir))
+
+    # load the index
+    idx = Index(data_dir)
     li.pubmed_path = data_dir
     li.the_index = idx
 
     # test with only A-B terms
-    result = work.km_work_all_vs_all({'a_terms': ['cancer'], 'b_terms': ['test']})
+    result = work.km_work_all_vs_all({'a_terms': ['cancer'], 'b_terms': ['test'], 'return_pmids': True, 'top_n_articles': 3})
     assert len(result) == 1
     assert 'c_term' not in result[0]
     assert result[0]['a_term'] == 'cancer'
@@ -38,9 +42,10 @@ def test_skim_work(data_dir):
     assert result[0]['b_count'] == 250
     assert result[0]['ab_count'] == 16
     assert result[0]['total_count'] == 4139
+    assert result[0]['ab_pmid_intersection'] == [34579798, 34579095, 34579733]
 
     # test with A-B-C terms
-    result = work.km_work_all_vs_all({'a_terms': ['cancer'], 'b_terms': ['test'], 'c_terms': ['coffee'], 'top_n': 50, 'ab_fet_threshold': 0.8})
+    result = work.km_work_all_vs_all({'a_terms': ['cancer'], 'b_terms': ['test'], 'c_terms': ['coffee'], 'top_n': 50, 'ab_fet_threshold': 0.8, 'return_pmids': True, 'top_n_articles': 3})
     assert len(result) == 1
     assert result[0]['a_term'] == 'cancer'
     assert result[0]['b_term'] == 'test'
@@ -57,3 +62,5 @@ def test_skim_work(data_dir):
     assert result[0]['bc_pred_score'] == pytest.approx(0.752, abs=0.001)
     assert result[0]['c_count'] == 10
     assert result[0]['bc_count'] == 2
+    assert result[0]['ab_pmid_intersection'] == [34579798, 34579095, 34579733]
+    assert result[0]['bc_pmid_intersection'] == [34580748, 34578919]
