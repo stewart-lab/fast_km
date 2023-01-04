@@ -5,7 +5,7 @@ from indexing.abstract import Abstract
 from indexing.index_builder import IndexBuilder
 import indexing.km_util as util
 import workers.loaded_index as li
-from workers.work import skim_work
+from workers.work import km_work_all_vs_all
 import json
 
 def test_index_abstract(tmp_path):
@@ -69,51 +69,25 @@ def test_index_abstract(tmp_path):
     assert the_index.n_articles() == 2
 
 def test_citation_count(tmp_path):
-    assert not os.path.exists(util.get_index_dir(tmp_path))
+    icite_json_demo_data = json.dumps({
+        "34577995": 0,
+        "34577996": 0,
+        "34577997": 0,
+        "34577998": 1,
+        "34577999": 2,
+        "34578000": 0,
+        "34578001": 0,
+        "34578002": 8,
+        "34578003": 3
+        })
 
-    cataloger = AbstractCatalog(tmp_path)
-    abs1 = Abstract(1000, 2020, "A Really Cool Pubmed Abstract",
-        "test The quick brown fox jumped over the lazy dog repeated the repeat.")
-    abs2 = Abstract(1001, 2021, "A Cool Title",
-        "Some of the words are are the repeated repeat but some are-are-are not.")
-    abs3 = Abstract(1002, 2022, "sdfsb  rgtd gfhdfg",
-        "Test repeat test repeat")
-    ct = {"1000":"1", "1001":"2", "1002":"3"}
-    
-    cataloger.add_or_update_abstract(abs1)
-    cataloger.add_or_update_abstract(abs2)
-    cataloger.add_or_update_abstract(abs3)
-    cataloger.write_catalog_to_disk(util.get_abstract_catalog(tmp_path))
-
-    with open(util.get_icite_file(tmp_path), "w", encoding="utf-8") as f:
-        json.dump(ct, f)
-        
-    indexer = IndexBuilder(tmp_path)
-    hot_storage = dict()
-    cold_storage = dict()
-    indexer._index_abstract(abs1, hot_storage)
-    indexer._serialize_hot_to_cold_storage(hot_storage, cold_storage)
-    indexer._write_index_to_disk(cold_storage)
-
-    indexer._index_abstract(abs2, hot_storage)
-    indexer._serialize_hot_to_cold_storage(hot_storage, cold_storage, True)
-    indexer._write_index_to_disk(cold_storage)
-
-    indexer._index_abstract(abs3, hot_storage)
-    indexer._serialize_hot_to_cold_storage(hot_storage, cold_storage, True)
-    indexer._write_index_to_disk(cold_storage)
+    if not os.path.exists(util.get_index_dir(tmp_path)):
+        os.mkdir(util.get_index_dir(tmp_path))
+    with open(util.get_icite_file(tmp_path), 'w') as f:
+        f.write(icite_json_demo_data)
 
     the_index = Index(tmp_path)
     li.the_index = the_index
 
-    query = {
-        "a_terms": ["test"],
-        "b_terms": ["repeat"],
-        "c_terms": ["the"],
-        "top_n": 50,
-        "ab_fet_threshold": 1.0,
-        "return_pmids": 'True'
-    }
-    val = skim_work(query)
-    assert val[0]['bc_pmid_intersection'] == "{1001: '2', 1000: '1'}"
-    print(val)
+    result = li.the_index.top_n_by_citation_count({34578002, 34577999, 1, 2, 3, 4, 5}, 2)
+    assert result == {34578002, 34577999}
