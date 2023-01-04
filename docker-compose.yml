@@ -38,7 +38,7 @@ services:
       - fast_km-network
 
   neo4j:
-    image: neo4j
+    image: neo4j:4.4
     environment:
       NEO4J_AUTH: neo4j/mypassword
     volumes:
