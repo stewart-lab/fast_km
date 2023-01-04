@@ -2,9 +2,10 @@ import pytest
 import requests
 import time
 import os
-import shutil
 from subprocess import check_output
 from indexing import km_util as util
+import src.knowledge_graph.knowledge_graph as kg
+from src.knowledge_graph.knowledge_graph import KnowledgeGraph
 
 flask_port = '5099'
 api_url = 'http://localhost:' + flask_port
@@ -18,98 +19,43 @@ the_auth = ('username', 'password')
 def data_dir():
     return os.path.join(os.getcwd(), "src", "tests", "test_data", "indexer")
 
-def test_container_integration(data_dir, monkeypatch):
-    # you can uncomment this pytest.skip if you want to test container 
-    # integration on your local machine
-    pytest.skip('skipped; CI pipeline tests containers')
-
-    # set the pubmed dir for this test
-    monkeypatch.setenv(name='PUBMED_DIR', value=data_dir.replace(os.getcwd(), '.'))
-
-    # use "docker compose" by default, but might need to use "docker-compose" (old syntax)
-    # depending on the machine this is being run on
-    docker_compose = 'docker compose'
-
-    try:
-        cmd_output = check_output(docker_compose, shell=True)
-    except:
-        #try:
-        docker_compose = 'docker-compose'
-        #    cmd_output = check_output(docker_compose, shell=True)
-        #except:
-        #    pytest.skip('skipped; docker compose may not be available on this system')
-
-    try:
-        # remove any old containers
-        cmd_output = check_output(docker_compose + ' down', shell=True)
-
-        # delete the index if it exists already
-        index_dir = util.get_index_dir(data_dir)
-        if os.path.exists(index_dir):
-            shutil.rmtree(index_dir)
-        assert not os.path.exists(index_dir)
-
-        # run the docker containers
-        time.sleep(1)
-        
-        if docker_compose == 'docker compose':
-            cmd_output = check_output(docker_compose + ' up --build --wait', shell=True)
-            time.sleep(15)
-        else:
-            # docker-compose does not have the '--wait' flag
-            cmd_output = check_output(docker_compose + ' up --build -d', shell=True)
-            time.sleep(25)
-
-        # run query
-        skim_url = api_url + skim_append
-        query = {'a_terms': ['cancer'], 'b_terms': ['coffee'], 'c_terms': ['water'], 'ab_fet_threshold': 1, 'top_n': 50, 'query_knowledge_graph': 'True'}
-        job_info = _post_job(skim_url, query)
-
-        if job_info['status'] == 'failed':
-            if 'message' in job_info:
-                raise RuntimeError('the job failed because: ' + job_info['message'])
-            raise RuntimeError('the job failed without an annotated reason')
-        
-        result = job_info['result']
-        assert result[0]['total_count'] == 0
-
-        # TODO: this just tests that the neo4j database can be connected to.
-        # it does not test for actual querying of the knowledge graph. need to
-        # write that into a test.
-        #assert 'ab_relationship' in result[0]
-        #assert 'connection error' not in result[0]['ab_relationship']
-
-        # build the index
-        _post_job(api_url + update_index_append, {'n_files': 0, 'clear_cache': False})
-
-        # run query. the new (built) index should be detected, causing the 
-        # cache to auto-clear.
-        result = _post_job(skim_url, query)['result']
-        assert result[0]['total_count'] > 4000
-        #assert 'ab_relationship' in result[0]
-        #assert 'connection error' not in result[0]['ab_relationship']
-
-    except Exception as e:
-        assert False, str(e)
-
-    finally:
-        cmd_output = check_output(docker_compose + ' down', shell=True)
-
 @pytest.mark.ci
 def test_container_integration_on_running_containers_ci(data_dir):
-    # you can uncomment this pytest.skip if you want to test container 
-    # integration on your local machine. you must have the containers
-    # already running with the test index folder as the PUBMED_DIR env var
-    # to run this unit test properly.
-    #pytest.skip('skipped; CI pipeline tests containers')
+    # this unit test is meant to be run on a continuous integration platform
+    # (e.g., AppVeyor). you can run this on your local machine but you must 
+    # have the containers already running with the test index folder as the 
+    # PUBMED_DIR env var to run this unit test properly.
+
+    _clear_cache()
 
     # fail the test if the index has already been built
     index_dir = util.get_index_dir(data_dir)
     assert not os.path.exists(index_dir)
 
+    # populate/query the knowledge graph
+    # util.neo4j_host = 'localhost'
+    # kg.rel_pvalue_cutoff = 1.1
+    # test_kg = KnowledgeGraph()
+    # test_kg.populate(os.path.join(data_dir, 'relations.tsv'))
+    # test_kg.write_node_id_index(util.get_knowledge_graph_node_id_index(data_dir))
+    # test_kg.load_node_id_index(util.get_knowledge_graph_node_id_index(data_dir))
+    # query_result = test_kg.query('1 10 phenanthroline', 'phen')
+    # assert query_result[0]['relationship'] == 'COREF'
+    # assert 18461203 in query_result[0]['pmids']
+
     # run query WITHOUT the index being built
     skim_url = api_url + skim_append
-    query = {'a_terms': ['cancer'], 'b_terms': ['test'], 'c_terms': ['coffee'], 'top_n': 50, 'ab_fet_threshold': 0.8}
+    query = {
+            'a_terms': ['cancer'], 
+            'b_terms': ['test'], 
+            'c_terms': ['coffee'], 
+            'top_n': 50, 
+            'ab_fet_threshold': 0.8, 
+            'return_pmids': True, 
+            'query_knowledge_graph': True,
+            'rel_pvalue_cutoff': 1.1
+        }
+
     job_info = _post_job(skim_url, query)
 
     if job_info['status'] == 'failed':
@@ -142,6 +88,11 @@ def test_container_integration_on_running_containers_ci(data_dir):
     assert result[0]['bc_pred_score'] == pytest.approx(0.752, abs=0.001)
     assert result[0]['c_count'] == 10
     assert result[0]['bc_count'] == 2
+    assert result[0]['ab_pmid_intersection'] == '{34579523, 34580803, 34581509, 34581316, 34579753, 34579789, 34580591, 34580336, 34580018, 34579701, 34579733, 34579095, 34581788, 34579798, 34580026, 34581628}'
+    assert result[0]['bc_pmid_intersection'] == '{34580748, 34578919}'
+    # assert result[0]['ab_relationship'][0]['relationship'] == 'POS_ASSOCIATION'
+    # assert result[0]['ab_relationship'][0]['pmids'] == [1, 2, 3, 4, 5]
+    # assert not result[0]['bc_relationship'][0]['relationship']
 
 def _post_job(url, json):
     total_sleep_time = 0
@@ -160,3 +111,8 @@ def _post_job(url, json):
             raise RuntimeError('the job timed out after 5 min')
 
     return get_response
+
+def _clear_cache():
+    url = api_url + clear_cache_append
+    job_id = requests.post(url=url, json={}, auth=the_auth).json()['id']
+    time.sleep(5)

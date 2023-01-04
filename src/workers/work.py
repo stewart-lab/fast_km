@@ -83,6 +83,7 @@ def km_work_all_vs_all(json: dict):
     censor_year = _get_censor_year(json)
     return_pmids = bool(json.get('return_pmids', False))
     query_kg = bool(json.get('query_knowledge_graph', False))
+    _rel_pvalue_cutoff = float(json.get('rel_pvalue_cutoff', rel_pvalue_cutoff))
 
     _update_job_status('progress', 0)
 
@@ -158,9 +159,9 @@ def km_work_all_vs_all(json: dict):
                 if return_pmids:
                     abc_result['ab_pmid_intersection'] = str(ab['pmid_intersection'])
 
-                if query_kg: # and abc_result['ab_pvalue'] < rel_pvalue_cutoff:
-                    if abc_result['ab_pvalue'] < rel_pvalue_cutoff:
-                        rel = knowledge_graph.query(abc_result['a_term'], abc_result['b_term'])
+                if query_kg:
+                    if abc_result['ab_pvalue'] < _rel_pvalue_cutoff:
+                        rel = knowledge_graph.query(abc_result['a_term'], abc_result['b_term'], censor_year)
                         abc_result['ab_relationship'] = rel
                     else:
                         abc_result['ab_relationship'] = None
@@ -181,8 +182,8 @@ def km_work_all_vs_all(json: dict):
                         abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
 
                     if query_kg:
-                        if abc_result['bc_pvalue'] < rel_pvalue_cutoff:
-                            rel = knowledge_graph.query(abc_result['b_term'], abc_result['c_term'])
+                        if abc_result['bc_pvalue'] < _rel_pvalue_cutoff:
+                            rel = knowledge_graph.query(abc_result['b_term'], abc_result['c_term'], censor_year)
                             abc_result['bc_relationship'] = rel
                         else:
                             abc_result['bc_relationship'] = None
@@ -379,11 +380,13 @@ def _remove_from_token_dict(term: str, token_dict):
         c_tokens = li.the_index.get_ngrams(c_tokens)
         for c_token in c_tokens:
             query_terms = token_dict[c_token]
-            query_terms.remove(term)
+            if term in query_terms:
+                query_terms.remove(term)
             if not query_terms:
                 li.the_index.decache_token(c_token)
 
         query_terms = token_dict[subterm]
-        query_terms.remove(term)
+        if term in query_terms:
+            query_terms.remove(term)
         if not query_terms:
             li.the_index.decache_token(subterm)
