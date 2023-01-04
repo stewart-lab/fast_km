@@ -8,8 +8,6 @@ from indexing.abstract import Abstract
 from indexing.index_builder import IndexBuilder
 from indexing.abstract_catalog import AbstractCatalog
 from indexing import km_util as util
-import requests
-import json
 
 @pytest.fixture
 def data_dir():
@@ -85,7 +83,6 @@ def test_indexer(data_dir):
     query = query | index._query_index("exopolysaccharide")
 
     assert len(query) == 37
-
 
 def test_abstract_cataloging(tmp_path):
     cataloger = AbstractCatalog(tmp_path)

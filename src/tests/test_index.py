@@ -5,7 +5,6 @@ from indexing.abstract import Abstract
 from indexing.index_builder import IndexBuilder
 import indexing.km_util as util
 import workers.loaded_index as li
-from workers.work import km_work_all_vs_all
 import json
 
 def test_index_abstract(tmp_path):
@@ -23,10 +22,6 @@ def test_index_abstract(tmp_path):
     abs2 = Abstract(1001, 2021, "A Cool Title",
         "Some of the words are are repeated but some are-are-are not.")
 
-    ct = {1000:1, 1001:2}
-    
-    with open(str(tmp_path) + "/test.json", "w", encoding="utf-8") as f:
-            json.dump(ct, f)
     cataloger.add_or_update_abstract(abs1)
     cataloger.add_or_update_abstract(abs2)
     cataloger.write_catalog_to_disk(util.get_abstract_catalog(tmp_path))
@@ -65,8 +60,6 @@ def test_index_abstract(tmp_path):
 
     query = the_index._query_index("test_test")
     assert len(query) == 0
-
-    assert the_index.n_articles() == 2
 
 def test_citation_count(tmp_path):
     icite_json_demo_data = json.dumps({

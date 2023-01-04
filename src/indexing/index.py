@@ -92,7 +92,7 @@ class Index():
         self._publication_years = dict()
         return date_censored_pmid_set
 
-    def top_n_by_citation_count(self, pmids: 'set[int]', top_n_articles = math.inf) -> 'set[int]':
+    def top_n_by_citation_count(self, pmids: 'set[int]', top_n_articles = math.inf) -> 'list[int]':
         if top_n_articles == math.inf:
             return list(pmids)
 
