@@ -84,6 +84,7 @@ def km_work_all_vs_all(json: dict):
     return_pmids = bool(json.get('return_pmids', False))
     query_kg = bool(json.get('query_knowledge_graph', False))
     _rel_pvalue_cutoff = float(json.get('rel_pvalue_cutoff', rel_pvalue_cutoff))
+    top_n_articles = int(json.get('top_n_articles', 10))
 
     _update_job_status('progress', 0)
 
@@ -98,7 +99,7 @@ def km_work_all_vs_all(json: dict):
             b_term = li.the_index.get_highest_priority_term(b_term_set, b_term_token_dict)
             b_term_set.remove(b_term)
 
-            res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids)
+            res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids, top_n_articles)
 
             if res['pvalue'] <= ab_fet_threshold:
                 ab_results.append(res)
@@ -157,7 +158,7 @@ def km_work_all_vs_all(json: dict):
                     }
 
                 if return_pmids:
-                    abc_result['ab_pmid_intersection'] = str(ab['pmid_intersection'])
+                    abc_result['ab_pmid_intersection'] = ab['pmid_intersection']
 
                 if query_kg:
                     if abc_result['ab_pvalue'] < _rel_pvalue_cutoff:
@@ -169,7 +170,7 @@ def km_work_all_vs_all(json: dict):
                 # add c-terms and b-c term KM info (SKiM)
                 if not km_only:
                     b_term = ab['b_term']
-                    bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year, return_pmids)
+                    bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year, return_pmids, top_n_articles)
 
                     abc_result['c_term'] = c_term
                     abc_result['bc_pvalue'] = bc['pvalue']
@@ -179,7 +180,7 @@ def km_work_all_vs_all(json: dict):
                     abc_result['bc_count'] = bc['len(a_b_intersect)']
                     
                     if return_pmids:
-                        abc_result['bc_pmid_intersection'] = str(bc['pmid_intersection'])
+                        abc_result['bc_pmid_intersection'] = bc['pmid_intersection']
 
                     if query_kg:
                         if abc_result['bc_pvalue'] < _rel_pvalue_cutoff:

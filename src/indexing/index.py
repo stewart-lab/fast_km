@@ -2,6 +2,7 @@ import quickle
 import math
 import os
 import gc
+import json
 import pymongo
 import cdblib
 import sys
@@ -28,6 +29,8 @@ class Index():
         self._bin_path = util.get_index_file(pubmed_abstract_dir)
         self._abstract_catalog = util.get_abstract_catalog(pubmed_abstract_dir)
         self._publication_years = dict()
+        self._citation_count = dict()
+        self._load_citation_data()
         self._date_censored_pmids = dict()
         self._open_mmap_connection()
         self.n_articles() # precalculate total N articles
@@ -88,6 +91,18 @@ class Index():
 
         self._publication_years = dict()
         return date_censored_pmid_set
+
+    def top_n_by_citation_count(self, pmids: 'set[int]', top_n_articles = math.inf) -> 'list[int]':
+        if top_n_articles == math.inf:
+            return list(pmids)
+
+        if not self._citation_count:
+            return list(pmids)[:top_n_articles]
+        
+        # sort by citation count (descending order) and return top N
+        # TODO: avoid casting the PMIDs as strings, probably adds a fair bit of time
+        top_n_sorted = sorted(pmids, key=lambda pmid: -self._citation_count.get(str(pmid), 0))[:top_n_articles]
+        return top_n_sorted
 
     def n_articles(self, censor_year = math.inf) -> int:
         """Returns the number of indexed abstracts, given an optional 
@@ -167,6 +182,13 @@ class Index():
             highest_priority_term = list_of_terms[0]
 
         return highest_priority_term
+        
+    def _load_citation_data(self) -> None:
+        try:
+            with open(util.get_icite_file(self._pubmed_dir), encoding="utf-8") as f:
+                self._citation_count = json.load(f)
+        except:
+            print("error loading citation count data")
 
     def _get_term_priority(self, term: str):
         if term in self.ngram_cache:

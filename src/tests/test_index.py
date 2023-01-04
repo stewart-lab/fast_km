@@ -4,6 +4,8 @@ from indexing.index import Index
 from indexing.abstract import Abstract
 from indexing.index_builder import IndexBuilder
 import indexing.km_util as util
+import workers.loaded_index as li
+import json
 
 def test_index_abstract(tmp_path):
     assert not os.path.exists(util.get_index_dir(tmp_path))
@@ -59,4 +61,25 @@ def test_index_abstract(tmp_path):
     query = the_index._query_index("test_test")
     assert len(query) == 0
 
-    assert the_index.n_articles() == 2
+def test_citation_count(tmp_path):
+    icite_json_demo_data = json.dumps({
+        "34577995": 0,
+        "34577996": 0,
+        "34577997": 0,
+        "34577998": 1,
+        "34577999": 2,
+        "34578000": 0,
+        "34578001": 0,
+        "34578002": 8,
+        "34578003": 3
+        })
+
+    if not os.path.exists(util.get_index_dir(tmp_path)):
+        os.mkdir(util.get_index_dir(tmp_path))
+    with open(util.get_icite_file(tmp_path), 'w') as f:
+        f.write(icite_json_demo_data)
+
+    the_index = Index(tmp_path)
+
+    result = the_index.top_n_by_citation_count({34578002, 34577999, 34577998, 1, 2, 3, 4, 5}, 2)
+    assert result == [34578002, 34577999]
