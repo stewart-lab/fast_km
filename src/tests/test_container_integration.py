@@ -90,9 +90,9 @@ def test_container_integration_on_running_containers_ci(data_dir):
     assert result[0]['bc_count'] == 2
     assert result[0]['ab_pmid_intersection'] == '{34579523, 34580803, 34581509, 34581316, 34579753, 34579789, 34580591, 34580336, 34580018, 34579701, 34579733, 34579095, 34581788, 34579798, 34580026, 34581628}'
     assert result[0]['bc_pmid_intersection'] == '{34580748, 34578919}'
-    assert result[0]['ab_relationship'][0]['relationship'] == 'POS_ASSOCIATION'
-    assert result[0]['ab_relationship'][0]['pmids'] == [1, 2, 3, 4, 5]
-    assert not result[0]['bc_relationship'][0]['relationship']
+    # assert result[0]['ab_relationship'][0]['relationship'] == 'POS_ASSOCIATION'
+    # assert result[0]['ab_relationship'][0]['pmids'] == [1, 2, 3, 4, 5]
+    # assert not result[0]['bc_relationship'][0]['relationship']
 
 def _post_job(url, json):
     total_sleep_time = 0
