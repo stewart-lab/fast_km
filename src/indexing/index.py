@@ -92,6 +92,18 @@ class Index():
         self._publication_years = dict()
         return date_censored_pmid_set
 
+    def top_n_by_citation_count(self, pmids: 'set[int]', top_n_articles = math.inf) -> 'set[int]':
+        if top_n_articles == math.inf:
+            return pmids
+
+        if not self.citation_count:
+            return set(list(pmids)[:top_n_articles])
+        
+        # sort by citation count (descending order) and return top N
+        # TODO: avoid casting the PMIDs as strings, probably adds a fair bit of time
+        top_n_sorted = sorted(pmids, key=lambda pmid: -self.citation_count.get(str(pmid), 0))[:top_n_articles]
+        return set(top_n_sorted)
+
     def n_articles(self, censor_year = math.inf) -> int:
         """Returns the number of indexed abstracts, given an optional 
         censor year."""
@@ -176,8 +188,7 @@ class Index():
             with open(util.get_icite_file(self._pubmed_dir), encoding="utf-8") as f:
                 self.citation_count = json.load(f)
         except:
-            self.citation_count = None
-            print("Citation count data does not exist.")
+            print("error loading citation count data")
 
     def _get_term_priority(self, term: str):
         if term in self.ngram_cache:

@@ -27,7 +27,7 @@ def get_sort_ratio(table) -> float:
 
     return table[0][0] / denom
 
-def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.inf, return_pmids = False) -> dict:
+def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.inf, return_pmids = False, top_n_articles = math.inf) -> dict:
     """"""
     start_time = time.perf_counter()
     result = dict()
@@ -65,10 +65,8 @@ def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.
     result['n_articles'] = n_articles
 
     if return_pmids:
-        result['pmid_intersection'] = a_term_set & b_term_set
-
-        if len(result['pmid_intersection']) > 1000:
-            result['pmid_intersection'] = set(list(result['pmid_intersection'])[:1000])
+        intersection = idx.top_n_by_citation_count(a_term_set & b_term_set, top_n_articles)
+        result['pmid_intersection'] = intersection
 
     return result
 
