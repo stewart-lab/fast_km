@@ -122,7 +122,7 @@ def km_work_all_vs_all(json: dict):
             reverse=True)
 
         ab_results = ab_results[:top_n + 20]
-        
+
         # RAM efficiency. decache unneeded tokens/terms
         b_terms_used = set([ab_res['b_term'] for ab_res in ab_results])
         c_term_token_dict = _get_token_dict(c_terms)
