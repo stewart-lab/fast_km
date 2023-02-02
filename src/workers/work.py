@@ -121,8 +121,8 @@ def km_work_all_vs_all(json: dict):
             km.get_prediction_score(res['pvalue'], res['sort_ratio']), 
             reverse=True)
 
-        ab_results = ab_results[:top_n]
-
+        ab_results = ab_results[:top_n + 20]
+        
         # RAM efficiency. decache unneeded tokens/terms
         b_terms_used = set([ab_res['b_term'] for ab_res in ab_results])
         c_term_token_dict = _get_token_dict(c_terms)
@@ -201,6 +201,17 @@ def km_work_all_vs_all(json: dict):
                 _remove_from_token_dict(c_term, c_term_token_dict)
 
             c_term_n += 1
+
+    if top_n < sys.maxsize:
+        # sometimes high prediction score A-B pairs with no B-C pairs will 
+        # crowd out lower-scoring A-B pairs that have B-C pairs. we want to
+        # ignore the former in favor of including the latter. we added 
+        # 20 extra B-terms above as padding, now we need to filter out any
+        # extra B-terms not in the top N.
+        top_n_b = [x['b_term'] for x in ab_results]
+        abc_bs = set([x['b_term'] for x in return_val])
+        top_n_b = set([x for x in top_n_b if x in abc_bs][:top_n])
+        return_val = [x for x in return_val if x['b_term'] in top_n_b]
 
     _update_job_status('progress', 1.0000)
     return return_val
