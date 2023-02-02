@@ -64,3 +64,6 @@ def test_skim_work(data_dir):
     assert result[0]['bc_count'] == 2
     assert result[0]['ab_pmid_intersection'] == [34579798, 34579095, 34579733]
     assert result[0]['bc_pmid_intersection'] == [34580748, 34578919]
+
+    result = work.km_work_all_vs_all({'a_terms': ['cancer'], 'b_terms': ['carcinoma', 'downregulation'], 'c_terms': ['crop'], 'top_n': 1, 'ab_fet_threshold': 0.3, 'bc_fet_threshold': 0.3})
+    assert len(result) == 1
