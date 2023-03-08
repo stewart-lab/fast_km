@@ -72,6 +72,7 @@ def km_work_all_vs_all(json: dict):
         top_n = _get_top_n(json)
         ab_fet_threshold = _get_ab_fet_threshold(json, 1e-5)
         bc_fet_threshold = _get_bc_fet_threshold(json, 0.9999)
+        valid_bc_hit_pval = json.get('valid_bc_hit_pval', 1.0)
     else:
         # KM query
         km_only = True
@@ -121,7 +122,7 @@ def km_work_all_vs_all(json: dict):
             km.get_prediction_score(res['pvalue'], res['sort_ratio']), 
             reverse=True)
 
-        ab_results = ab_results[:top_n + 20]
+        ab_results = ab_results[:top_n + 300]
 
         # RAM efficiency. decache unneeded tokens/terms
         b_terms_used = set([ab_res['b_term'] for ab_res in ab_results])
@@ -208,10 +209,18 @@ def km_work_all_vs_all(json: dict):
         # ignore the former in favor of including the latter. we added 
         # 20 extra B-terms above as padding, now we need to filter out any
         # extra B-terms not in the top N.
-        top_n_b = [x['b_term'] for x in ab_results]
-        abc_bs = set([x['b_term'] for x in return_val])
-        top_n_b = set([x for x in top_n_b if x in abc_bs][:top_n])
-        return_val = [x for x in return_val if x['b_term'] in top_n_b]
+
+        # Bs including padding in prediction score order, including those without B-C hits
+        ranked_bs = [ab['b_term'] for ab in ab_results]
+
+        # Bs with valid B-C hits
+        valid_bs = set([x['b_term'] for x in return_val if x['bc_pvalue'] <= valid_bc_hit_pval])
+
+        # top 50 Bs with valid B-C hits
+        ranked_top_n_valid_bs = set([b for b in ranked_bs if b in valid_bs][:top_n])
+
+        # filter the results
+        return_val = [x for x in return_val if x['b_term'] in ranked_top_n_valid_bs]
 
     _update_job_status('progress', 1.0000)
     return return_val
