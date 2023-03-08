@@ -72,7 +72,7 @@ def km_work_all_vs_all(json: dict):
         top_n = _get_top_n(json)
         ab_fet_threshold = _get_ab_fet_threshold(json, 1e-5)
         bc_fet_threshold = _get_bc_fet_threshold(json, 0.9999)
-        valid_bc_hit_pval = json.get('valid_bc_hit_pval', 1.0)
+        valid_bc_hit_pval = float(json.get('valid_bc_hit_pval', 1.0))
     else:
         # KM query
         km_only = True
@@ -94,6 +94,10 @@ def km_work_all_vs_all(json: dict):
     for a_term_n, a_term in enumerate(a_terms):
         ab_results = []
         b_term_set = list(b_terms)
+
+        while a_term in b_term_set:
+            b_term_set.remove(a_term)
+
         b_term_n = 0
 
         while b_term_set:
@@ -122,7 +126,7 @@ def km_work_all_vs_all(json: dict):
             km.get_prediction_score(res['pvalue'], res['sort_ratio']), 
             reverse=True)
 
-        ab_results = ab_results[:top_n + 300]
+        ab_results = ab_results[:top_n + 20]
 
         # RAM efficiency. decache unneeded tokens/terms
         b_terms_used = set([ab_res['b_term'] for ab_res in ab_results])
@@ -137,6 +141,10 @@ def km_work_all_vs_all(json: dict):
 
         # take top N per a-b pair and run b-terms against c-terms
         c_term_set = list(c_terms)
+
+        while a_term in c_term_set:
+            c_term_set.remove(a_term)
+
         c_term_n = 0
 
         while c_term_set:
@@ -171,6 +179,10 @@ def km_work_all_vs_all(json: dict):
                 # add c-terms and b-c term KM info (SKiM)
                 if not km_only:
                     b_term = ab['b_term']
+
+                    if b_term == c_term:
+                        continue
+
                     bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year, return_pmids, top_n_articles)
 
                     abc_result['c_term'] = c_term
