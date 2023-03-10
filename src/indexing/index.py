@@ -469,6 +469,8 @@ def _place_in_mongo(query: str, result: 'set[int]') -> None:
             # not sure what this error is. seems to throw occasionally. just ignore it.
             print('warning: non-fatal AutoReconnect error in inserting to mongo')
             pass
+        except errors.DocumentTooLarge:
+            pass
     else:
         pass
 
