@@ -155,7 +155,7 @@ def _parse_xml(xml_content: str) -> 'list[Abstract]':
                 date_completed = medline_citation.find('DateCompleted')
                 year = date_completed.find('Year').text
             except AttributeError:
-                year = 99999 # TODO: kind of hacky...
+                year = 99999
                 pass
         
         if year == 99999:
@@ -168,7 +168,7 @@ def _parse_xml(xml_content: str) -> 'list[Abstract]':
                 match = re.search(year_regex, date_string)
                 year = match.group()
             except AttributeError:
-                year = 99999 # TODO: kind of hacky...
+                year = 99999
                 pass
 
         # get article title
