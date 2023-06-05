@@ -19,6 +19,9 @@ class IndexBuilder():
         abstract_catalog.catalog.clear() # saves RAM
 
         print('building index...')
+
+        # initialize the abstract year dict with 100m keys (much faster to add to)
+        self.abstract_years = dict.fromkeys(range(100000000))
         
         # build the index
         catalog_path = util.get_abstract_catalog(self.path_to_pubmed_abstracts)
@@ -37,6 +40,7 @@ class IndexBuilder():
                 print('done with ' + str(i + 1) + ' abstracts')
 
         # write the index
+        self.abstract_years = {pmid:year for pmid, year in self.abstract_years.items() if year}
         self._serialize_hot_to_cold_storage(hot_storage, cold_storage, consolidate_cold_storage=True)
         self._write_index_to_disk(cold_storage, overwrite_old)
 
