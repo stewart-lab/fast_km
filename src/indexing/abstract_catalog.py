@@ -8,7 +8,7 @@ from indexing.abstract import Abstract
 import re
 
 delim = '\t'
-year_regex = r"(?<!\d)(?:18[0-9]\d|19[0-9]\d|20[0-9]\d)(?!\d)"
+year_regex = r"(?<!\d)(?:1\d\d\d|20\d\d)(?!\d)"
 
 class AbstractCatalog():
     def __init__(self, pubmed_path) -> None:
