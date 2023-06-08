@@ -10,10 +10,10 @@ class KmWorker(Worker):
         super().__init__(queues, *args, **kwargs)
 
 def start_worker(queues: 'list[str]' = [km_util.JobPriority.MEDIUM.name]):
-    print('worker sleeping for 5 sec before starting...')
+    print('INFO: worker sleeping for 5 sec before starting...')
     time.sleep(5)
 
-    print('starting worker...')
+    print('INFO: starting worker...')
 
     _load_index()
 

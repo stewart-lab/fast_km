@@ -51,7 +51,7 @@ def get_worker_queue_names(i, high, med, low):
         return [x.name for x in km_util.JobPriority]
 
 def main():
-    print('workers waiting 10 sec for redis to set up...')
+    print('INFO: workers waiting 10 sec for redis to set up...')
     time.sleep(10)
     li.pubmed_path = '/mnt/pubmed'
 

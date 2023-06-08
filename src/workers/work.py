@@ -249,8 +249,8 @@ def update_index_work(json: dict):
         clear_cache = True
 
     # download baseline
-    print('Checking for files to download...')
-    _update_job_status('progress', 'downloading abstracts')
+    print('INFO: Checking for files to download...')
+    _update_job_status('progress', 0.1000)
 
     downloader.bulk_download(
         ftp_address='ftp.ncbi.nlm.nih.gov',
@@ -268,12 +268,12 @@ def update_index_work(json: dict):
     )
 
     # TODO: figure out how to report download and index building progress
-    _update_job_status('progress', 'building index')
+    _update_job_status('progress', 0.3000)
     index_builder = IndexBuilder(li.pubmed_path)
     index_builder.build_index(overwrite_old=False) # wait to remove old index
 
     # restart the workers (TODO: except this one)
-    _update_job_status('progress', 'restarting workers')
+    _update_job_status('progress', 0.9000)
     interrupted_jobs = restart_workers(requeue_interrupted_jobs=False)
 
     # remove the old index
@@ -285,14 +285,14 @@ def update_index_work(json: dict):
     # re-queue interrupted jobs
     _queue_jobs(interrupted_jobs)
 
-    _update_job_status('progress', 'finished')
+    _update_job_status('progress', 1.0000)
 
 def clear_mongo_cache(json):
     indexing.index._connect_to_mongo()
     indexing.index._empty_mongo()
 
 def restart_workers(requeue_interrupted_jobs = True):
-    print('restarting workers...')
+    print('INFO: restarting workers...')
     workers = Worker.all(_r)
 
     interrupted_jobs = []
@@ -303,7 +303,7 @@ def restart_workers(requeue_interrupted_jobs = True):
         job = worker.get_current_job()
 
         if job and (not this_job or (str(job.id) != str(this_job.id))):
-            print('canceling job: ' + str(job.id))
+            print('INFO: canceling job: ' + str(job.id))
             interrupted_jobs.append(job)
 
         # TODO: if the worker grabs another job now, it's a problem
@@ -331,7 +331,7 @@ def connect_to_neo4j():
 
 def _queue_jobs(jobs):
     for job in jobs:
-        print('restarting job: ' + str(job))
+        print('INFO: restarting job: ' + str(job))
         if 'priority' in job:
             job_priority = job['priority']
         else:
@@ -343,7 +343,7 @@ def _update_job_status(key, value):
     job = get_current_job()
 
     if job is None:
-        print('error: tried to update job status, but could not find job')
+        print('WARNING: tried to update job status, but could not find job')
         return
     
     job.meta[key] = value
