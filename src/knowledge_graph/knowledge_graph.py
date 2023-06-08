@@ -24,7 +24,7 @@ class KnowledgeGraph:
             self.graph = Graph(uri, auth=(user, password))
         except:
             self.graph = None
-            print('Could not find a neo4j knowledge graph database')
+            print('WARNING: Could not find a neo4j knowledge graph database. knowledge graph will be unavailable.')
             return
 
         try:
@@ -33,7 +33,7 @@ class KnowledgeGraph:
                 self.load_node_id_index(kg_ids)
         except:
             self.node_ids = dict()
-            print('Problem loading graph node IDs')
+            print('WARNING: Problem loading graph node IDs. knowledge graph queries may be slower than normal.')
 
     def query(self, a_term: str, b_term: str, censor_year = None):
         if not self.graph:

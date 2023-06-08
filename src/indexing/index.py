@@ -188,7 +188,7 @@ class Index():
             with open(util.get_icite_file(self._pubmed_dir), encoding="utf-8") as f:
                 self._citation_count = json.load(f)
         except:
-            print("error loading citation count data")
+            print("WARNING: could not citation count data. jobs will still complete but PMIDs will not be in citation count order.")
 
     def _get_term_priority(self, term: str):
         if term in self.ngram_cache:
@@ -229,7 +229,7 @@ class Index():
         tokens = util.get_tokens(query)
 
         if len(tokens) > 100:
-            print("Query failed, must have <=100 words; query was " + query)
+            print("ERROR: Query failed, must have <=100 words; query was " + query)
             return set()
             # raise ValueError("Query must have <=100 words")
         if not tokens:
@@ -246,7 +246,7 @@ class Index():
 
     def _open_mmap_connection(self) -> None:
         if not os.path.exists(self._bin_path):
-            print('warning: index does not exist and needs to be built')
+            print('WARNING: index does not exist and needs to be built. queries will return empty values until index is built.')
             self.connection = None
             return
 
@@ -438,7 +438,7 @@ def _connect_to_mongo() -> None:
         mongo_cache = db["query_cache"]
         mongo_cache.create_index('query', unique=True)
     except:
-        print('warning: could not find a MongoDB instance to use as a query cache')
+        print('WARNING: could not find a MongoDB instance to use as a query cache. jobs will complete but may be slower than normal.')
         mongo_cache = None
 
 def _check_mongo_for_query(query: str) -> bool:
@@ -446,7 +446,7 @@ def _check_mongo_for_query(query: str) -> bool:
         try:
             result = mongo_cache.find_one({'query': query})
         except:
-            print('warning: non-fatal error in retrieving from mongo')
+            print('WARNING: non-fatal error in retrieving from mongo. job may complete slower than normal.')
             return None
 
         if not isinstance(result, type(None)):
@@ -467,7 +467,7 @@ def _place_in_mongo(query: str, result: 'set[int]') -> None:
             pass
         except errors.AutoReconnect:
             # not sure what this error is. seems to throw occasionally. just ignore it.
-            print('warning: non-fatal AutoReconnect error in inserting to mongo')
+            print('WARNING: non-fatal AutoReconnect error in inserting to mongo. job may complete slower than normal.')
             pass
         except errors.DocumentTooLarge:
             pass
@@ -477,4 +477,4 @@ def _place_in_mongo(query: str, result: 'set[int]') -> None:
 def _empty_mongo() -> None:
     if not isinstance(mongo_cache, type(None)):
         x = mongo_cache.delete_many({})
-        print('mongodb cache cleared, ' + str(x.deleted_count) + ' items were deleted')
+        print('INFO: mongodb cache cleared, ' + str(x.deleted_count) + ' items were deleted')

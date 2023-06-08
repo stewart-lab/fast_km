@@ -5,8 +5,10 @@ import glob
 import xml.etree.ElementTree as ET
 import indexing.km_util as util
 from indexing.abstract import Abstract
+import re
 
 delim = '\t'
+year_regex = r"(?<!\d)(?:1\d\d\d|20\d\d)(?!\d)"
 
 class AbstractCatalog():
     def __init__(self, pubmed_path) -> None:
@@ -147,6 +149,27 @@ def _parse_xml(xml_content: str) -> 'list[Abstract]':
         except AttributeError:
             year = 99999 # TODO: kind of hacky...
             pass
+
+        if year == 99999:
+            try:
+                date_completed = medline_citation.find('DateCompleted')
+                year = date_completed.find('Year').text
+            except AttributeError:
+                year = 99999
+                pass
+        
+        if year == 99999:
+            try:
+                article = medline_citation.find('Article')
+                journal = article.find('Journal')
+                journal_issue = journal.find('JournalIssue')
+                pub_date = journal_issue.find('PubDate')
+                date_string = pub_date.find('MedlineDate').text
+                match = re.search(year_regex, date_string)
+                year = match.group()
+            except AttributeError:
+                year = 99999
+                pass
 
         # get article title
         try:

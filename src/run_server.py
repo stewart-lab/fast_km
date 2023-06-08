@@ -6,7 +6,7 @@ parser.add_argument('-p', '--pw_hash', default='none')
 args = parser.parse_args()
 
 def main():
-    print('server waiting 10 sec for redis to set up...')
+    print('INFO: server waiting 10 sec for redis to set up...')
     time.sleep(10)
 
     import server.app as app

@@ -12,13 +12,16 @@ class IndexBuilder():
         self.abstract_years = dict()
 
     def build_index(self, dump_rate = 300000, overwrite_old = True):
-        print('cataloging abstracts...')
+        print('INFO: cataloging abstracts...')
         # catalog abstracts
         abstract_catalog = AbstractCatalog(self.path_to_pubmed_abstracts)
         abstract_catalog.catalog_abstracts()
         abstract_catalog.catalog.clear() # saves RAM
 
-        print('building index...')
+        print('INFO: building index...')
+
+        # initialize the abstract year dict with large number of keys (much faster to add to)
+        self.abstract_years = dict.fromkeys(range(len(abstract_catalog.abstract_files) * 50000))
         
         # build the index
         catalog_path = util.get_abstract_catalog(self.path_to_pubmed_abstracts)
@@ -34,9 +37,10 @@ class IndexBuilder():
 
                 # sort of difficult to report progress because we don't know
                 # the total number of abstracts
-                print('done with ' + str(i + 1) + ' abstracts')
+                print('INFO: done with ' + str(i + 1) + ' abstracts')
 
         # write the index
+        self.abstract_years = {pmid:year for pmid, year in self.abstract_years.items() if year}
         self._serialize_hot_to_cold_storage(hot_storage, cold_storage, consolidate_cold_storage=True)
         self._write_index_to_disk(cold_storage, overwrite_old)
 
@@ -105,7 +109,7 @@ class IndexBuilder():
                         partial = quickle.loads(partial_serialized)
                         combined_dict.update(partial)
                     except:
-                        print('problem combining dictionaries for: ' + token)
+                        print('ERROR: problem combining dictionaries for: ' + token)
 
                     try:
                         byte_len = partial_serialized.index(byte_delim)

@@ -70,7 +70,7 @@ def list_files_to_download(ftp_address: str, ftp_dir: str, local_dir: str):
         remote_size = byte_dict[remote_filename]
 
         if remove_partial_file(local_filename, remote_size):
-            print('partial file found, we will re-download it: ' + local_filename)
+            print('INFO: partial file found, we will re-download it: ' + local_filename)
 
         if not path.exists(local_filename):
             files_to_download.append(remote_filename)
@@ -100,7 +100,7 @@ def bulk_download(ftp_address: str, ftp_dir: str, local_dir: str, n_to_download 
         remote_files_to_get = list_files_to_download(ftp_address, ftp_dir, 
             local_dir)
 
-        print('Need to download ' + str(len(remote_files_to_get)) + ' files'
+        print('INFO: Need to download ' + str(len(remote_files_to_get)) + ' files'
             + ' from ' + ftp_address + '/' + ftp_dir)
 
         # delete any *.xml.gz* file from previous years
@@ -110,7 +110,7 @@ def bulk_download(ftp_address: str, ftp_dir: str, local_dir: str, n_to_download 
 
             for file in files_to_remove:
                 if os.path.basename(file) not in remote_files_to_get:
-                    print('deleting outdated file from \'' + str(year) + ': ' + file)
+                    print('INFO: deleting outdated file from \'' + str(year) + ': ' + file)
                     os.remove(file)
 
         # download the files
