@@ -1,4 +1,5 @@
 # fast_km
+[![AppVeyor Badge](https://ci.appveyor.com/api/projects/status/github/stewart-lab/fast_km)](https://ci.appveyor.com/project/robertmillikin/fast-km)
 
 # API
 ## /skim/api/jobs/
