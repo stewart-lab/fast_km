@@ -33,7 +33,7 @@ services:
       - fast_km-network
 
   redis:
-    image: redis
+    image: redis:7.0.10
     networks:
       - fast_km-network
 

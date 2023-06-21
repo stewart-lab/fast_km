@@ -2,6 +2,7 @@ import os
 import pytest
 import gzip
 import shutil
+import pickle
 from indexing.abstract_catalog import _parse_xml
 from indexing.index import Index
 from indexing.abstract import Abstract
@@ -114,8 +115,21 @@ def test_abstract_cataloging_real_file(data_dir):
 
     # TODO: assertions
     i = 0
+    test_abstract_dict = dict()
     for abs in cataloger.stream_existing_catalog(path):
+        test_abstract_dict[abs.pmid] = abs
+
         i += 1
         assert abs.pmid > 0
 
     assert i == 4139
+
+    # this abstract has "Dimocarpus longan" in italics in the title.
+    # this code makes sure it's parsed correctly.
+    pmid = 34577997
+    article = test_abstract_dict[pmid]
+    title = article.title
+
+    assert 'Dimocarpus longan' in title
+    assert 'Peel Extract as Bio-Based' in title
+    

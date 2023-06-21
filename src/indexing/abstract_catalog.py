@@ -173,7 +173,9 @@ def _parse_xml(xml_content: str) -> 'list[Abstract]':
 
         # get article title
         try:
-            title = article.find('ArticleTitle').text
+            title = article.find('ArticleTitle')
+            title = "".join(title.itertext())
+            
         except AttributeError:
             pass
 
