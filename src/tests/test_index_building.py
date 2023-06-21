@@ -121,11 +121,8 @@ def test_abstract_cataloging_real_file(data_dir):
 
     assert i == 4139
 
-def test_italics_in_title(data_dir):
-    delete_existing_index(data_dir)
-
     # this abstract has "Dimocarpus longan" in italics in the title.
-    # this unit test makes sure it's parsed correctly.
+    # this code makes sure it's parsed correctly.
     pmid = 34577997
 
     cataloger = AbstractCatalog(data_dir)
@@ -136,3 +133,4 @@ def test_italics_in_title(data_dir):
 
     assert 'Dimocarpus longan' in title
     assert 'Peel Extract as Bio-Based' in title
+    

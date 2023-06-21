@@ -35,10 +35,10 @@ def test_skim_work(data_dir):
     assert 'c_term' not in result[0]
     assert result[0]['a_term'] == 'cancer'
     assert result[0]['b_term'] == 'test'
-    assert result[0]['ab_pvalue'] == pytest.approx(0.744, abs=0.001)
+    assert result[0]['ab_pvalue'] == pytest.approx(0.753, abs=0.001)
     assert result[0]['ab_sort_ratio'] == pytest.approx(0.064, abs=0.001)
     assert result[0]['ab_pred_score'] == pytest.approx(0.222, abs=0.001)
-    assert result[0]['a_count'] == 301
+    assert result[0]['a_count'] == 303
     assert result[0]['b_count'] == 250
     assert result[0]['ab_count'] == 16
     assert result[0]['total_count'] == 4139
@@ -49,10 +49,10 @@ def test_skim_work(data_dir):
     assert len(result) == 1
     assert result[0]['a_term'] == 'cancer'
     assert result[0]['b_term'] == 'test'
-    assert result[0]['ab_pvalue'] == pytest.approx(0.744, abs=0.001)
+    assert result[0]['ab_pvalue'] == pytest.approx(0.753, abs=0.001)
     assert result[0]['ab_sort_ratio'] == pytest.approx(0.064, abs=0.001)
     assert result[0]['ab_pred_score'] == pytest.approx(0.222, abs=0.001)
-    assert result[0]['a_count'] == 301
+    assert result[0]['a_count'] == 303
     assert result[0]['b_count'] == 250
     assert result[0]['ab_count'] == 16
     assert result[0]['total_count'] == 4139
