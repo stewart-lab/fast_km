@@ -2,6 +2,7 @@ import os
 import pytest
 import gzip
 import shutil
+import pickle
 from indexing.abstract_catalog import _parse_xml
 from indexing.index import Index
 from indexing.abstract import Abstract
@@ -119,3 +120,19 @@ def test_abstract_cataloging_real_file(data_dir):
         assert abs.pmid > 0
 
     assert i == 4139
+
+def test_italics_in_title(data_dir):
+    delete_existing_index(data_dir)
+
+    # this abstract has "Dimocarpus longan" in italics in the title.
+    # this unit test makes sure it's parsed correctly.
+    pmid = 34577997
+
+    cataloger = AbstractCatalog(data_dir)
+    cataloger.catalog_abstracts()
+
+    article = pickle.loads(cataloger.catalog[pmid])
+    title = article.title
+
+    assert 'Dimocarpus longan' in title
+    assert 'Peel Extract as Bio-Based' in title
