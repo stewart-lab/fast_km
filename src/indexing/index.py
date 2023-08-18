@@ -59,7 +59,7 @@ class Index():
                 pmid_set.update(self._query_index(synonym))
         elif logical_and in term:
             terms = get_subterms(term)
-            pmid_set = self._query_index(terms[0])
+            pmid_set = set(self._query_index(terms[0]))
             for t in terms[1:]:
                 pmid_set.intersection_update(self._query_index(t))
         else:
