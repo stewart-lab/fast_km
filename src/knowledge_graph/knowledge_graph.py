@@ -41,7 +41,7 @@ class KnowledgeGraph:
 
     def query(self, a_term: str, b_term: str, censor_year = None):
         if not self.graph:
-            return [{'a_term': a_term, 'a_type': '', 'relationship': 'neo4j connection error', 'b_term': b_term, 'b_type': '', 'pmids': []}]
+            return [self._construct_rel_response(a_term, '', b_term, '', 'neo4j connection error', [], self.graph_name)]
 
         if index.logical_and in a_term or index.logical_and in b_term:
             return [self._null_rel_response(a_term, b_term)]
@@ -116,7 +116,7 @@ class KnowledgeGraph:
             else:
                 pmids = relation['pmids']
 
-            relation_json = {'a_term': node1_name, 'a_type': node1_type, 'relationship': relationship, 'b_term': node2_name, 'b_type': node2_type, 'pmids': pmids[:100]}
+            relation_json = self._construct_rel_response(node1_name, node1_type, node2_name, node2_type, relationship, pmids[:100], self.graph_name)
             result.append(relation_json)
 
         if not result:
@@ -243,7 +243,10 @@ class KnowledgeGraph:
                 merge_relationships(self.graph.auto(), batch, r_type, start_node_key=(n1_type, "name"), end_node_key=(n2_type, "name"))
 
     def _null_rel_response(self, a_term, b_term):
-        return {'a_term': a_term, 'a_type': '', 'relationship': '', 'b_term': b_term, 'b_type': '', 'pmids': []}
+        return self._construct_rel_response(a_term, '', b_term, '', '', [], self.graph_name)
+
+    def _construct_rel_response(self, a_term: str, a_type: str, b_term: str, b_type: str, relationship: str, pmids: list, source: str):
+        return {'a_term': a_term, 'a_type': a_type, 'relationship': relationship, 'b_term': b_term, 'b_type': b_type, 'pmids': pmids, 'source': source}
 
 def _sanitize_txt(term: str):
     subterms = set()
