@@ -327,7 +327,10 @@ def _initialize_mongo_caching():
         li.the_index._check_if_mongo_should_be_refreshed()
 
 def connect_to_neo4j():
-    return KnowledgeGraph()
+    graphs = []
+    for url in km_util.neo4j_host:
+        graphs.append(KnowledgeGraph(url))
+    return graphs
 
 def _queue_jobs(jobs):
     for job in jobs:

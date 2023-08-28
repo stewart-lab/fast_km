@@ -10,6 +10,7 @@ parser.add_argument('-w', '--workers', default=1)
 parser.add_argument('--high_priority', default=0, required=False)
 parser.add_argument('--medium_priority', default=0, required=False)
 parser.add_argument('--low_priority', default=0, required=False)
+parser.add_argument('--neo4j_address', default='neo4j:7687', required=False)
 args = parser.parse_args()
 
 def start_workers(do_multiprocessing = True):
@@ -17,6 +18,7 @@ def start_workers(do_multiprocessing = True):
     high_priority = int(args.high_priority)
     medium_priority = int(args.medium_priority)
     low_priority = int(args.low_priority)
+    km_util.neo4j_host = [x.strip() for x in args.neo4j_address.split(',')]
 
     if do_multiprocessing:
         worker_processes = []

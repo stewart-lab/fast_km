@@ -6,7 +6,6 @@ import indexing.km_util as util
 import indexing.index as index
 import workers.loaded_index as li
 
-neo4j_port = "7687"
 user = "neo4j"
 password = "mypassword"
 
@@ -15,25 +14,30 @@ min_pmids_for_rel = 3
 max_synonyms = 9999
 
 class KnowledgeGraph:
-    def __init__(self):
+    def __init__(self, url: str):
         self.query_cache = dict()
         self.node_ids = dict()
+        self.graph_name = 'neo4j'
 
         try:
-            uri="bolt://" + util.neo4j_host + ":" + neo4j_port
+            uri="bolt://" + url
             self.graph = Graph(uri, auth=(user, password))
         except:
             self.graph = None
-            print('WARNING: Could not find a neo4j knowledge graph database. knowledge graph will be unavailable.')
+            print('WARNING: Could not find a neo4j knowledge graph database at ' + uri + '; knowledge graph will be unavailable.')
             return
 
         try:
-            kg_ids = util.get_knowledge_graph_node_id_index(li.pubmed_path)
-            if kg_ids:
+            self.graph_name = url.split(':')[0]
+            kg_ids = util.get_knowledge_graph_node_id_index(li.pubmed_path, self.graph_name)
+            if os.path.exists(kg_ids):
+                self.load_node_id_index(kg_ids)
+            else:
+                self.write_node_id_index()
                 self.load_node_id_index(kg_ids)
         except:
             self.node_ids = dict()
-            print('WARNING: Problem loading graph node IDs. knowledge graph queries may be slower than normal.')
+            print('WARNING: Problem loading graph node IDs (expected path ' + kg_ids + '). knowledge graph queries may be slower than normal.')
 
     def query(self, a_term: str, b_term: str, censor_year = None):
         if not self.graph:
@@ -121,7 +125,9 @@ class KnowledgeGraph:
         self.query_cache[sanitized_ab_tuple] = result
         return result
 
-    def write_node_id_index(self, path: str):
+    def write_node_id_index(self):
+        path = util.get_knowledge_graph_node_id_index(li.pubmed_path, self.graph_name)
+        
         dir = os.path.dirname(path)
         
         if not os.path.exists(dir):

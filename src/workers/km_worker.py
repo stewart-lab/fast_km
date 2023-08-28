@@ -9,7 +9,7 @@ class KmWorker(Worker):
     def __init__(self, queues=None, *args, **kwargs):
         super().__init__(queues, *args, **kwargs)
 
-def start_worker(queues: 'list[str]' = [km_util.JobPriority.MEDIUM.name]):
+def start_worker(queues: 'list[str]' = [km_util.JobPriority.MEDIUM.name], neo4j_addresses: 'list[str]' = ['neo4j']):
     print('INFO: worker sleeping for 5 sec before starting...')
     time.sleep(5)
 

@@ -4,7 +4,7 @@ from enum import Enum
 
 redis_host = 'redis'
 mongo_host = 'mongo'
-neo4j_host = 'neo4j'
+neo4j_host = ['neo4j:7687'] # overridden in run_worker.py
 tokenizer = nltk.RegexpTokenizer(r"\w+")
 encoding = 'utf-8'
 
@@ -74,8 +74,8 @@ def get_index_file(abstracts_dir: str) -> str:
 def get_cataloged_files(abstracts_dir: str) -> str:
     return os.path.join(get_index_dir(abstracts_dir), 'cataloged.txt')
 
-def get_knowledge_graph_node_id_index(abstracts_dir: str) -> str:
-    return os.path.join(get_index_dir(abstracts_dir), 'kg_node_ids.txt')
+def get_knowledge_graph_node_id_index(abstracts_dir: str, graph_name: str) -> str:
+    return os.path.join(get_index_dir(abstracts_dir), graph_name + '_node_ids.txt')
     
 def get_icite_file(abstracts_dir: str) -> str:
     return os.path.join(get_index_dir(abstracts_dir), 'icite.json')
