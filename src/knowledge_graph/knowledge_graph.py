@@ -6,7 +6,6 @@ import indexing.km_util as util
 import indexing.index as index
 import workers.loaded_index as li
 
-neo4j_port = "7687"
 user = "neo4j"
 password = "mypassword"
 
@@ -15,29 +14,34 @@ min_pmids_for_rel = 3
 max_synonyms = 9999
 
 class KnowledgeGraph:
-    def __init__(self):
+    def __init__(self, url: str):
         self.query_cache = dict()
         self.node_ids = dict()
+        self.graph_name = 'neo4j'
 
         try:
-            uri="bolt://" + util.neo4j_host + ":" + neo4j_port
+            uri="bolt://" + url
             self.graph = Graph(uri, auth=(user, password))
         except:
             self.graph = None
-            print('WARNING: Could not find a neo4j knowledge graph database. knowledge graph will be unavailable.')
+            print('WARNING: Could not find a neo4j knowledge graph database at ' + uri + '; knowledge graph will be unavailable.')
             return
 
         try:
-            kg_ids = util.get_knowledge_graph_node_id_index(li.pubmed_path)
-            if kg_ids:
+            self.graph_name = url.split(':')[0]
+            kg_ids = util.get_knowledge_graph_node_id_index(li.pubmed_path, self.graph_name)
+            if os.path.exists(kg_ids):
+                self.load_node_id_index(kg_ids)
+            else:
+                self.write_node_id_index()
                 self.load_node_id_index(kg_ids)
         except:
             self.node_ids = dict()
-            print('WARNING: Problem loading graph node IDs. knowledge graph queries may be slower than normal.')
+            print('WARNING: Problem loading graph node IDs (expected path ' + kg_ids + '). knowledge graph queries may be slower than normal.')
 
     def query(self, a_term: str, b_term: str, censor_year = None):
         if not self.graph:
-            return [{'a_term': a_term, 'a_type': '', 'relationship': 'neo4j connection error', 'b_term': b_term, 'b_type': '', 'pmids': []}]
+            return [self._construct_rel_response(a_term, '', b_term, '', 'neo4j connection error', [], self.graph_name)]
 
         if index.logical_and in a_term or index.logical_and in b_term:
             return [self._null_rel_response(a_term, b_term)]
@@ -112,7 +116,7 @@ class KnowledgeGraph:
             else:
                 pmids = relation['pmids']
 
-            relation_json = {'a_term': node1_name, 'a_type': node1_type, 'relationship': relationship, 'b_term': node2_name, 'b_type': node2_type, 'pmids': pmids[:100]}
+            relation_json = self._construct_rel_response(node1_name, node1_type, node2_name, node2_type, relationship, pmids[:100], self.graph_name)
             result.append(relation_json)
 
         if not result:
@@ -121,7 +125,9 @@ class KnowledgeGraph:
         self.query_cache[sanitized_ab_tuple] = result
         return result
 
-    def write_node_id_index(self, path: str):
+    def write_node_id_index(self):
+        path = util.get_knowledge_graph_node_id_index(li.pubmed_path, self.graph_name)
+        
         dir = os.path.dirname(path)
         
         if not os.path.exists(dir):
@@ -237,7 +243,10 @@ class KnowledgeGraph:
                 merge_relationships(self.graph.auto(), batch, r_type, start_node_key=(n1_type, "name"), end_node_key=(n2_type, "name"))
 
     def _null_rel_response(self, a_term, b_term):
-        return {'a_term': a_term, 'a_type': '', 'relationship': '', 'b_term': b_term, 'b_type': '', 'pmids': []}
+        return self._construct_rel_response(a_term, '', b_term, '', '', [], self.graph_name)
+
+    def _construct_rel_response(self, a_term: str, a_type: str, b_term: str, b_type: str, relationship: str, pmids: list, source: str):
+        return {'a_term': a_term, 'a_type': a_type, 'relationship': relationship, 'b_term': b_term, 'b_type': b_type, 'pmids': pmids, 'source': source}
 
 def _sanitize_txt(term: str):
     subterms = set()
