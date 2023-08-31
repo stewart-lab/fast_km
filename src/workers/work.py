@@ -206,7 +206,7 @@ def km_work_all_vs_all(json: dict):
                             abc_result['bc_relationship'] = []
 
                             for kg in knowledge_graphs:
-                                rel = knowledge_graphs.query(abc_result['b_term'], abc_result['c_term'], censor_year)
+                                rel = kg.query(abc_result['b_term'], abc_result['c_term'], censor_year)
                                 abc_result['bc_relationship'].extend(rel)
                         else:
                             abc_result['bc_relationship'] = None
