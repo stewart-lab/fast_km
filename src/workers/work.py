@@ -335,7 +335,7 @@ def _initialize_mongo_caching():
         # such as 'fever' to save the current state of the index
         li.the_index._check_if_mongo_should_be_refreshed()
 
-def connect_to_neo4j() -> list[KnowledgeGraph]:
+def connect_to_neo4j() -> 'list[KnowledgeGraph]':
     graphs = []
     for url in km_util.neo4j_host:
         graphs.append(KnowledgeGraph(url))
