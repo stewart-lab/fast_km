@@ -17,7 +17,7 @@ _r = Redis(host=km_util.redis_host, port=6379)
 
 def km_work(json: list):
     _initialize_mongo_caching()
-    knowledge_graph = connect_to_neo4j()
+    knowledge_graphs = connect_to_neo4j()
 
     return_val = []
 
@@ -48,8 +48,11 @@ def km_work(json: list):
             query_kg = bool(item['query_knowledge_graph'])
 
             if query_kg and res['pvalue'] < rel_pvalue_cutoff:
-                rel = knowledge_graph.query(a_term, b_term)
-                res['relationship'] = rel
+                res['relationship'] = []
+
+                for kg in knowledge_graphs:
+                    rel = kg.query(a_term, b_term)
+                    res['relationship'].extend(rel)
 
         return_val.append(res)
 
@@ -57,7 +60,7 @@ def km_work(json: list):
 
 def km_work_all_vs_all(json: dict):
     _initialize_mongo_caching()
-    knowledge_graph = connect_to_neo4j()
+    knowledge_graphs = connect_to_neo4j()
 
     return_val = []
     km_only = False
@@ -171,8 +174,11 @@ def km_work_all_vs_all(json: dict):
 
                 if query_kg:
                     if abc_result['ab_pvalue'] < _rel_pvalue_cutoff:
-                        rel = knowledge_graph.query(abc_result['a_term'], abc_result['b_term'], censor_year)
-                        abc_result['ab_relationship'] = rel
+                        abc_result['ab_relationship'] = []
+
+                        for kg in knowledge_graphs:
+                            rel = kg.query(abc_result['a_term'], abc_result['b_term'], censor_year)
+                            abc_result['ab_relationship'].extend(rel)
                     else:
                         abc_result['ab_relationship'] = None
 
@@ -197,8 +203,11 @@ def km_work_all_vs_all(json: dict):
 
                     if query_kg:
                         if abc_result['bc_pvalue'] < _rel_pvalue_cutoff:
-                            rel = knowledge_graph.query(abc_result['b_term'], abc_result['c_term'], censor_year)
-                            abc_result['bc_relationship'] = rel
+                            abc_result['bc_relationship'] = []
+
+                            for kg in knowledge_graphs:
+                                rel = knowledge_graphs.query(abc_result['b_term'], abc_result['c_term'], censor_year)
+                                abc_result['bc_relationship'].extend(rel)
                         else:
                             abc_result['bc_relationship'] = None
 
@@ -326,7 +335,7 @@ def _initialize_mongo_caching():
         # such as 'fever' to save the current state of the index
         li.the_index._check_if_mongo_should_be_refreshed()
 
-def connect_to_neo4j():
+def connect_to_neo4j() -> list[KnowledgeGraph]:
     graphs = []
     for url in km_util.neo4j_host:
         graphs.append(KnowledgeGraph(url))
