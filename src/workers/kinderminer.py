@@ -20,6 +20,14 @@ def get_contingency_table(a_term_set: set, b_term_set: set, total_n: int):
 def fisher_exact(table) -> float:
     return scipy.stats.fisher_exact(table, fet_sided)[1]
 
+def chi_square(table) -> float:
+    try:
+        return scipy.stats.chi2_contingency(table, fet_sided)[1]
+    except ValueError:
+        # default to a p-value of 1.0
+        # this happens if the sum of a row or column is 0
+        return 1.0
+
 def get_sort_ratio(table) -> float:
     denom = (table[0][0] + table[1][0])
     if denom == 0:
@@ -27,7 +35,9 @@ def get_sort_ratio(table) -> float:
 
     return table[0][0] / denom
 
-def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.inf, return_pmids = False, top_n_articles = math.inf) -> dict:
+def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.inf, 
+                       return_pmids = False, top_n_articles = math.inf,
+                       scoring = 'fet') -> dict:
     """"""
     start_time = time.perf_counter()
     result = dict()
@@ -48,8 +58,12 @@ def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.
     n_a_and_b = table[0][0]
     n_articles = idx.n_articles(censor_year)
 
-    # perform fisher's exact test
-    pvalue = fisher_exact(table)
+    # perform statistical test (default fisher's exact test)
+    if scoring == 'chi-square':
+        pvalue = chi_square(table)
+    else: # 'fet'
+        pvalue = fisher_exact(table)
+
     sort_ratio = get_sort_ratio(table)
 
     run_time = time.perf_counter() - start_time

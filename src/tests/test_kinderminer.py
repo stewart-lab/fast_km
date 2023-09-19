@@ -24,6 +24,19 @@ def test_fisher_exact_test():
     sort_ratio = km.get_sort_ratio(table)
     assert sort_ratio == pytest.approx(15 / 59)
 
+def test_chisq_pvalue():
+    table = [[10, 3000], [2000, 10000000]]
+    pvalue = km.chi_square(table)
+    assert pvalue == pytest.approx(2.583e-30, abs=1e-30)
+
+    table = [[1, 3000], [2000, 10000000]]
+    pvalue = km.chi_square(table)
+    assert pvalue == 1
+
+    table = [[0, 100], [0, 10000000]]
+    pvalue = km.chi_square(table)
+    assert pvalue == 1
+
 def test_text_sanitation():
     text = 'Testing123****.'
     sanitized_text = index.sanitize_term(text)
