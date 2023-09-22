@@ -67,6 +67,7 @@ def km_work_all_vs_all(json: dict):
 
     a_terms = json['a_terms']
     b_terms = json['b_terms']
+    scoring = json.get('scoring', 'fet')
 
     if 'c_terms' in json:
         # SKiM query
@@ -107,7 +108,7 @@ def km_work_all_vs_all(json: dict):
             b_term = li.the_index.get_highest_priority_term(b_term_set, b_term_token_dict)
             b_term_set.remove(b_term)
 
-            res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids, top_n_articles)
+            res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids, top_n_articles, scoring)
 
             if res['pvalue'] <= ab_fet_threshold:
                 ab_results.append(res)
@@ -189,7 +190,7 @@ def km_work_all_vs_all(json: dict):
                     if b_term == c_term:
                         continue
 
-                    bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year, return_pmids, top_n_articles)
+                    bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year, return_pmids, top_n_articles, scoring)
 
                     abc_result['c_term'] = c_term
                     abc_result['bc_pvalue'] = bc['pvalue']
