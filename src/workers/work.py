@@ -15,49 +15,6 @@ import indexing.index as index
 
 _r = Redis(host=km_util.redis_host, port=6379)
 
-def km_work(json: list):
-    _initialize_mongo_caching()
-    knowledge_graphs = connect_to_neo4j()
-
-    return_val = []
-
-    if len(json) > 1000000000:
-        raise ValueError('Must be <=1000000000 queries')
-
-    for item in json:
-        a_term = item['a_term']
-        b_term = item['b_term']
-
-        censor_year = _get_censor_year(item)
-
-        if a_term is None or b_term is None:
-            raise TypeError('Must supply a_term and b_term')
-
-        return_pmids = False
-        if 'return_pmids' in item:
-            return_pmids = bool(item['return_pmids'])
-
-        res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids)
-
-        if 'pmid_intersection' in res:
-            res['pmid_intersection'] = str(res['pmid_intersection'])
-
-        # query knowledge graph
-        query_kg = False
-        if 'query_knowledge_graph' in item:
-            query_kg = bool(item['query_knowledge_graph'])
-
-            if query_kg and res['pvalue'] < rel_pvalue_cutoff:
-                res['relationship'] = []
-
-                for kg in knowledge_graphs:
-                    rel = kg.query(a_term, b_term)
-                    res['relationship'].extend(rel)
-
-        return_val.append(res)
-
-    return return_val
-
 def km_work_all_vs_all(json: dict):
     _initialize_mongo_caching()
     knowledge_graphs = connect_to_neo4j()
@@ -108,10 +65,10 @@ def km_work_all_vs_all(json: dict):
             b_term = li.the_index.get_highest_priority_term(b_term_set, b_term_token_dict)
             b_term_set.remove(b_term)
 
-            res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids, top_n_articles, scoring)
+            ab_res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids, top_n_articles, scoring)
 
-            if res['pvalue'] <= ab_fet_threshold:
-                ab_results.append(res)
+            if ab_res['pvalue'] <= ab_fet_threshold:
+                ab_results.append(ab_res)
             else:
                 # RAM efficiency. decache unneeded tokens/terms
                 li.the_index.decache_token(b_term)
@@ -155,18 +112,23 @@ def km_work_all_vs_all(json: dict):
             c_term = li.the_index.get_highest_priority_term(c_term_set, c_term_token_dict)
             c_term_set.remove(c_term)
 
+            # get the A-C results
+            if not km_only:
+                ac = km.kinderminer_search(a_term, c_term, li.the_index, censor_year, return_pmids, top_n_articles, scoring)
+
             for ab in ab_results:
                 abc_result = {
                         'a_term': ab['a_term'],
+                        'a_count': ab['len(a_term_set)'],
+
                         'b_term': ab['b_term'],
+                        'b_count': ab['len(b_term_set)'],
 
                         'ab_pvalue': ab['pvalue'],
                         'ab_sort_ratio': ab['sort_ratio'],
                         'ab_pred_score': km.get_prediction_score(ab['pvalue'], ab['sort_ratio']),
-                        
-                        'a_count': ab['len(a_term_set)'],
-                        'b_count': ab['len(b_term_set)'],
                         'ab_count': ab['len(a_b_intersect)'],
+                        
                         'total_count': ab['n_articles']
                     }
 
@@ -198,9 +160,15 @@ def km_work_all_vs_all(json: dict):
                     abc_result['bc_pred_score'] = km.get_prediction_score(bc['pvalue'], bc['sort_ratio'])
                     abc_result['c_count'] = bc['len(b_term_set)']
                     abc_result['bc_count'] = bc['len(a_b_intersect)']
-                    
+
+                    abc_result['ac_count'] = ac['len(a_b_intersect)']
+                    abc_result['ac_pvalue'] = ac['pvalue']
+                    abc_result['ac_sort_ratio'] = ac['sort_ratio']
+                    abc_result['ac_pred_score'] = km.get_prediction_score(ac['pvalue'], ac['sort_ratio'])
+
                     if return_pmids:
                         abc_result['bc_pmid_intersection'] = bc['pmid_intersection']
+                        abc_result['ac_pmid_intersection'] = ac['pmid_intersection']
 
                     if query_kg:
                         if abc_result['bc_pvalue'] < _rel_pvalue_cutoff:
