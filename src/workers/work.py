@@ -106,7 +106,9 @@ def km_work_all_vs_all(json: dict):
 
         while b_term_set:
             b_term = li.the_index.get_highest_priority_term(b_term_set, b_term_token_dict)
-            b_term_set.remove(b_term)
+
+            if b_term in b_term_set:
+                b_term_set.remove(b_term)
 
             res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids, top_n_articles, scoring)
 
@@ -153,7 +155,9 @@ def km_work_all_vs_all(json: dict):
 
         while c_term_set:
             c_term = li.the_index.get_highest_priority_term(c_term_set, c_term_token_dict)
-            c_term_set.remove(c_term)
+
+            if c_term in c_term_set:
+                c_term_set.remove(c_term)
 
             for ab in ab_results:
                 abc_result = {
