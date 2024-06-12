@@ -5,7 +5,7 @@ from enum import Enum
 redis_host = 'redis'
 mongo_host = 'mongo'
 neo4j_host = ['neo4j:7687'] # overridden in run_worker.py
-tokenizer = nltk.RegexpTokenizer(r"[a-zA-Z0-9Α-Ωα-ω]+")
+tokenizer = nltk.RegexpTokenizer(r"[\w]+")
 encoding = 'utf-8'
 
 class JobPriority(Enum):
@@ -57,6 +57,17 @@ def write_all_lines(path: str, items: 'list[str]') -> None:
 def get_tokens(text: str) -> 'list[str]':
     l_text = text.lower()
     tokens = tokenizer.tokenize(l_text)
+
+    # remove underscores
+    if '_' in text:
+        new_tokens = []
+
+        for token in tokens:
+            spl = token.split('_')
+            new_tokens.extend(spl)
+        
+        tokens = new_tokens
+
     return tokens
 
 def sanitize_text(text: str) -> str:
