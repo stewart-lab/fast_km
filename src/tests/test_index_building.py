@@ -23,7 +23,7 @@ def delete_existing_index(data_dir):
     assert not os.path.exists(index_dir)
 
 def test_tokenization():
-    text = "The quick brown fox jumped over the lazy dog."
+    text = "The_quick brown fox jumped over the lazy dog."
 
     tokens = util.get_tokens(text)
     assert "the" in tokens

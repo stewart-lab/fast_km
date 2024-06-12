@@ -57,6 +57,17 @@ def write_all_lines(path: str, items: 'list[str]') -> None:
 def get_tokens(text: str) -> 'list[str]':
     l_text = text.lower()
     tokens = tokenizer.tokenize(l_text)
+
+    # remove underscores
+    if '_' in text:
+        new_tokens = []
+
+        for token in tokens:
+            spl = token.split('_')
+            new_tokens.extend(spl)
+        
+        tokens = new_tokens
+
     return tokens
 
 def sanitize_text(text: str) -> str:
