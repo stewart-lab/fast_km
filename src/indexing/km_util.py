@@ -5,7 +5,7 @@ from enum import Enum
 redis_host = 'redis'
 mongo_host = 'mongo'
 neo4j_host = ['neo4j:7687'] # overridden in run_worker.py
-tokenizer = nltk.RegexpTokenizer(r"\w+")
+tokenizer = nltk.RegexpTokenizer(r"[a-zA-Z0-9Α-Ωα-ω]+")
 encoding = 'utf-8'
 
 class JobPriority(Enum):
