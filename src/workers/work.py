@@ -15,49 +15,6 @@ import indexing.index as index
 
 _r = Redis(host=km_util.redis_host, port=6379)
 
-def km_work(json: list):
-    _initialize_mongo_caching()
-    knowledge_graphs = connect_to_neo4j()
-
-    return_val = []
-
-    if len(json) > 1000000000:
-        raise ValueError('Must be <=1000000000 queries')
-
-    for item in json:
-        a_term = item['a_term']
-        b_term = item['b_term']
-
-        censor_year = _get_censor_year(item)
-
-        if a_term is None or b_term is None:
-            raise TypeError('Must supply a_term and b_term')
-
-        return_pmids = False
-        if 'return_pmids' in item:
-            return_pmids = bool(item['return_pmids'])
-
-        res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids)
-
-        if 'pmid_intersection' in res:
-            res['pmid_intersection'] = str(res['pmid_intersection'])
-
-        # query knowledge graph
-        query_kg = False
-        if 'query_knowledge_graph' in item:
-            query_kg = bool(item['query_knowledge_graph'])
-
-            if query_kg and res['pvalue'] < rel_pvalue_cutoff:
-                res['relationship'] = []
-
-                for kg in knowledge_graphs:
-                    rel = kg.query(a_term, b_term)
-                    res['relationship'].extend(rel)
-
-        return_val.append(res)
-
-    return return_val
-
 def km_work_all_vs_all(json: dict):
     _initialize_mongo_caching()
     knowledge_graphs = connect_to_neo4j()
@@ -89,7 +46,14 @@ def km_work_all_vs_all(json: dict):
     return_pmids = bool(json.get('return_pmids', False))
     query_kg = bool(json.get('query_knowledge_graph', False))
     _rel_pvalue_cutoff = float(json.get('rel_pvalue_cutoff', rel_pvalue_cutoff))
-    top_n_articles = int(json.get('top_n_articles', 10))
+
+    # 'top_n_articles' is here for legacy support. 'top_n_articles_most_cited' is the new key.
+    if ('top_n_articles' in json):
+        top_n_articles_most_cited = int(json['top_n_articles'])
+        top_n_articles_most_recent = 0
+    else:
+        top_n_articles_most_cited = int(json.get('top_n_articles_most_cited', 5))
+        top_n_articles_most_recent = int(json.get('top_n_articles_most_recent', 5))
 
     _update_job_status('progress', 0)
 
@@ -110,10 +74,11 @@ def km_work_all_vs_all(json: dict):
             if b_term in b_term_set:
                 b_term_set.remove(b_term)
 
-            res = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids, top_n_articles, scoring)
+            ab = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids, 
+                                       top_n_articles_most_cited, top_n_articles_most_recent, scoring)
 
-            if res['pvalue'] <= ab_fet_threshold:
-                ab_results.append(res)
+            if ab['pvalue'] <= ab_fet_threshold:
+                ab_results.append(ab)
             else:
                 # RAM efficiency. decache unneeded tokens/terms
                 li.the_index.decache_token(b_term)
@@ -194,7 +159,8 @@ def km_work_all_vs_all(json: dict):
                     if b_term == c_term:
                         continue
 
-                    bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year, return_pmids, top_n_articles, scoring)
+                    bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year, return_pmids, 
+                                               top_n_articles_most_cited, top_n_articles_most_recent, scoring)
 
                     abc_result['c_term'] = c_term
                     abc_result['bc_pvalue'] = bc['pvalue']

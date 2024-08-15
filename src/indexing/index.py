@@ -103,6 +103,14 @@ class Index():
         # TODO: avoid casting the PMIDs as strings, probably adds a fair bit of time
         top_n_sorted = sorted(pmids, key=lambda pmid: -self._citation_count.get(str(pmid), 0))[:top_n_articles]
         return top_n_sorted
+    
+    def top_n_by_pmid(self, pmids: 'set[int]', top_n_articles = math.inf) -> 'list[int]':
+        if top_n_articles == math.inf:
+            return list(pmids)
+
+        # sort by PMID (descending order) and return top N
+        top_n_sorted = sorted(pmids, reverse=True)[:top_n_articles]
+        return top_n_sorted
 
     def n_articles(self, censor_year = math.inf) -> int:
         """Returns the number of indexed abstracts, given an optional 
