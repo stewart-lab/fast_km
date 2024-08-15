@@ -7,7 +7,7 @@ from rq.job import Job
 from rq.command import send_stop_job_command
 from rq.exceptions import InvalidJobOperation
 from flask_restful import Api
-from workers.work import km_work, km_work_all_vs_all, update_index_work, clear_mongo_cache, restart_workers
+from workers.work import km_work_all_vs_all, update_index_work, clear_mongo_cache, restart_workers
 import logging
 from flask_bcrypt import Bcrypt
 import indexing.km_util as km_util
@@ -133,15 +133,6 @@ def _get_generic(request):
     response = jsonify(job_data)
     response.status_code = status_code
     return response
-
-## ******** KinderMiner Post/Get ********
-@_app.route('/km/api/jobs/', methods=['POST'])
-def _post_km_job():
-    return _post_generic(km_work, request)
-
-@_app.route('/km/api/jobs/', methods=['GET'])
-def _get_km_job():
-    return _get_generic(request)
 
 ## ******** SKiM Post/Get ********
 @_app.route('/skim/api/jobs/', methods=['POST'])

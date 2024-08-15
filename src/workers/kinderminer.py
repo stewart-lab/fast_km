@@ -36,8 +36,8 @@ def get_sort_ratio(table) -> float:
     return table[0][0] / denom
 
 def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.inf, 
-                       return_pmids = False, top_n_articles = math.inf,
-                       scoring = 'fet') -> dict:
+                       return_pmids = False, top_n_articles_most_cited = math.inf,
+                       top_n_articles_most_recent = math.inf, scoring = 'fet') -> dict:
     """"""
     start_time = time.perf_counter()
     result = dict()
@@ -79,8 +79,20 @@ def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.
     result['n_articles'] = n_articles
 
     if return_pmids:
-        intersection = idx.top_n_by_citation_count(a_term_set & b_term_set, top_n_articles)
-        result['pmid_intersection'] = intersection
+        ab_intersect = a_term_set & b_term_set
+
+        if (top_n_articles_most_cited is not math.inf) and (top_n_articles_most_recent is not math.inf):
+            n_most_cited = idx.top_n_by_citation_count(ab_intersect, top_n_articles_most_cited)
+            n_most_recent = idx.top_n_by_pmid(ab_intersect, top_n_articles_most_recent)
+
+            for pmid in n_most_recent:
+                if pmid not in n_most_cited:
+                    n_most_cited.append(pmid)
+            append_pmids = n_most_cited
+        else:
+            append_pmids = idx.top_n_by_citation_count(ab_intersect, math.inf)
+
+        result['pmid_intersection'] = append_pmids
 
     return result
 
