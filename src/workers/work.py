@@ -118,11 +118,17 @@ def km_work_all_vs_all(json: dict):
 
         c_term_n = 0
 
+        # for each c-term, run each b-term against it
         while c_term_set:
             c_term = li.the_index.get_highest_priority_term(c_term_set, c_term_token_dict)
 
             if c_term in c_term_set:
                 c_term_set.remove(c_term)
+
+            # run A-C
+            if not km_only:
+                ac = km.kinderminer_search(a_term, c_term, li.the_index, censor_year, return_pmids, 
+                    top_n_articles_most_cited, top_n_articles_most_recent, scoring)
 
             for ab in ab_results:
                 abc_result = {
@@ -168,9 +174,15 @@ def km_work_all_vs_all(json: dict):
                     abc_result['bc_pred_score'] = km.get_prediction_score(bc['pvalue'], bc['sort_ratio'])
                     abc_result['c_count'] = bc['len(b_term_set)']
                     abc_result['bc_count'] = bc['len(a_b_intersect)']
+
+                    abc_result['ac_pvalue'] = ac['pvalue']
+                    abc_result['ac_sort_ratio'] = ac['sort_ratio']
+                    abc_result['ac_pred_score'] = km.get_prediction_score(ac['pvalue'], ac['sort_ratio'])
+                    abc_result['ac_count'] = ac['len(a_b_intersect)']
                     
                     if return_pmids:
                         abc_result['bc_pmid_intersection'] = bc['pmid_intersection']
+                        abc_result['ac_pmid_intersection'] = ac['pmid_intersection']
 
                     if query_kg:
                         if abc_result['bc_pvalue'] < _rel_pvalue_cutoff:
