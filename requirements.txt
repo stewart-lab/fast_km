@@ -1,7 +1,7 @@
 Flask==2.0.2
 Flask-RESTful==0.3.9
 nltk==3.6.5
-numpy==1.21.2
+numpy
 pytest==6.2.5
 quickle==0.4.0
 redis==3.5.3
@@ -9,10 +9,12 @@ regex==2021.10.8
 requests==2.26.0
 rq==1.10.0
 rq-dashboard==0.6.1
-scipy==1.7.1
+scipy
 flask-bcrypt==0.7.1
 pymongo==4.0.1
 Werkzeug==2.0.2
 neo4j==4.4.5
 py2neo
 pure-cdb
+htcondor
+pandas
