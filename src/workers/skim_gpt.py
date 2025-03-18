@@ -106,7 +106,7 @@ def run_skim_gpt(job_dir: str, config: dict) -> str:
         "request_gpus": "1",
         "request_cpus": "1",
         "request_memory": "24GB",
-        "request_disk": "50GB",
+        "request_disk": "60GB",
         "requirements": "(CUDACapability >= 8.0)",
         "+WantGPULab": "true",
         "+GPUJobLength": '"short"',
@@ -176,10 +176,8 @@ def run_skim_gpt(job_dir: str, config: dict) -> str:
         print("HTCondor job completed, retrieving output...")
         htcondor_helper.retrieve_output(cluster_id)
 
-    # process results
+    # read and parse the job_result.json
     print("Processing results...")
-
-    # get the .json file that isn't config.json. it may have spaces in it.
     results_json_path = os.path.join(job_dir, 'job_result.json')
     if not os.path.exists(results_json_path):
         raise FileNotFoundError(f"Results file {results_json_path} not found")
