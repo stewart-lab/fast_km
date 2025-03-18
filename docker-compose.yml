@@ -18,9 +18,10 @@ services:
       context: .
       dockerfile: ./src/workers/Dockerfile
     image: fast_km-worker:build
-    command: --workers 2 --high_priority 1 --medium_priority 0 --low_priority 0 --neo4j_address neo4j_kg:7687,neo4j_semmeddb:7687
+    command: --workers 2 --high_priority 1 --medium_priority 0 --low_priority 0 --neo4j_address neo4j_kg:7687,neo4j_semmeddb:7687 --pubmed_api_key ${PUBMED_API_KEY} --openai_api_key ${OPENAI_API_KEY} --htcondor_token ${HTCONDOR_TOKEN}
     volumes:
       - ${PUBMED_DIR}:/mnt/pubmed  # edit .env file to change pubmed dir
+      - /tmp:/tmp
     depends_on:
       - redis
     networks:
@@ -37,31 +38,31 @@ services:
     networks:
       - fast_km-network
 
-  neo4j_kg:
-    image: neo4j:4.4.16
-    environment:
-      NEO4J_AUTH: neo4j/mypassword
-    volumes:
-      - ${NEO4J_KG_DIR}/data:/data
-      - ${NEO4J_KG_DIR}/logs:/logs
-    expose:
-      - 7474
-      - 7687
-    networks:
-      - fast_km-network
+  # neo4j_kg:
+  #   image: neo4j:4.4.16
+  #   environment:
+  #     NEO4J_AUTH: neo4j/mypassword
+  #   volumes:
+  #     - ${NEO4J_KG_DIR}/data:/data
+  #     - ${NEO4J_KG_DIR}/logs:/logs
+  #   expose:
+  #     - 7474
+  #     - 7687
+  #   networks:
+  #     - fast_km-network
 
-  neo4j_semmeddb:
-    image: neo4j:4.4.16
-    environment:
-      NEO4J_AUTH: neo4j/mypassword
-    volumes:
-      - ${NEO4J_SEMMEDDB_DIR}/data:/data
-      - ${NEO4J_SEMMEDDB_DIR}/logs:/logs
-    expose:
-      - 7474
-      - 7687
-    networks:
-      - fast_km-network
+  # neo4j_semmeddb:
+  #   image: neo4j:4.4.16
+  #   environment:
+  #     NEO4J_AUTH: neo4j/mypassword
+  #   volumes:
+  #     - ${NEO4J_SEMMEDDB_DIR}/data:/data
+  #     - ${NEO4J_SEMMEDDB_DIR}/logs:/logs
+  #   expose:
+  #     - 7474
+  #     - 7687
+  #   networks:
+  #     - fast_km-network
 
 networks:
   fast_km-network:

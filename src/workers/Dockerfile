@@ -1,4 +1,4 @@
-## Base image is Debian Linux with Python 3.7.2
+## Base image is Debian Linux with Python 3.8.9
 FROM python:3.8.9-slim
 
 ## copy source code into Docker image

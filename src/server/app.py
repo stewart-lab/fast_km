@@ -7,7 +7,7 @@ from rq.job import Job
 from rq.command import send_stop_job_command
 from rq.exceptions import InvalidJobOperation
 from flask_restful import Api
-from workers.work import km_work_all_vs_all, update_index_work, clear_mongo_cache, restart_workers
+from workers.work import km_work_all_vs_all, update_index_work, clear_mongo_cache, restart_workers, gpt_score_hypothesis
 import logging
 from flask_bcrypt import Bcrypt
 import indexing.km_util as km_util
@@ -141,6 +141,15 @@ def _post_skim_job():
 
 @_app.route('/skim/api/jobs/', methods=['GET'])
 def _get_skim_job():
+    return _get_generic(request)
+
+## ******** HypothesisEval Post/Get ********
+@_app.route('/hypothesis_eval/api/jobs/', methods=['POST'])
+def _post_hypothesis_eval_job():
+    return _post_generic(gpt_score_hypothesis, request)
+
+@_app.route('/hypothesis_eval/api/jobs/', methods=['GET'])
+def _get_hypothesis_eval_job():
     return _get_generic(request)
 
 ## ******** Update Index Post/Get ********

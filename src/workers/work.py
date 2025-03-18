@@ -1,5 +1,6 @@
 import math
 import sys
+import os
 import indexing.index
 from rq import get_current_job, Queue
 from rq.worker import Worker
@@ -7,6 +8,7 @@ from redis import Redis
 import rq.command as rqc
 import workers.loaded_index as li
 import workers.kinderminer as km
+import workers.skim_gpt as skim_gpt
 from indexing.index_builder import IndexBuilder
 import indexing.download_abstracts as downloader
 from knowledge_graph.knowledge_graph import KnowledgeGraph, rel_pvalue_cutoff
@@ -228,6 +230,75 @@ def km_work_all_vs_all(json: dict):
 
     _update_job_status('progress', 1.0000)
     return return_val
+
+def gpt_score_hypothesis(json: dict):
+    data = json.get('data', None)
+
+    if not data or len(data) == 0:
+        raise ValueError('data is required and must be a non-empty list')
+    
+    # determine if KM or SKiM
+    count_with_c = len([x for x in data if 'c_term' in x])
+    if count_with_c != 0 and count_with_c != len(data):
+        raise ValueError('data must be all KM or all SKiM')
+    is_km = 'c_term' not in data[0]
+
+
+    # validate data
+    for item in data:
+        if 'a_term' not in item:
+            raise ValueError('a_term is required')
+        if 'b_term' not in item:
+            raise ValueError('b_term is required')
+        if not is_km and 'c_term' not in item:
+            raise ValueError('c_term is required for SKiM')
+        
+        if 'ab_pmid_intersection' not in item or len(item['ab_pmid_intersection']) == 0:
+            raise ValueError('ab_pmid_intersection is required')
+        if not is_km and ('bc_pmid_intersection' not in item or len(item['bc_pmid_intersection'])) == 0:
+            raise ValueError('bc_pmid_intersection is required for SKiM')
+        if not is_km and ('ac_pmid_intersection' not in item or len(item['ac_pmid_intersection'])) == 0:
+            raise ValueError('ac_pmid_intersection is required for SKiM')
+    
+    # validate hypotheses
+    if is_km:
+        if 'KM_hypothesis' not in json:
+            raise ValueError('KM_hypothesis is required for KM')
+        if not isinstance(json['KM_hypothesis'], str):
+            raise ValueError('KM_hypothesis must be a string')
+        if '{a_term}' not in json['KM_hypothesis'] or '{b_term}' not in json['KM_hypothesis']:
+            raise ValueError('KM_hypothesis must contain {a_term} and {b_term}')
+    if not is_km:
+        if 'SKIM_hypotheses' not in json:
+            raise ValueError('SKIM_hypotheses is required for SKiM')
+        if not isinstance(json['SKIM_hypotheses'], dict):
+            raise ValueError('SKIM_hypotheses must be a dictionary')
+        if 'AB' not in json['SKIM_hypotheses']:
+            raise ValueError('AB hypothesis is required for SKiM')
+        if 'BC' not in json['SKIM_hypotheses']:
+            raise ValueError('BC hypothesis is required for SKiM')
+        if 'rel_AC' not in json['SKIM_hypotheses']:
+            raise ValueError('rel_AC hypothesis is required for SKiM')
+        if 'AC' not in json['SKIM_hypotheses']:
+            raise ValueError('AC hypothesis is required for SKiM')
+        if 'ABC' not in json['SKIM_hypotheses']:
+            raise ValueError('ABC hypothesis is required for SKiM')
+        
+        if '{a_term}' not in json['SKIM_hypotheses']['AB'] or '{b_term}' not in json['SKIM_hypotheses']['AB']:
+            raise ValueError('AB hypothesis must contain {a_term} and {b_term}')
+        if '{b_term}' not in json['SKIM_hypotheses']['BC'] or '{c_term}' not in json['SKIM_hypotheses']['BC']:
+            raise ValueError('BC hypothesis must contain {b_term} and {c_term}')
+        if '{a_term}' not in json['SKIM_hypotheses']['AC'] or '{c_term}' not in json['SKIM_hypotheses']['AC']:
+            raise ValueError('AC hypothesis must contain {a_term} and {c_term}')
+        if '{a_term}' not in json['SKIM_hypotheses']['rel_AC'] or '{c_term}' not in json['SKIM_hypotheses']['rel_AC']:
+            raise ValueError('rel_AC hypothesis must contain {a_term} and {c_term}')
+        if '{a_term}' not in json['SKIM_hypotheses']['ABC'] or '{b_term}' not in json['SKIM_hypotheses']['ABC'] or '{c_term}' not in json['SKIM_hypotheses']['ABC']:
+            raise ValueError('ABC hypothesis must contain {a_term}, {b_term}, and {c_term}')
+        
+    job = get_current_job()
+    temp_dir = os.path.join('/tmp', "job-" + job.id)
+    results = skim_gpt.run_skim_gpt(temp_dir, json)
+    return results
 
 def update_index_work(json: dict):
     indexing.index._connect_to_mongo()
