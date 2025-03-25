@@ -5,6 +5,7 @@ from enum import Enum
 redis_address = 'redis:6379'
 mongo_address = 'mongo:27017'
 neo4j_addresses = ['neo4j:7687']
+flask_port = 5000
 pubmed_api_key = ''
 openai_api_key = ''
 htcondor_token = ''
