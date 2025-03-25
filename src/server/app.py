@@ -38,7 +38,7 @@ def start_server(pw_hash: str):
 def _set_up_rq_dashboard():
     _app.config.from_object(rq_dashboard.default_settings)
     _app.register_blueprint(rq_dashboard.blueprint, url_prefix="/rq")
-    _app.config['RQ_DASHBOARD_REDIS_URL'] = 'redis://' + km_util.redis_address + ':6379'
+    _app.config['RQ_DASHBOARD_REDIS_URL'] = 'redis://' + km_util.redis_address
 
 def _authenticate(request):
     if _pw_hash == 'none':
