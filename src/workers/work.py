@@ -15,7 +15,9 @@ from knowledge_graph.knowledge_graph import KnowledgeGraph, rel_pvalue_cutoff
 import indexing.km_util as km_util
 import indexing.index as index
 
-_r = Redis(host=km_util.redis_host, port=6379)
+redis_host = km_util.redis_address.split(':')[0]
+redis_port = int(km_util.redis_address.split(':')[1])
+_r = Redis(host=redis_host, port=redis_port)
 
 def km_work_all_vs_all(json: dict):
     _initialize_mongo_caching()
@@ -391,7 +393,7 @@ def _initialize_mongo_caching():
 
 def connect_to_neo4j() -> 'list[KnowledgeGraph]':
     graphs = []
-    for url in km_util.neo4j_host:
+    for url in km_util.neo4j_addresses:
         graphs.append(KnowledgeGraph(url))
     return graphs
 

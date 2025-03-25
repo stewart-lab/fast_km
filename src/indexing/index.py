@@ -440,8 +440,9 @@ def _connect_to_mongo() -> None:
     # mongo_cache.create_index('query', unique=True) #expireafterseconds=72 * 60 * 60, 
     global mongo_cache
     try:
-        loc = util.mongo_host
-        client = pymongo.MongoClient(loc, 27017, serverSelectionTimeoutMS = 500, connectTimeoutMS = 500)
+        host = util.mongo_address.split(':')[0]
+        port = int(util.mongo_address.split(':')[1])
+        client = pymongo.MongoClient(host, port, serverSelectionTimeoutMS = 500, connectTimeoutMS = 500)
         db = client["query_cache_db"]
         mongo_cache = db["query_cache"]
         mongo_cache.create_index('query', unique=True)
