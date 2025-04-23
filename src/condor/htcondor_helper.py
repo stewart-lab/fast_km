@@ -8,7 +8,7 @@ from condor.utils import setup_logger
 logger = setup_logger()
 
 class HTCondorHelper:
-    def __init__(self, config: dict[str, Any]):
+    def __init__(self, config: 'dict[str, Any]'):
         """Initialize HTCondor helper with configuration"""
         self.config = config
         self.token = config["token"]
@@ -31,7 +31,8 @@ class HTCondorHelper:
             htcondor.param["SEC_TOKEN_AUTHENTICATION"] = "REQUIRED"
             
             self.collector = htcondor.Collector(self.config["collector_host"])
-            submit_host = htcondor.classad.quote(self.config["submit_host"])
+            submit_host_url = self.config["submit_host"]
+            submit_host = htcondor.classad.quote(submit_host_url)
             
             # Setup security manager with token
             schedd_ads = self.collector.query(
@@ -41,18 +42,18 @@ class HTCondorHelper:
             )
 
             if not schedd_ads:
-                raise ValueError(f"No scheduler found for {self.config["submit_host"]}")
+                raise ValueError(f"No scheduler found for {submit_host_url}")
             
             schedd_ad = schedd_ads[0]
             self.schedd = htcondor.Schedd(schedd_ad)
 
             cred_ads = self.collector.query(
                 htcondor.AdTypes.Credd,
-                constraint=f'Name == "{self.config["submit_host"]}"'
+                constraint=f'Name == "{submit_host_url}"'
             )
 
             if not cred_ads:
-                print(f"No credential daemon found for {self.config['submit_host']}. Continuing without it.")
+                print(f"No credential daemon found for {submit_host_url}. Continuing without it.")
                 self.credd = None
             else:
                 cred_ad = cred_ads[0]

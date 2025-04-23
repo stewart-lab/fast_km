@@ -5,7 +5,7 @@ from glob import glob
 from condor.htcondor_helper import HTCondorHelper
 import indexing.km_util as km_util
 
-def run_skim_gpt(job_dir: str, config: dict) -> list[dict]:
+def run_skim_gpt(job_dir: str, config: dict) -> 'list[dict]':
     """
     Submit a SKiM-GPT or KM-GPT job to HTCondor and return the results.
     """
@@ -204,7 +204,7 @@ def run_skim_gpt(job_dir: str, config: dict) -> list[dict]:
     print(f"Results processed successfully. Results are in {job_dir}")
     return results
     
-def parse_results(result_json_path: str) -> list[dict]:
+def parse_results(result_json_path: str) -> 'list[dict]':
     parsed_results = []
 
     # read json
