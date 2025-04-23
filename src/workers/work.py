@@ -233,7 +233,7 @@ def km_work_all_vs_all(json: dict):
     _update_job_status('progress', 1.0000)
     return return_val
 
-def gpt_score_hypothesis(json: dict):
+def gpt_score_hypothesis(json: dict) -> list[dict]:
     data = json.get('data', None)
 
     if not data or len(data) == 0:
