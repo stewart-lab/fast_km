@@ -5,9 +5,9 @@ from glob import glob
 from condor.htcondor_helper import HTCondorHelper
 import indexing.km_util as km_util
 
-def run_skim_gpt(job_dir: str, config: dict) -> str:
+def run_skim_gpt(job_dir: str, config: dict) -> 'list[dict]':
     """
-    Submit a SKiM-GPT or KM-GPT job to HTCondor and return the output directory once the job is complete.
+    Submit a SKiM-GPT or KM-GPT job to HTCondor and return the results.
     """
 
     data = config['data']
@@ -107,6 +107,7 @@ def run_skim_gpt(job_dir: str, config: dict) -> str:
         "request_cpus": "1",
         "request_memory": "24GB",
         "request_disk": "60GB",
+        "gpus_minimum_memory": "30G",
         "requirements": "(CUDACapability >= 8.0)",
         "+WantGPULab": "true",
         "+GPUJobLength": '"short"',
@@ -166,29 +167,44 @@ def run_skim_gpt(job_dir: str, config: dict) -> str:
     original_dir = os.getcwd()
     os.chdir(job_dir)
 
+    # write the HTCondor token to a file
+    token_dir = os.path.join(job_dir, "token")
+    token_file = write_token_to_file(config["HTCONDOR_TOKEN"], token_dir)
+    htcondor_connection_config["token_file"] = token_file
+
     # submit the job
-    htcondor_helper = HTCondorHelper(htcondor_connection_config)
-    cluster_id = htcondor_helper.submit_jobs(htcondor_job_config)
-    print(f"HTCondor job submitted with cluster ID {cluster_id}")
+    try:
+        htcondor_helper = HTCondorHelper(htcondor_connection_config)
+        cluster_id = htcondor_helper.submit_jobs(htcondor_job_config)
+        print(f"HTCondor job submitted with cluster ID {cluster_id}")
 
-    # monitor the job
-    if htcondor_helper.monitor_jobs(cluster_id):
-        print("HTCondor job completed, retrieving output...")
-        htcondor_helper.retrieve_output(cluster_id)
+        # monitor the job
+        if htcondor_helper.monitor_jobs(cluster_id):
+            print("HTCondor job completed, retrieving output...")
+            htcondor_helper.retrieve_output(cluster_id)
 
-    # read and parse the job_result.json
-    print("Processing results...")
-    results_json_path = os.path.join(job_dir, 'job_result.json')
-    if not os.path.exists(results_json_path):
-        raise FileNotFoundError(f"Results file {results_json_path} not found")
-    results = parse_results(results_json_path)
+        # read and parse the job_result.json
+        print("Processing results...")
+        results_json_path = os.path.join(job_dir, 'job_result.json')
+        if not os.path.exists(results_json_path):
+            raise FileNotFoundError(f"Results file {results_json_path} not found")
+        results = parse_results(results_json_path)
+    except Exception as e:
+        # Ensure token is always removed even if an error occurs
+        if os.path.exists(token_file):
+            os.remove(token_file)
+        raise e
     
-    os.chdir(original_dir)
+    # remove token file for security reasons
+    if os.path.exists(token_file):
+        os.remove(token_file)
 
+    # all done
+    os.chdir(original_dir)
     print(f"Results processed successfully. Results are in {job_dir}")
     return results
     
-def parse_results(result_json_path: str):
+def parse_results(result_json_path: str) -> 'list[dict]':
     parsed_results = []
 
     # read json
@@ -198,16 +214,16 @@ def parse_results(result_json_path: str):
     for json_result in results_json:
         parsed_result = dict()
 
-        if 'A_B_C_Relationship' in json_result:
+        if 'A_B_C_Relationship' in json_result: # SKiM only
             parsed_result['a_term'] = json_result['A_B_C_Relationship']['a_term']
             parsed_result['b_term'] = json_result['A_B_C_Relationship']['b_term']
             parsed_result['c_term'] = json_result['A_B_C_Relationship']['c_term']
             parsed_result['abc_result'] = json_result['A_B_C_Relationship']['Result']
-        if 'A_B_Relationship' in json_result:
+        if 'A_B_Relationship' in json_result: # KM and SKiM
             parsed_result['a_term'] = json_result['A_B_Relationship']['a_term']
             parsed_result['b_term'] = json_result['A_B_Relationship']['b_term']
             parsed_result['ab_result'] = json_result['A_B_Relationship']['Result']
-        if 'A_C_Relationship' in json_result:
+        if 'A_C_Relationship' in json_result: # SKiM only
             parsed_result['a_term'] = json_result['A_C_Relationship']['a_term']
             parsed_result['c_term'] = json_result['A_C_Relationship']['c_term']
             parsed_result['ac_result'] = json_result['A_C_Relationship']['Result']
@@ -218,3 +234,22 @@ def parse_results(result_json_path: str):
         parsed_results.append(parsed_result)
 
     return parsed_results
+
+def write_token_to_file(htcondor_token: str, token_dir: str) -> str:
+    """Write the HTCondor token from environment variable to the token directory"""
+    # HTCondor tokens need to be in the format of a JWT with header.payload.signature
+    if not htcondor_token.count('.') >= 2 and 'eyJ' not in htcondor_token:
+        print("WARNING: Token doesn't appear to be in JWT format, it may not work with HTCondor")
+
+    # HTCondor expects token files to follow a specific format
+    # First try the default token file name
+    os.makedirs(token_dir, exist_ok=True)
+    token_file = os.path.join(token_dir, 'condor_token')
+    
+    with open(token_file, 'w') as f:
+        f.write(htcondor_token)
+    
+    # Set secure permissions (owner read-only)
+    os.chmod(token_file, 0o600)
+    
+    return token_file

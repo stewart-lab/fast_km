@@ -33,7 +33,7 @@ def start_server(pw_hash: str):
     log.setLevel(logging.ERROR)
 
     # start the server
-    _app.run(host="0.0.0.0")
+    _app.run(host="0.0.0.0", port=km_util.flask_port)
 
 def _set_up_rq_dashboard():
     _app.config.from_object(rq_dashboard.default_settings)
