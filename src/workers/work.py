@@ -295,6 +295,30 @@ def gpt_score_hypothesis(json: dict):
         if '{a_term}' not in json['SKIM_hypotheses']['ABC'] or '{b_term}' not in json['SKIM_hypotheses']['ABC'] or '{c_term}' not in json['SKIM_hypotheses']['ABC']:
             raise ValueError('ABC hypothesis must contain {a_term}, {b_term}, and {c_term}')
         
+    # trim PMID AB-intersects, BC-intersects, and AC-intersects
+    top_n_articles_most_cited = int(json.get('top_n_articles_most_cited', 0))
+    top_n_articles_most_recent = int(json.get('top_n_articles_most_recent', 0))
+    if top_n_articles_most_cited <= 0 and top_n_articles_most_recent <= 0:
+        top_n_articles_most_cited = 3
+        top_n_articles_most_recent = 2
+
+    for item in data:
+        if 'ab_pmid_intersection' in item:
+            ab_pmid_intersection = [int(pmid) for pmid in item['ab_pmid_intersection']]
+            most_cited = li.the_index.top_n_by_citation_count(ab_pmid_intersection, top_n_articles_most_cited)
+            most_recent = li.the_index.top_n_by_pmid(ab_pmid_intersection, top_n_articles_most_recent)
+            item['ab_pmid_intersection'] = [str(pmid) for pmid in set(most_cited + most_recent)]
+        if 'bc_pmid_intersection' in item:
+            bc_pmid_intersection = [int(pmid) for pmid in item['bc_pmid_intersection']]
+            most_cited = li.the_index.top_n_by_citation_count(bc_pmid_intersection, top_n_articles_most_cited)
+            most_recent = li.the_index.top_n_by_pmid(bc_pmid_intersection, top_n_articles_most_recent)
+            item['bc_pmid_intersection'] = [str(pmid) for pmid in set(most_cited + most_recent)]
+        if 'ac_pmid_intersection' in item:
+            ac_pmid_intersection = [int(pmid) for pmid in item['ac_pmid_intersection']]
+            most_cited = li.the_index.top_n_by_citation_count(ac_pmid_intersection, top_n_articles_most_cited)
+            most_recent = li.the_index.top_n_by_pmid(ac_pmid_intersection, top_n_articles_most_recent)
+            item['ac_pmid_intersection'] = [str(pmid) for pmid in set(most_cited + most_recent)]
+    
     job = get_current_job()
     temp_dir = os.path.join('/tmp', "job-" + job.id)
     results = skim_gpt.run_skim_gpt(temp_dir, json)
