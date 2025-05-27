@@ -11,6 +11,8 @@ parser.add_argument('--high_priority', default=0, required=False)
 parser.add_argument('--medium_priority', default=0, required=False)
 parser.add_argument('--low_priority', default=0, required=False)
 parser.add_argument('--neo4j_address', default='neo4j:7687', required=False)
+parser.add_argument('--redis_address', default='redis:6379', required=False)
+parser.add_argument('--mongo_address', default='mongo:27017', required=False)
 parser.add_argument('--pubmed_api_key', default='', required=False)
 parser.add_argument('--openai_api_key', default='', required=False)
 parser.add_argument('--htcondor_token', default='', required=False)
@@ -21,7 +23,9 @@ def start_workers(do_multiprocessing = True):
     high_priority = int(args.high_priority)
     medium_priority = int(args.medium_priority)
     low_priority = int(args.low_priority)
-    km_util.neo4j_host = [x.strip() for x in args.neo4j_address.split(',')]
+    km_util.redis_address = args.redis_address
+    km_util.mongo_address = args.mongo_address
+    km_util.neo4j_addresses = [x.strip() for x in args.neo4j_address.split(',')]
     km_util.pubmed_api_key = args.pubmed_api_key
     km_util.openai_api_key = args.openai_api_key
     km_util.htcondor_token = args.htcondor_token

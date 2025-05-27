@@ -2,12 +2,12 @@ import os
 import nltk
 from enum import Enum
 
-redis_host = 'redis'
-mongo_host = 'mongo'
+redis_address = 'redis:6379'
+mongo_address = 'mongo:27017'
+neo4j_addresses = ['neo4j:7687']
 pubmed_api_key = ''
 openai_api_key = ''
 htcondor_token = ''
-neo4j_host = ['neo4j:7687'] # overridden in run_worker.py
 tokenizer = nltk.RegexpTokenizer(r"\w+")
 encoding = 'utf-8'
 

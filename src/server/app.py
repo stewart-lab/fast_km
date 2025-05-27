@@ -12,7 +12,9 @@ import logging
 from flask_bcrypt import Bcrypt
 import indexing.km_util as km_util
 
-_r = Redis(host=km_util.redis_host, port=6379)
+redis_host = km_util.redis_address.split(':')[0]
+redis_port = int(km_util.redis_address.split(':')[1])
+_r = Redis(host=redis_host, port=redis_port)
 _queues = {p.name : Queue(connection=_r, name=p.name) for p in km_util.JobPriority}
 _app = Flask(__name__)
 _api = Api(_app)
@@ -36,7 +38,7 @@ def start_server(pw_hash: str):
 def _set_up_rq_dashboard():
     _app.config.from_object(rq_dashboard.default_settings)
     _app.register_blueprint(rq_dashboard.blueprint, url_prefix="/rq")
-    _app.config['RQ_DASHBOARD_REDIS_URL'] = 'redis://' + km_util.redis_host + ':6379'
+    _app.config['RQ_DASHBOARD_REDIS_URL'] = 'redis://' + km_util.redis_address
 
 def _authenticate(request):
     if _pw_hash == 'none':
