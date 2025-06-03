@@ -48,7 +48,9 @@ export HF_DATASETS_CACHE=$_CONDOR_SCRATCH_DIR/datasets
 export HF_MODULES_CACHE=$_CONDOR_SCRATCH_DIR/modules
 export HF_METRICS_CACHE=$_CONDOR_SCRATCH_DIR/metrics
 # Execute main.py with the required arguments
-python relevance.py --km_output files.txt --config config.json
+# python relevance.py --km_output files.txt --config config.json
+# skimgpt-relevance --km_output files.txt --config config.json
+skimgpt-relevance --km_output "$files_txt" --config "$config_json" --secrets "$secrets_json"
 
 # print a 'hello' message to the job's terminal output:
 # echo "Hello CHTC from Job $1 running on `whoami`@`hostname`"

@@ -2,7 +2,9 @@ import os
 import shutil
 import json
 from glob import glob
-from condor.htcondor_helper import HTCondorHelper
+import src
+from src.htcondor_helper import HTCondorHelper
+from src.utils import Config
 import indexing.km_util as km_util
 
 def run_skim_gpt(job_dir: str, config: dict) -> 'list[dict]':
@@ -12,14 +14,21 @@ def run_skim_gpt(job_dir: str, config: dict) -> 'list[dict]':
 
     data = config['data']
     is_km = 'c_term' not in data[0]
+    is_direct_comp = 'KM_direct_comp_hypothesis' in config
 
     # fill in remainder of config
-    if is_km:
+    if is_direct_comp:
+        config['JOB_TYPE'] = 'km_with_gpt_direct_comp'
+        config.setdefault('KM_hypothesis', '')
+        config.setdefault('SKIM_hypotheses', {})
+    elif is_km:
         config['JOB_TYPE'] = 'km_with_gpt'
-        config['SKIM_hypotheses'] = dict()
+        config.setdefault('SKIM_hypotheses', {})
+        config.setdefault("KM_direct_comp_hypothesis", "")
     else:
         config['JOB_TYPE'] = 'skim_with_gpt'
-        config['KM_hypothesis'] = ''
+        config.setdefault('KM_hypothesis', '')
+        config.setdefault("KM_direct_comp_hypothesis", "")
 
     config['Evaluate_single_abstract'] = False
 
@@ -30,6 +39,7 @@ def run_skim_gpt(job_dir: str, config: dict) -> 'list[dict]':
         "TOP_N_ARTICLES_MOST_RECENT": 50,
         "POST_N": 5,
         "MIN_WORD_COUNT": 98,
+        "MODEL": config.get('model', 'r1'),
         "API_URL": "http://localhost:5099/skim/api/jobs",
         "PORT": "5081",
         "RATE_LIMIT": 3,
@@ -38,6 +48,8 @@ def run_skim_gpt(job_dir: str, config: dict) -> 'list[dict]':
         "RETRY_DELAY": 5,
         "LOG_LEVEL": "INFO"
     }
+
+    config['GLOBAL_SETTINGS']['OUTDIR_SUFFIX'] = ""
 
     config['abstract_filter'] = {
         "MODEL": "lexu14/porpoise1",
@@ -50,13 +62,14 @@ def run_skim_gpt(job_dir: str, config: dict) -> 'list[dict]':
         "TEST_LEAKAGE_TYPE": "empty"
     }
 
-    # default to o3-mini model
+    # default to deepseek r1 model
     # TODO: make the default model an environment variable
-    config['GLOBAL_SETTINGS']['MODEL'] = config.get('model', 'o3-mini')
+    config['GLOBAL_SETTINGS']['MODEL'] = config.get('model', 'r1')
 
     config['PUBMED_API_KEY'] = km_util.pubmed_api_key
     config['API_KEY'] = km_util.openai_api_key
     config['HTCONDOR_TOKEN'] = km_util.htcondor_token
+    config['DEEPSEEK_API_KEY'] = getattr(km_util, 'deepseek_api_key', '')
 
     if not config['PUBMED_API_KEY']:
         raise ValueError("PUBMED_API_KEY is not set")
@@ -79,7 +92,7 @@ def run_skim_gpt(job_dir: str, config: dict) -> 'list[dict]':
     htcondor_job_config = {
         # docker image details
         'universe': 'docker',
-        "docker_image": "docker://lexu27/kmgpt_filter:v0.6",
+        "docker_image": "docker://stewartlab/skimgpt:0.1.6",
         "docker_pull_policy": "missing",
         
         # this transfers files from the submit node to the execute node
@@ -92,14 +105,14 @@ def run_skim_gpt(job_dir: str, config: dict) -> 'list[dict]':
 
         # execute node logging
         'log': 'run_$(Cluster).log',
-        'error': 'run_$(Cluster)_$(Process).err',
-        'output': 'run_$(Cluster)_$(Process).out',
+        'error': 'output/std_err.err',
+        'output': 'output/std_out.out',
         "stream_error": "true",
         "stream_output": "true",
 
         # this transfers files from the execute node to the submit node
         # the 'retrieve_output' in htcondor_helper.py transfers the files from the submit node to the current machine
-        "transfer_output_files": "job_result.json",
+        "transfer_output_files": "output",
         "when_to_transfer_output": "ON_EXIT",
 
         # hardware/CUDA requirements for the execute node
@@ -137,24 +150,51 @@ def run_skim_gpt(job_dir: str, config: dict) -> 'list[dict]':
             for result in data:
                 f.write(f"{result['a_term']}\t{result['b_term']}\t{result['c_term']}\t{result['ab_pmid_intersection']}\t{result['bc_pmid_intersection']}\t{result['ac_pmid_intersection']}\n")
 
+    # write secrets to job_dir/secrets.json (include DEEPSEEK_API_KEY)
+    secrets = {
+        "PUBMED_API_KEY":    config["PUBMED_API_KEY"],
+        "OPENAI_API_KEY":    config["API_KEY"],
+        "HTCONDOR_TOKEN":    config["HTCONDOR_TOKEN"],
+        "DEEPSEEK_API_KEY":  config["DEEPSEEK_API_KEY"],
+    }
+    secrets_json_path = os.path.join(job_dir, "secrets.json")
+    with open(secrets_json_path, "w") as f:
+        json.dump(secrets, f, indent=4)
+
+    # remove secrets from config to avoid including them in config.json
+    config.pop("PUBMED_API_KEY")
+    config.pop("API_KEY")
+    config.pop("HTCONDOR_TOKEN")
+    config.pop("DEEPSEEK_API_KEY")
+
+    # Embed HTCondor settings in the format skimgpt.Config expects
+    config["HTCONDOR"] = {
+        "collector_host": htcondor_connection_config["collector_host"],
+        "submit_host":   htcondor_connection_config["submit_host"],
+        "docker_image":  htcondor_job_config["docker_image"],
+        "request_gpus":  htcondor_job_config["request_gpus"],
+        "request_cpus":  htcondor_job_config["request_cpus"],
+        "request_memory":htcondor_job_config["request_memory"],
+        "request_disk":  htcondor_job_config["request_disk"],
+    }
+
     # write config to job_dir/config.json
     config_json_path = os.path.join(job_dir, 'config.json')
     with open(config_json_path, 'w') as f:
         json.dump(config, f, indent=4)
 
-    # copy run.sh and relevance.py to job_dir
-    cwd = os.getcwd()
-    original_src_dir = os.path.join(cwd, 'src', 'condor')
+    # copy run.sh and relevance.py from installed skimgpt package
+    pkg_dir = os.path.dirname(src.__file__)
     for file in ["run.sh", "relevance.py"]:
-        src_path = os.path.abspath(os.path.join(original_src_dir, file))
+        src_path = os.path.join(pkg_dir, file)
         dst_path = os.path.join(job_dir, file)
         if os.path.exists(src_path):
             shutil.copy2(src_path, dst_path)
         else:
-            raise FileNotFoundError(f"Required file {file} not found in {original_src_dir}")
+            raise FileNotFoundError(f"Required file {file} not found in {pkg_dir}")
             
     # copy .py files into job_dir/src
-    for src_file in glob(os.path.join(original_src_dir, "*.py")):
+    for src_file in glob(os.path.join(pkg_dir, "*.py")):
         dst_path = os.path.join(job_src_dir, os.path.basename(src_file))
         if os.path.abspath(src_file) != os.path.abspath(dst_path):
             shutil.copy2(src_file, dst_path)
@@ -167,15 +207,19 @@ def run_skim_gpt(job_dir: str, config: dict) -> 'list[dict]':
     original_dir = os.getcwd()
     os.chdir(job_dir)
 
-    # write the HTCondor token to a file
+    # write the HTCondor token to a file (now pulled from our secrets dict)
     token_dir = os.path.join(job_dir, "token")
-    token_file = write_token_to_file(config["HTCONDOR_TOKEN"], token_dir)
-    htcondor_connection_config["token_file"] = token_file
+    token_file = write_token_to_file(secrets["HTCONDOR_TOKEN"], token_dir)
+    htcondor_connection_config["token_file"] = token_file  # retained if used elsewhere
 
-    # submit the job
+    # instantiate Config (reads config.json + secrets.json)
+    config_obj = Config(config_json_path)
+
+    # submit the job via the skimgpt package's HTCondorHelper
     try:
-        htcondor_helper = HTCondorHelper(htcondor_connection_config)
-        cluster_id = htcondor_helper.submit_jobs(htcondor_job_config)
+        htcondor_helper = HTCondorHelper(config_obj, token_dir)
+        # submit_jobs now takes the path to files.txt (we've chdir'ed into job_dir)
+        cluster_id = htcondor_helper.submit_jobs("files.txt")
         print(f"HTCondor job submitted with cluster ID {cluster_id}")
 
         # monitor the job
