@@ -39,7 +39,7 @@ def run_skim_gpt(job_dir: str, config: dict) -> 'list[dict]':
         "TOP_N_ARTICLES_MOST_RECENT": 50,
         "POST_N": 5,
         "MIN_WORD_COUNT": 98,
-        "MODEL": config.get('model', 'r1'),
+        "MODEL": config.get('model', 'r1'),     # default to deepseek r1 model, TODO: make the default model an environment variable
         "API_URL": "http://localhost:5099/skim/api/jobs",
         "PORT": "5081",
         "RATE_LIMIT": 3,
@@ -61,10 +61,6 @@ def run_skim_gpt(job_dir: str, config: dict) -> 'list[dict]':
         "TEST_LEAKAGE": False,
         "TEST_LEAKAGE_TYPE": "empty"
     }
-
-    # default to deepseek r1 model
-    # TODO: make the default model an environment variable
-    config['GLOBAL_SETTINGS']['MODEL'] = config.get('model', 'r1')
 
     config['PUBMED_API_KEY'] = km_util.pubmed_api_key
     config['API_KEY'] = km_util.openai_api_key
