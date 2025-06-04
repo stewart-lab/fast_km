@@ -19,9 +19,10 @@ import json
 import os
 import requests
 from datetime import datetime
+import shutil
 
-# Base URL for the API. Reads FLASK_PORT env var (default 5000) to match server's listening port.
-port = os.environ.get("FLASK_PORT", "5000")
+# Base URL for the API. Use port 6002 to connect to the Docker container (mapped from container port 5000)
+port = os.environ.get("FLASK_PORT", "6002")
 API_BASE = f"http://localhost:{port}"
 POST_URL = f"{API_BASE}/hypothesis_eval/api/jobs/"
 GET_URL  = f"{API_BASE}/hypothesis_eval/api/jobs/"
@@ -147,18 +148,91 @@ def main():
         print("Status:", status)
         if status == "finished":
             print("Final result:")
-            print(json.dumps(status_json.get("result"), indent=2))
+            result_data = status_json.get("result")
+            print(json.dumps(result_data, indent=2))
+            
             # Save final result JSON into our timestamped subdir
             result_dst = os.path.join(out_dir, "result.json")
             with open(result_dst, "w") as rf:
-                json.dump(status_json.get("result"), rf, indent=2)
+                json.dump(result_data, rf, indent=2)
             print(f"Saved result JSON to {result_dst}")
+            
+            # If result is a dictionary with multiple results, save each one separately  
+            if isinstance(result_data, dict):
+                for key, value in result_data.items():
+                    individual_result_dst = os.path.join(out_dir, f"result_{key}.json")
+                    with open(individual_result_dst, "w") as rf:
+                        json.dump(value, rf, indent=2)
+                    print(f"Saved individual result to result_{key}.json")
+                    
+                print(f"Parsed {len(result_data)} individual results from the job")
+            
             break
         if status in ("queued", "started"):
             time.sleep(2)
         else:
             print("Unexpected status:", status)
             break
+
+    # 7) Copy HTCondor log files to test directory for persistence
+    print(f"\n--- Copying HTCondor Log Files ---")
+    # Check for log files in multiple locations
+    log_patterns = [
+        "run_*.log",                    # HTCondor job logs in root
+        "output/std_out.out",           # Standard output in output subdirectory
+        "output/std_err.err",           # Standard error in output subdirectory
+        "std_out.out",                  # Also check root directory
+        "std_err.err"                   # Also check root directory
+    ]
+    copied_logs = []
+    
+    for pattern in log_patterns:
+        import glob
+        if "*" in pattern:
+            # Use glob for wildcard patterns
+            log_files = glob.glob(os.path.join(job_dir, pattern))
+        else:
+            # Direct path check for specific files
+            log_path = os.path.join(job_dir, pattern)
+            log_files = [log_path] if os.path.exists(log_path) else []
+            
+        for log_path in log_files:
+            if os.path.exists(log_path):
+                log_filename = os.path.basename(log_path)
+                log_dst = os.path.join(out_dir, log_filename)
+                try:
+                    shutil.copy2(log_path, log_dst)
+                    copied_logs.append(log_filename)
+                    print(f"✓ Copied {log_filename} to test directory")
+                    
+                    # Show a preview of the log content
+                    try:
+                        with open(log_path, 'r') as f:
+                            content = f.read()
+                            lines = content.split('\n')
+                            if len(lines) > 10:
+                                preview = '\n'.join(lines[:5] + ['...'] + lines[-5:])
+                            else:
+                                preview = content
+                            print(f"  Preview of {log_filename}:")
+                            print(f"  {preview[:200]}{'...' if len(preview) > 200 else ''}")
+                    except Exception as e:
+                        print(f"  Could not preview {log_filename}: {e}")
+                        
+                except Exception as e:
+                    print(f"✗ Failed to copy {log_filename}: {e}")
+    
+    if copied_logs:
+        print(f"Successfully copied {len(copied_logs)} log file(s): {', '.join(copied_logs)}")
+    else:
+        print("No HTCondor log files found to copy")
+    
+    print(f"\n✅ Test completed! All files saved to: {out_dir}")
+    print(f"Files in test directory:")
+    for file in sorted(os.listdir(out_dir)):
+        file_path = os.path.join(out_dir, file)
+        size = os.path.getsize(file_path)
+        print(f"  {file} ({size} bytes)")
 
 if __name__ == "__main__":
     main() 
