@@ -259,8 +259,6 @@ def gpt_score_hypothesis(json: dict) -> 'list[dict]':
             raise ValueError('ab_pmid_intersection is required')
         if not is_km and ('bc_pmid_intersection' not in item or len(item['bc_pmid_intersection'])) == 0:
             raise ValueError('bc_pmid_intersection is required for SKiM')
-        if not is_km and ('ac_pmid_intersection' not in item or len(item['ac_pmid_intersection'])) == 0:
-            raise ValueError('ac_pmid_intersection is required for SKiM')
     
     # validate hypotheses
     if is_km:
