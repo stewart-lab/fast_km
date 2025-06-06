@@ -219,9 +219,8 @@ def main():
     job_dir = f"/tmp/job-{job_id}"
     print("Expecting job files in:", job_dir)
 
-    # prepare a timestamped output subdir under fast_km/tests
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    test_data_dir = os.path.abspath(os.path.join(script_dir, "tests"))
+    test_data_dir = os.path.abspath(os.path.join(script_dir, "test_results", "package_tests"))
     os.makedirs(test_data_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_dir = os.path.join(test_data_dir, timestamp)

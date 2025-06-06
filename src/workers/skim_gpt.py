@@ -142,6 +142,7 @@ def run_skim_gpt(job_dir: str, payload: dict) -> dict:
     
     # Inject dynamic values from payload
     config['KM_hypothesis'] = payload.get('KM_hypothesis', '')
+    config['SKIM_hypotheses'] = payload.get('SKIM_hypotheses', {})
     config['GLOBAL_SETTINGS']['MODEL'] = payload.get('model', 'r1')
     config['GLOBAL_SETTINGS']['TOP_N_ARTICLES_MOST_CITED'] = payload.get('top_n_articles_most_cited', 50)
     config['GLOBAL_SETTINGS']['TOP_N_ARTICLES_MOST_RECENT'] = payload.get('top_n_articles_most_recent', 50)
