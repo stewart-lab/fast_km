@@ -1,7 +1,6 @@
 import multiprocessing
 import time
 import argparse
-import os
 from workers.km_worker import start_worker
 import workers.loaded_index as li
 import indexing.km_util as km_util
@@ -14,10 +13,10 @@ parser.add_argument('--low_priority', default=0, required=False)
 parser.add_argument('--neo4j_address', default='neo4j:7687', required=False)
 parser.add_argument('--redis_address', default='redis:6379', required=False)
 parser.add_argument('--mongo_address', default='mongo:27017', required=False)
-parser.add_argument('--pubmed_api_key', default=os.environ.get('PUBMED_API_KEY', ''), required=False)
-parser.add_argument('--openai_api_key',default=os.environ.get('OPENAI_API_KEY', ''), required=False)
-parser.add_argument('--htcondor_token', default=os.environ.get('HTCONDOR_TOKEN', ''), required=False)
-parser.add_argument('--deepseek_api_key', default=os.environ.get('DEEPSEEK_API_KEY', ''), required=False)
+parser.add_argument('--pubmed_api_key', default='', required=True)
+parser.add_argument('--openai_api_key', default='', required=True)
+parser.add_argument('--htcondor_token', default='', required=True)
+parser.add_argument('--deepseek_api_key', default='', required=True)
 args = parser.parse_args()
 
 def start_workers(do_multiprocessing = True):

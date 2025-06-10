@@ -194,8 +194,7 @@ class HTCondorHelper:
                         return False
                     
                     # Check if all jobs completed
-                    completed_jobs = [ad for ad in ads if ad.get("JobStatus") == 4]
-                    if len(completed_jobs) == len(ads):
+                    if all(ad.get("JobStatus") == 4 for ad in ads):
                         self.logger.info(f"All jobs in cluster {cluster_id} completed successfully")
                         return True
                     
@@ -215,9 +214,17 @@ class HTCondorHelper:
                         status_counts[status] = status_counts.get(status, 0) + 1
                     
                     status_desc = {
-                        1: "Idle", 2: "Running", 3: "Removed",
-                        4: "Completed", 5: "Held", 6: "Transferring Output",
-                        7: "Suspended"
+                        1: "Idle", 
+                        2: "Running", 
+                        3: "Removed",
+                        4: "Completed", 
+                        5: "Held", 
+                        6: "Transferring Output",
+                        7: "Suspended",
+                        8: "Debugging",
+                        9: "Retiring",
+                        10: "Postmortem",
+                        11: "Transferring Input"
                     }
                     
                     status_msg = ", ".join(f"{status_desc.get(k, f'Unknown({k})')}: {v}" 
