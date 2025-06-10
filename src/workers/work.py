@@ -235,17 +235,16 @@ def km_work_all_vs_all(json: dict):
 
 def gpt_score_hypothesis(json: dict) -> 'list[dict]':
     data = json.get('data', None)
-    # detect direct-comparison flag
-    is_direct_comp = bool(json.get("is_direct_comp", False))
 
     if not data or len(data) == 0:
         raise ValueError('data is required and must be a non-empty list')
     
-    # determine if KM or SKiM
+    # determine if KM or SKiM or direct comparison KM
     count_with_c = len([x for x in data if 'c_term' in x])
     if count_with_c != 0 and count_with_c != len(data):
         raise ValueError('data must be all KM or all SKiM')
-    # treat direct_comp as its own KM variant
+    
+    is_direct_comp = 'KM_direct_comp_hypothesis' in json
     is_km = ('c_term' not in data[0]) and not is_direct_comp
 
     # validate data

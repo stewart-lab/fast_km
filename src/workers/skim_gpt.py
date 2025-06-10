@@ -136,7 +136,6 @@ def run_skim_gpt(job_dir: str, payload: dict) -> dict:
     # Set job type
     if is_direct_comp:
         config['JOB_TYPE'] = 'km_with_gpt_direct_comp'
-        config['KM_direct_comp_hypothesis'] = payload.get('KM_direct_comp_hypothesis', '')
     elif is_km:
         config['JOB_TYPE'] = 'km_with_gpt'
     else:
@@ -145,6 +144,7 @@ def run_skim_gpt(job_dir: str, payload: dict) -> dict:
     # Inject dynamic values from payload
     config['KM_hypothesis'] = payload.get('KM_hypothesis', '')
     config['SKIM_hypotheses'] = payload.get('SKIM_hypotheses', {})
+    config['KM_direct_comp_hypothesis'] = payload.get('KM_direct_comp_hypothesis', '')
     config['GLOBAL_SETTINGS']['MODEL'] = payload.get('model', 'r1')
     config['GLOBAL_SETTINGS']['TOP_N_ARTICLES_MOST_CITED'] = payload.get('top_n_articles_most_cited', 50)
     config['GLOBAL_SETTINGS']['TOP_N_ARTICLES_MOST_RECENT'] = payload.get('top_n_articles_most_recent', 50)
