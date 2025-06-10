@@ -37,7 +37,7 @@ def _get_static_config_template():
         "HTCONDOR": {
             "collector_host": "cm.chtc.wisc.edu",
             "submit_host": "ap2002.chtc.wisc.edu",
-            "docker_image": "docker://stewartlab/skimgpt:0.1.6",
+            "docker_image": "docker://stewartlab/skimgpt:0.1.7",
             "request_gpus": "1",
             "request_cpus": "1",
             "request_memory": "24GB",
