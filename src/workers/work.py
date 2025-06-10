@@ -235,6 +235,8 @@ def km_work_all_vs_all(json: dict):
 
 def gpt_score_hypothesis(json: dict) -> 'list[dict]':
     data = json.get('data', None)
+    # detect direct-comparison flag
+    is_direct_comp = bool(json.get("is_direct_comp", False))
 
     if not data or len(data) == 0:
         raise ValueError('data is required and must be a non-empty list')
@@ -243,8 +245,8 @@ def gpt_score_hypothesis(json: dict) -> 'list[dict]':
     count_with_c = len([x for x in data if 'c_term' in x])
     if count_with_c != 0 and count_with_c != len(data):
         raise ValueError('data must be all KM or all SKiM')
-    is_km = 'c_term' not in data[0]
-
+    # treat direct_comp as its own KM variant
+    is_km = ('c_term' not in data[0]) and not is_direct_comp
 
     # validate data
     for item in data:
@@ -261,14 +263,21 @@ def gpt_score_hypothesis(json: dict) -> 'list[dict]':
             raise ValueError('bc_pmid_intersection is required for SKiM')
     
     # validate hypotheses
-    if is_km:
+    if is_direct_comp:
+        if 'KM_direct_comp_hypothesis' not in json:
+            raise ValueError('KM_direct_comp_hypothesis is required for direct comparison KM')
+        if not isinstance(json['KM_direct_comp_hypothesis'], str):
+            raise ValueError('KM_direct_comp_hypothesis must be a string')
+        if '{a_term}' not in json['KM_direct_comp_hypothesis'] or '{b_term1}' not in json['KM_direct_comp_hypothesis'] or '{b_term2}' not in json['KM_direct_comp_hypothesis']:
+            raise ValueError('KM_direct_comp_hypothesis must contain {a_term}, {b_term1}, and {b_term2}')
+    elif is_km:
         if 'KM_hypothesis' not in json:
             raise ValueError('KM_hypothesis is required for KM')
         if not isinstance(json['KM_hypothesis'], str):
             raise ValueError('KM_hypothesis must be a string')
         if '{a_term}' not in json['KM_hypothesis'] or '{b_term}' not in json['KM_hypothesis']:
             raise ValueError('KM_hypothesis must contain {a_term} and {b_term}')
-    if not is_km:
+    else:
         if 'SKIM_hypotheses' not in json:
             raise ValueError('SKIM_hypotheses is required for SKiM')
         if not isinstance(json['SKIM_hypotheses'], dict):

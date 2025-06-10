@@ -5,8 +5,10 @@ from glob import glob
 from condor.htcondor_helper import HTCondorHelper
 from condor.utils import Config
 import indexing.km_util as km_util
+import threading
+import time
 
-def get_static_config_template():
+def _get_static_config_template():
     """Get the static configuration template that works with skimgpt"""
     return {
         "JOB_TYPE": "km_with_gpt",  # Will be overridden based on data structure
@@ -124,7 +126,7 @@ def run_skim_gpt(job_dir: str, payload: dict) -> dict:
     """
     
     # Get static config template
-    config = get_static_config_template()
+    config = _get_static_config_template()
     
     # Extract data and determine job type
     data = payload['data']
@@ -152,7 +154,7 @@ def run_skim_gpt(job_dir: str, payload: dict) -> dict:
         "PUBMED_API_KEY": km_util.pubmed_api_key,
         "OPENAI_API_KEY": km_util.openai_api_key,
         "HTCONDOR_TOKEN": km_util.htcondor_token,
-        "DEEPSEEK_API_KEY": getattr(km_util, 'deepseek_api_key', ''),
+        "DEEPSEEK_API_KEY": km_util.deepseek_api_key,
     }
 
     # Validate required secrets
@@ -178,25 +180,8 @@ def run_skim_gpt(job_dir: str, payload: dict) -> dict:
         if is_km:
             f.write('a_term\tb_term\tab_pmid_intersection\n')
             for item in data:
-                # Convert PMID intersection to Python list representation with strings
-                pmids = item['ab_pmid_intersection']
-                
-                # Handle different input formats
-                if isinstance(pmids, str):
-                    # If it's a string representation of a list, evaluate it
-                    import ast
-                    try:
-                        pmids = ast.literal_eval(pmids)
-                    except:
-                        # If not a valid list string, assume it's comma-separated
-                        pmids = [p.strip() for p in pmids.split(',') if p.strip()]
-                
-                # Ensure we have a list
-                if not isinstance(pmids, list):
-                    pmids = list(pmids) if pmids else []
-                
-                # Convert to Python list representation with strings
-                pmids_list = [str(p) for p in pmids]
+                # assume item['ab_pmid_intersection'] is always a list of ints or strings
+                pmids_list = [str(p) for p in item['ab_pmid_intersection']]
                 pmids_str = str(pmids_list)
                 f.write(f"{item['a_term']}\t{item['b_term']}\t{pmids_str}\n")
         else:
@@ -303,9 +288,6 @@ def run_skim_gpt(job_dir: str, payload: dict) -> dict:
         monitoring_success = False
         try:
             # Start monitoring in a separate thread while streaming logs
-            import threading
-            import time
-            
             # Monitor the job
             def monitor_job():
                 nonlocal monitoring_success
