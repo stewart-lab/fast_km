@@ -9,6 +9,7 @@ flask_port = 5000
 pubmed_api_key = ''
 openai_api_key = ''
 htcondor_token = ''
+deepseek_api_key = ''
 tokenizer = nltk.RegexpTokenizer(r"\w+")
 encoding = 'utf-8'
 

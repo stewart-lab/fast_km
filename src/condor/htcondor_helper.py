@@ -232,7 +232,7 @@ class HTCondorHelper:
                     self.logger.info(f"Cluster {cluster_id} status: {status_msg}. Total wait time: {total_wait} seconds")
                     
                     # Retrieve intermediate output files every minute
-                    self.logger.info(f"Attempting to retrieve intermediate output files for cluster {cluster_id}")
+                    # self.logger.info(f"Attempting to retrieve intermediate output files for cluster {cluster_id}")
                     try:
                         # Add timeout to prevent hanging
                         retrieve_start = time.time()
@@ -272,7 +272,8 @@ class HTCondorHelper:
                             self.logger.warning(f"Retrieve operation timed out after {max_retrieve_time} seconds")
                             # Continue with monitoring even if retrieve times out
                         elif retrieve_success[0]:
-                            self.logger.info(f"Successfully retrieved intermediate output files for cluster {cluster_id}")
+                            pass
+                            # self.logger.info(f"Successfully retrieved intermediate output files for cluster {cluster_id}")
                         else:
                             self.logger.warning(f"Failed to retrieve intermediate output files: {retrieve_error[0]}")
                             
