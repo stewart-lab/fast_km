@@ -2,11 +2,10 @@ import htcondor2 as htcondor
 import time
 import os
 import threading
-from src.utils import Config
 
 
 class HTCondorHelper:
-    def __init__(self, config: Config, token_dir: str):
+    def __init__(self, config: dict, token_dir: str):
         """Initialize with Config instance"""
         self.config = config
         self.logger = config.logger
