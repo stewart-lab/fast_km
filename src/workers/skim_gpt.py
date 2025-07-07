@@ -339,11 +339,11 @@ def _get_config_template():
         "HTCONDOR": {
             "collector_host": "cm.chtc.wisc.edu",
             "submit_host": "ap2002.chtc.wisc.edu",
-            "docker_image": "docker://stewartlab/skimgpt:0.1.7",
+            "docker_image": "docker://stewartlab/skimgpt:0.1.8",
             "request_gpus": "1",
             "request_cpus": "1",
-            "request_memory": "24GB",
-            "request_disk": "60GB"
+            "request_memory": "10GB",
+            "request_disk": "10GB"
         },
         "abstract_filter": {
             "MODEL": "lexu14/porpoise1",
