@@ -1,10 +1,11 @@
 ## Base image is Debian Linux with Python 3.8.9
 FROM python:3.8.9-slim
 
-## copy source code into Docker image
-COPY . /fast-km/
+## copy source code into Docker image (ignoring .env which could contain sensitive information)
+COPY src /fast-km/src
+COPY requirements.txt /fast-km/requirements.txt
 
-WORKDIR /fast-km/
+WORKDIR /fast-km
 
 ## install python package requirements
 RUN pip install --upgrade pip
