@@ -20,6 +20,7 @@ def run_skim_gpt(job_dir: str, payload: dict) -> dict:
             "KM_hypothesis": "{a_term} (Disease or Condition) informs {b_term} (Drug or Compound)",
             "top_n_articles_most_cited": 5,
             "top_n_articles_most_recent": 6,
+            "post_n": 5,
             "data": [{"a_term": "...", "b_term": "...", "ab_pmid_intersection": [...]}]
         }
     
@@ -65,7 +66,8 @@ def run_skim_gpt(job_dir: str, payload: dict) -> dict:
     config['GLOBAL_SETTINGS']['MODEL'] = payload.get('model', 'o3-mini')
     config['GLOBAL_SETTINGS']['TOP_N_ARTICLES_MOST_CITED'] = payload.get('top_n_articles_most_cited', 50)
     config['GLOBAL_SETTINGS']['TOP_N_ARTICLES_MOST_RECENT'] = payload.get('top_n_articles_most_recent', 50)
-    
+    config['GLOBAL_SETTINGS']['POST_N'] = payload.get('post_n', 5)
+
     # Set up secrets
     secrets = {
         "PUBMED_API_KEY": km_util.pubmed_api_key,
