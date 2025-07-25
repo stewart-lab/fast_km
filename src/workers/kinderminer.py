@@ -35,7 +35,7 @@ def get_sort_ratio(table) -> float:
 
     return table[0][0] / denom
 
-def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.inf, 
+def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year_lower = 0, censor_year_upper = math.inf, 
                        return_pmids = False, top_n_articles_most_cited = math.inf,
                        top_n_articles_most_recent = math.inf, scoring = 'fet') -> dict:
     """"""
@@ -46,17 +46,17 @@ def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year = math.
     a_term_set = idx.construct_abstract_set(a_term)
     b_term_set = idx.construct_abstract_set(b_term)
 
-    # censor by year if applicable
-    if censor_year is not math.inf:
-        a_term_set = idx.censor_by_year(a_term_set, censor_year, a_term)
-        b_term_set = idx.censor_by_year(b_term_set, censor_year, b_term)
+    # censor by year if applicable (handle both single upper bound and range)
+    if censor_year_upper is not math.inf or censor_year_lower > 0:
+        a_term_set = idx.censor_by_year(a_term_set, censor_year_lower, censor_year_upper, a_term)
+        b_term_set = idx.censor_by_year(b_term_set, censor_year_lower, censor_year_upper, b_term)
 
     # create contingency table
     table = get_contingency_table(a_term_set, b_term_set, 
-        idx.n_articles(censor_year))
+        idx.n_articles(censor_year_lower, censor_year_upper))
 
     n_a_and_b = table[0][0]
-    n_articles = idx.n_articles(censor_year)
+    n_articles = idx.n_articles(censor_year_lower, censor_year_upper)
 
     # perform statistical test (default fisher's exact test)
     if scoring == 'chi-square':
