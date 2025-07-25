@@ -71,31 +71,15 @@ class Index():
 
         return pmid_set
 
-    def censor_by_year(self, pmids: 'set[int]', censor_year: int, term: str) -> 'set[int]':
-        if censor_year not in self._date_censored_pmids:
-            if not self._publication_years:
-                self._init_pub_years()
-
-            censored_set = set()
-
-            for pmid, year in self._publication_years.items():
-                if year <= censor_year:
-                    censored_set.add(pmid)
-            self._date_censored_pmids[censor_year] = censored_set
-
-        if (term, censor_year) in self._date_censored_query_cache:
-            return self._date_censored_query_cache[(term, censor_year)]
-        
-        date_censored_pmid_set = self._date_censored_pmids[censor_year] & pmids
-        self._date_censored_query_cache[(term, censor_year)] = date_censored_pmid_set
-
-        self._publication_years = dict()
-        return date_censored_pmid_set
-
-    def censor_by_year_range(self, pmids: 'set[int]', censor_year_lower: int, censor_year_upper: int, term: str) -> 'set[int]':
+    def censor_by_year(self, pmids: 'set[int]', censor_year_lower: int, censor_year_upper: int, term: str) -> 'set[int]':
         """Censor PMIDs by year range (lower <= year <= upper)."""
+        # year <0 and >2100 are excluded to prevent abuse
+        if censor_year_lower < 0:
+            censor_year_lower = 0
+        if censor_year_upper < 0:
+            return set()
         cache_key = (censor_year_lower, censor_year_upper)
-        
+
         if cache_key not in self._date_censored_pmids:
             if not self._publication_years:
                 self._init_pub_years()
@@ -115,7 +99,7 @@ class Index():
 
         self._publication_years = dict()
         return date_censored_pmid_set
-
+    
     def top_n_by_citation_count(self, pmids: 'set[int]', top_n_articles = math.inf) -> 'list[int]':
         if top_n_articles == math.inf:
             return list(pmids)
@@ -136,53 +120,27 @@ class Index():
         top_n_sorted = sorted(pmids, reverse=True)[:top_n_articles]
         return top_n_sorted
 
-    def n_articles(self, censor_year = math.inf) -> int:
-        """Returns the number of indexed abstracts, given an optional 
-        censor year."""
-        # year <0 and >2100 are excluded to prevent abuse...
-        if censor_year < 0:
-            return 0
-        else:
-            if censor_year in self._n_articles_by_pub_year:
-                return self._n_articles_by_pub_year[censor_year]
-
-            if not self._publication_years:
-                self._init_pub_years()
-
-            n_articles_censored = 0
-
-            for pmid in self._publication_years:
-                if self._publication_years[pmid] <= censor_year:
-                    n_articles_censored += 1
-
-            self._n_articles_by_pub_year[censor_year] = n_articles_censored
-
-            self._publication_years = dict()
-            return n_articles_censored
-
-    def n_articles_range(self, censor_year_lower: int, censor_year_upper: int) -> int:
+    def n_articles(self, censor_year_lower: int = 0, censor_year_upper: int = math.inf) -> int:
         """Returns the number of indexed abstracts within a year range."""
-        # year <0 and >2100 are excluded to prevent abuse...
+        # year <0 and >2100 are excluded to prevent abuse
         if censor_year_lower < 0:
             censor_year_lower = 0
         if censor_year_upper < 0:
             return 0
         
         cache_key = (censor_year_lower, censor_year_upper)
-        
+
         if cache_key in self._n_articles_by_pub_year:
             return self._n_articles_by_pub_year[cache_key]
-
+        
         if not self._publication_years:
             self._init_pub_years()
 
         n_articles_censored = 0
-
-        for pmid in self._publication_years:
-            year = self._publication_years[pmid]
+        for pmid, year in self._publication_years.items():
             if censor_year_lower <= year <= censor_year_upper:
                 n_articles_censored += 1
-
+                
         self._n_articles_by_pub_year[cache_key] = n_articles_censored
 
         self._publication_years = dict()

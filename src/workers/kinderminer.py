@@ -48,15 +48,15 @@ def kinderminer_search(a_term: str, b_term: str, idx: Index, censor_year_lower =
 
     # censor by year if applicable (handle both single upper bound and range)
     if censor_year_upper is not math.inf or censor_year_lower > 0:
-        a_term_set = idx.censor_by_year_range(a_term_set, censor_year_lower, censor_year_upper, a_term)
-        b_term_set = idx.censor_by_year_range(b_term_set, censor_year_lower, censor_year_upper, b_term)
+        a_term_set = idx.censor_by_year(a_term_set, censor_year_lower, censor_year_upper, a_term)
+        b_term_set = idx.censor_by_year(b_term_set, censor_year_lower, censor_year_upper, b_term)
 
     # create contingency table
     table = get_contingency_table(a_term_set, b_term_set, 
-        idx.n_articles_range(censor_year_lower, censor_year_upper))
+        idx.n_articles(censor_year_lower, censor_year_upper))
 
     n_a_and_b = table[0][0]
-    n_articles = idx.n_articles_range(censor_year_lower, censor_year_upper)
+    n_articles = idx.n_articles(censor_year_lower, censor_year_upper)
 
     # perform statistical test (default fisher's exact test)
     if scoring == 'chi-square':
