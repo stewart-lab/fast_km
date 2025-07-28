@@ -445,29 +445,6 @@ def _get_censor_year(item):
     if 'censor_year_lower' in item:
         censor_year_lower = int(item['censor_year_lower'])
     
-    # Handle nested job-specific settings structure from skimgpt
-    if 'JOB_SPECIFIC_SETTINGS' in item:
-        job_type = item.get('JOB_TYPE', '')
-        if job_type and job_type in item['JOB_SPECIFIC_SETTINGS']:
-            job_settings = item['JOB_SPECIFIC_SETTINGS'][job_type]
-            # Check if there's a nested job-specific block
-            if job_type in job_settings:
-                nested_settings = job_settings[job_type]
-                if 'censor_year' in nested_settings:
-                    censor_year_upper = int(nested_settings['censor_year'])
-                if 'censor_year_upper' in nested_settings:
-                    censor_year_upper = int(nested_settings['censor_year_upper'])
-                if 'censor_year_lower' in nested_settings:
-                    censor_year_lower = int(nested_settings['censor_year_lower'])
-            else:
-                # Check direct job settings
-                if 'censor_year' in job_settings:
-                    censor_year_upper = int(job_settings['censor_year'])
-                if 'censor_year_upper' in job_settings:
-                    censor_year_upper = int(job_settings['censor_year_upper'])
-                if 'censor_year_lower' in job_settings:
-                    censor_year_lower = int(job_settings['censor_year_lower'])
-    
     # Validate bounds
     if censor_year_upper is None or censor_year_upper > 2100:
         censor_year_upper = math.inf
