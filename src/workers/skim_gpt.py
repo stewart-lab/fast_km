@@ -344,8 +344,8 @@ def _get_config_template():
             "docker_image": "docker://stewartlab/skimgpt:1.0.0",
             "request_gpus": "1",
             "request_cpus": "1",
-            "request_memory": "10GB",
-            "request_disk": "10GB"
+            "request_memory": "15GB",
+            "request_disk": "15GB"
         },
         "abstract_filter": {
             "MODEL": "lexu14/porpoise1",
