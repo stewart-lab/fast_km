@@ -46,7 +46,7 @@ def km_work_all_vs_all(json: dict):
         top_n = _get_top_n(json, sys.maxsize)
         ab_fet_threshold = _get_ab_fet_threshold(json, math.inf)
 
-    censor_year = _get_censor_year(json)
+    censor_year_lower, censor_year_upper = _get_censor_year(json)
     return_pmids = bool(json.get('return_pmids', False))
     query_kg = bool(json.get('query_knowledge_graph', False))
     _rel_pvalue_cutoff = float(json.get('rel_pvalue_cutoff', rel_pvalue_cutoff))
@@ -78,7 +78,7 @@ def km_work_all_vs_all(json: dict):
             if b_term in b_term_set:
                 b_term_set.remove(b_term)
 
-            ab = km.kinderminer_search(a_term, b_term, li.the_index, censor_year, return_pmids, 
+            ab = km.kinderminer_search(a_term, b_term, li.the_index, censor_year_lower, censor_year_upper, return_pmids, 
                                        top_n_articles_most_cited, top_n_articles_most_recent, scoring)
 
             if ab['pvalue'] <= ab_fet_threshold:
@@ -131,7 +131,7 @@ def km_work_all_vs_all(json: dict):
 
             # run A-C
             if not km_only:
-                ac = km.kinderminer_search(a_term, c_term, li.the_index, censor_year, return_pmids, 
+                ac = km.kinderminer_search(a_term, c_term, li.the_index, censor_year_lower, censor_year_upper, return_pmids, 
                     top_n_articles_most_cited, top_n_articles_most_recent, scoring)
 
             for ab in ab_results:
@@ -157,7 +157,7 @@ def km_work_all_vs_all(json: dict):
                         abc_result['ab_relationship'] = []
 
                         for kg in knowledge_graphs:
-                            rel = kg.query(abc_result['a_term'], abc_result['b_term'], censor_year)
+                            rel = kg.query(abc_result['a_term'], abc_result['b_term'], censor_year_lower, censor_year_upper)
                             abc_result['ab_relationship'].extend(rel)
                     else:
                         abc_result['ab_relationship'] = None
@@ -169,7 +169,7 @@ def km_work_all_vs_all(json: dict):
                     if b_term == c_term:
                         continue
 
-                    bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year, return_pmids, 
+                    bc = km.kinderminer_search(b_term, c_term, li.the_index, censor_year_lower, censor_year_upper, return_pmids, 
                                                top_n_articles_most_cited, top_n_articles_most_recent, scoring)
 
                     abc_result['c_term'] = c_term
@@ -193,7 +193,7 @@ def km_work_all_vs_all(json: dict):
                             abc_result['bc_relationship'] = []
 
                             for kg in knowledge_graphs:
-                                rel = kg.query(abc_result['b_term'], abc_result['c_term'], censor_year)
+                                rel = kg.query(abc_result['b_term'], abc_result['c_term'], censor_year_lower, censor_year_upper)
                                 abc_result['bc_relationship'].extend(rel)
                         else:
                             abc_result['bc_relationship'] = None
@@ -431,17 +431,32 @@ def _update_job_status(key, value):
     job.save_meta()
 
 def _get_censor_year(item):
+    """Extract censor year bounds from item, supporting both old and new formats."""
+    censor_year_lower = 0
+    censor_year_upper = math.inf
+    
+    # Handle backwards compatibility with single censor_year parameter (top level)
     if 'censor_year' in item:
-        censor_year = int(item['censor_year'])
-    else:
-        censor_year = math.inf
-
-    if censor_year is None or censor_year > 2100:
-        censor_year = math.inf
-    if censor_year < 0:
-        censor_year = 0
-
-    return censor_year
+        censor_year_upper = int(item['censor_year'])
+    
+    # Handle new separate upper and lower bounds (top level)
+    if 'censor_year_upper' in item:
+        censor_year_upper = int(item['censor_year_upper'])
+    if 'censor_year_lower' in item:
+        censor_year_lower = int(item['censor_year_lower'])
+    
+    # Validate bounds
+    if censor_year_upper is None or censor_year_upper > 2100:
+        censor_year_upper = math.inf
+    if censor_year_upper < 0:
+        censor_year_upper = 0
+        
+    if censor_year_lower is None or censor_year_lower < 0:
+        censor_year_lower = 0
+    if censor_year_lower > 2100:
+        censor_year_lower = math.inf
+    
+    return censor_year_lower, censor_year_upper
 
 def _get_top_n(the_dict: dict, default_val = 50):
     return int(the_dict.get('top_n', default_val))

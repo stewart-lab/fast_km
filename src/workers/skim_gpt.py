@@ -366,7 +366,8 @@ def _get_config_template():
                 "NUM_B_TERMS": 25,
                 "km_with_gpt": {
                     "ab_fet_threshold": 1,
-                    "censor_year": 2024
+                    "censor_year_upper": 2024,
+                    "censor_year_lower": 0
                 }
             },
             "km_with_gpt_direct_comp": {
@@ -378,7 +379,8 @@ def _get_config_template():
                 "NUM_B_TERMS": 25,
                 "km_with_gpt_direct_comp": {
                     "ab_fet_threshold": 1,
-                    "censor_year": 1990
+                    "censor_year_upper": 1990,
+                    "censor_year_lower": 0
                 }
             },
             "skim_with_gpt": {
@@ -392,7 +394,8 @@ def _get_config_template():
                 "skim_with_gpt": {
                     "ab_fet_threshold": 1,
                     "bc_fet_threshold": 1,
-                    "censor_year": 2025,
+                    "censor_year_upper": 2025,
+                    "censor_year_lower": 0,
                     "top_n": 300
                 }
             }
