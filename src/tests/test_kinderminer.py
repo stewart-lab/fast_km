@@ -78,10 +78,10 @@ def test_kinderminer(data_dir):
 
     # test censor year
     # also tests that the article title is queried properly
-    km_result = km.kinderminer_search('patients undergoing pancreaticoduodenectomy', 'somatostatin', idx, censor_year=2020, return_pmids=True)
+    km_result = km.kinderminer_search('patients undergoing pancreaticoduodenectomy', 'somatostatin', idx, censor_year_upper=2020, return_pmids=True)
     assert km_result['len(a_term_set)'] == 1
     assert km_result['n_articles'] == 7
-    km_result = km.kinderminer_search('patients undergoing pancreaticoduodenectomy', 'somatostatin', idx, censor_year=2020, return_pmids=True)
+    km_result = km.kinderminer_search('patients undergoing pancreaticoduodenectomy', 'somatostatin', idx, censor_year_upper=2020, return_pmids=True)
     assert km_result['len(a_term_set)'] == 1
     assert km_result['n_articles'] == 7
 
