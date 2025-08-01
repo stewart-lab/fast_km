@@ -78,6 +78,9 @@ class Index():
             censor_year_lower = 0
         if censor_year_upper < 0:
             return set()
+        if censor_year_upper > 2100:
+            censor_year_upper = math.inf
+            
         cache_key = (censor_year_lower, censor_year_upper)
 
         if cache_key not in self._date_censored_pmids:
@@ -127,7 +130,9 @@ class Index():
             censor_year_lower = 0
         if censor_year_upper < 0:
             return 0
-        
+        if censor_year_upper > 2100:
+            censor_year_upper = math.inf
+
         cache_key = (censor_year_lower, censor_year_upper)
 
         if cache_key in self._n_articles_by_pub_year:
