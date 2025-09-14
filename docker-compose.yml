@@ -1,0 +1,33 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: fast_km_new-server:build
+    ports:
+      - "8000:8000"  # HOST_PORT:CONTAINER_PORT
+      - "8501:8501"
+    volumes:
+      - ./_data:/app/_data
+      - /tmp:/tmp
+    environment:
+      - REDIS=redis:6379
+      - HIGH=${HIGH}
+      - MEDIUM=${MEDIUM}
+      - LOW=${LOW}
+      - PUBMED_API_KEY=${PUBMED_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - HTCONDOR_TOKEN=${HTCONDOR_TOKEN}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+    depends_on:
+      - redis
+    networks:
+      - fast_km_new-network
+
+  redis:
+    image: redis
+    networks:
+      - fast_km_new-network
+
+networks:
+  fast_km_new-network:
