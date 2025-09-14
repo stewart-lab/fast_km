@@ -191,6 +191,8 @@ for job in jobs:
         # Progress bar
         if status == JobStatus.STARTED and progress is not None:
             st.progress(progress / 1.0, text=status_txt)
+        elif status == JobStatus.FINISHED:
+            st.progress(1.0, text=status_txt)
         else:
             st.progress(0.0, text=status_txt)
 
