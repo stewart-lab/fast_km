@@ -104,6 +104,7 @@ IMPLEMENTATION NOTES
 
 class Index():
     def __init__(self, data_dir: str):
+        print("Starting up index...")
         self.data_dir = data_dir
         self.n_documents = 0
         self.doc_origins = set[str]()
@@ -111,6 +112,7 @@ class Index():
         self.pmid_to_citation_count = np.zeros(0, dtype=np.uint32) # saves memory vs python dict
 
         start = time.perf_counter() # DEBUG
+        print("Connecting to DBs...") # DEBUG
         self._initialize()
         self._corpus = self._get_db_connection("_corpus")
         self._index = self._get_db_connection("_index")
@@ -752,7 +754,7 @@ class Index():
         """Load metadata about the corpus."""
         print("Loading metadata...")
         
-        # load list of indexed .xml files
+        # load list of .xml files
         print("SELECT DISTINCT origin FROM doc_origins") # DEBUG
         start = time.perf_counter() # DEBUG
         self._corpus_cursor.execute('''SELECT DISTINCT origin FROM doc_origins''')
@@ -762,35 +764,24 @@ class Index():
         duration = time.perf_counter() - start # DEBUG
         print(f"  Loaded {len(self.doc_origins)} document origins in {duration:.2f} seconds") # DEBUG
         
-        print("SELECT key, value FROM metadata") # DEBUG
-        start = time.perf_counter() # DEBUG
-        self._corpus_cursor.execute('''SELECT key, value FROM metadata''')
-        metadata_rows = self._corpus_cursor.fetchall()
-        duration = time.perf_counter() - start # DEBUG
-        print(f"  Loaded {len(metadata_rows)} metadata rows in {duration:.2f} seconds") # DEBUG
+        # read pub years
+        pmid_to_year_file = "pmid_to_year.npy"
+        if os.path.exists(os.path.join(self.data_dir, pmid_to_year_file)):
+            with open(os.path.join(self.data_dir, pmid_to_year_file), 'rb') as f:
+                data_bytes = f.read()
+                self.pmid_to_pub_year = np.frombuffer(data_bytes, dtype=np.uint16)
 
-        # load pmid_to_year mapping
-        print("Loading pmid_to_year mapping...") # DEBUG
-        start = time.perf_counter() # DEBUG
-        pmid_to_pub_year_row = [row for row in metadata_rows if row[0] == 'pmid_to_year']
-        if pmid_to_pub_year_row:
-            data = pmid_to_pub_year_row[0][1]
-            self.pmid_to_pub_year = np.frombuffer(data, dtype=np.uint16)
-        duration = time.perf_counter() - start # DEBUG
-        print(f"  Loaded pmid_to_year mapping in {duration:.2f} seconds") # DEBUG
+        # read citation counts
+        pmid_to_citation_count_file = "pmid_to_citation_count.npy"
+        if os.path.exists(os.path.join(self.data_dir, pmid_to_citation_count_file)):
+            with open(os.path.join(self.data_dir, pmid_to_citation_count_file), 'rb') as f:
+                data_bytes = f.read()
+                self.pmid_to_citation_count = np.frombuffer(data_bytes, dtype=np.uint32)
 
-        # load pmid_to_citation_count mapping
-        print("Loading pmid_to_citation_count mapping...") # DEBUG
-        start = time.perf_counter() # DEBUG
-        pmid_to_citation_count_row = [row for row in metadata_rows if row[0] == 'pmid_to_citation_count']
-        if pmid_to_citation_count_row:
-            data = pmid_to_citation_count_row[0][1]
-            self.pmid_to_citation_count = np.frombuffer(data, dtype=np.uint32)
-        duration = time.perf_counter() - start # DEBUG
-        print(f"  Loaded pmid_to_citation_count mapping in {duration:.2f} seconds") # DEBUG
-
-        # count n_documents
-        self.n_documents = np.count_nonzero(self.pmid_to_pub_year).item()
+        if self.pmid_to_pub_year.size:
+            self.n_documents = np.count_nonzero(self.pmid_to_pub_year).item()
+            print(f"  Loaded pmid_to_pub_year and pmid_to_citation_count from .npy files, n_documents = {self.n_documents}") # DEBUG
+        
         print("Done loading metadata.") # DEBUG
 
     def _refresh_metadata(self, new_docs: list[Document]) -> None:
@@ -844,12 +835,16 @@ class Index():
             _pmid_to_pub_year[pmid] = np.uint16(pub_year)
             _pmid_to_citation_count[pmid] = np.uint32(citation_count)
 
-        # save to metadata
+        # save to disk
+        pmid_to_year_file = "pmid_to_year.npy"
         packed_pub_years = np.ndarray.tobytes(_pmid_to_pub_year)
+        with open(os.path.join(self.data_dir, pmid_to_year_file), 'wb') as f:
+            f.write(packed_pub_years)
+
+        pmid_to_citation_count_file = "pmid_to_citation_count.npy"
         packed_citation_counts = np.ndarray.tobytes(_pmid_to_citation_count)
-        self._corpus_cursor.execute(f'''INSERT INTO metadata (key, value) VALUES ({PH}, {PH}) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value''', ('pmid_to_year', packed_pub_years))
-        self._corpus_cursor.execute(f'''INSERT INTO metadata (key, value) VALUES ({PH}, {PH}) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value''', ('pmid_to_citation_count', packed_citation_counts))
-        self._corpus.commit()
+        with open(os.path.join(self.data_dir, pmid_to_citation_count_file), 'wb') as f:
+            f.write(packed_citation_counts)
 
         # load the new metadata
         self._load_metadata()
