@@ -48,7 +48,8 @@ def get_corpus_docs(params: GetDocumentsParams):
     for pmid in params.pmids:
         document = idx.get_document(pmid)
         if document:
-            documents.append(document)
+            doc_dict = document.to_dict()
+            documents.append(doc_dict)
     idx.close()
     return {"status": "finished", "result": documents}
 

@@ -91,7 +91,7 @@ st.markdown(f"Current time: {now_local}")
 
 # show link to the API docs
 # this won't necessarily be correct if Docker or port forwarding is used
-st.markdown("API docs are available at [http://localhost:8000/docs](http://localhost:8000/docs)")
+st.markdown(f"API docs are available at [http://localhost:8000/docs](http://localhost:8000/docs)")
 
 # list workers
 st.subheader("Workers")
@@ -99,7 +99,10 @@ queue_names = ['HIGH', 'MEDIUM', 'LOW', 'INDEXING']
 workers = Worker.all(connection=redis_conn)
 workers.sort(key=lambda w: queue_names.index(w.queues[0].name) if w.queues else "")
 for worker in workers:
-    current_job = worker.get_current_job()
+    try:
+        current_job = worker.get_current_job()
+    except Exception:
+        current_job = None
     current_job_id = current_job.id if current_job else "None"
     if worker.state in ['idle']:
         icon = "💤"

@@ -110,15 +110,20 @@ class Index():
         self.pmid_to_pub_year = np.zeros(0, dtype=np.uint16) # saves memory vs python dict
         self.pmid_to_citation_count = np.zeros(0, dtype=np.uint32) # saves memory vs python dict
 
+        start = time.perf_counter() # DEBUG
         self._initialize()
         self._corpus = self._get_db_connection("_corpus")
         self._index = self._get_db_connection("_index")
+        duration = time.perf_counter() - start # DEBUG
+        print(f"Connected to DBs in {duration:.2f} seconds") # DEBUG
+
         self._term_cache = dict[str, set[int]]()
         self._ngram_cache = dict[str, dict[int, list[int]]]()
         self._bi_grams_maybe_should_cache = dict[str, int]()
         self._idx_cursor = self._index.cursor()
         self._corpus_cursor = self._corpus.cursor()
         self._load_metadata()
+        print(f"Loaded index with {self.n_documents} documents")
 
     def add_or_update_documents(self, documents: list[Document]) -> None:
         """Add documents to the corpus"""
@@ -271,7 +276,7 @@ class Index():
         n_docs_need_indexing = 0
         doc_tables_need_indexing = []
         for doc_table in doc_tables:
-            self._corpus_cursor.execute(f'''SELECT COUNT(*) FROM {doc_table} WHERE is_indexed = 0''')
+            self._corpus_cursor.execute(f'''SELECT COUNT(pmid) FROM {doc_table} WHERE is_indexed = 0''')
             n_docs_need_indexing_table = self._corpus_cursor.fetchone()[0]
             n_docs_need_indexing += n_docs_need_indexing_table
 
@@ -286,7 +291,7 @@ class Index():
         n_shards = len(shards)
 
         # count terms in the disk cache, this is used to estimate how long the cache refresh will take
-        self._idx_cursor.execute('''SELECT COUNT(*) FROM query_cache''')
+        self._idx_cursor.execute('''SELECT COUNT(term) FROM query_cache''')
         rows = self._idx_cursor.fetchone()
         cached_term_count = rows[0] if rows else 0
 
@@ -657,11 +662,16 @@ class Index():
             raise FastKmException("Citation counts not loaded, cannot sort by citation count")
 
         _sorted = sorted(pmids, key=lambda pmid: (self.pmid_to_citation_count[pmid], pmid), reverse=True)
-        return _sorted[:top_n]
+        top_n = _sorted[:top_n]
+        # for pmid in top_n:
+        #     print(f"PMID: {pmid}, Citation Count: {self.pmid_to_citation_count[pmid]}") # DEBUG
+        return top_n
 
     def top_n_pmids_by_impact_factor(self, pmids: set[int], top_n: int = 10) -> set[int]:
         """Given a set of PMIDs, return the top N PMIDs by impact factor (highest first). 
-        Impact factor is defined as citation count / (current year - publication year + 1). PMID is used as a tiebreaker."""
+        Impact factor is defined as citation count / (current year - publication year + 0.5). 
+        The 0.5 is added to avoid division by zero in all cases.
+        PMID is used as a tiebreaker."""
         if top_n < 1:
             return set()
 
@@ -669,7 +679,7 @@ class Index():
             raise FastKmException("Citation counts not loaded, cannot sort by impact factor")
 
         current_year = datetime.datetime.now().year
-        _sorted = sorted(pmids, key=lambda pmid: (self.pmid_to_citation_count[pmid] / max(1, (current_year - self.pmid_to_pub_year[pmid] + 1)), pmid), reverse=True)
+        _sorted = sorted(pmids, key=lambda pmid: (self.pmid_to_citation_count[pmid] / (current_year - self.pmid_to_pub_year[pmid] + 0.5), pmid), reverse=True)
         return _sorted[:top_n]
 
     def close(self) -> None:
@@ -700,6 +710,12 @@ class Index():
         return conn
 
     def _initialize(self) -> None:
+        _using_sqlite = not gvars.POSTGRES_HOST
+        _corpus_exists = os.path.exists(os.path.join(self.data_dir, "_corpus.db"))
+        _index_exists = os.path.exists(os.path.join(self.data_dir, "_index.db"))
+        if _using_sqlite and _corpus_exists and _index_exists:
+            return
+
         corpus = self._get_db_connection("_corpus")
         cur = corpus.cursor()
         cur.execute(f'''CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value {BINARY_TYPE})''')
@@ -734,29 +750,48 @@ class Index():
 
     def _load_metadata(self) -> None:
         """Load metadata about the corpus."""
+        print("Loading metadata...")
+        
         # load list of indexed .xml files
+        print("SELECT DISTINCT origin FROM doc_origins") # DEBUG
+        start = time.perf_counter() # DEBUG
         self._corpus_cursor.execute('''SELECT DISTINCT origin FROM doc_origins''')
         rows = self._corpus_cursor.fetchall()
         doc_origins = {row[0] for row in rows if row[0]}
         self.doc_origins = doc_origins
-
+        duration = time.perf_counter() - start # DEBUG
+        print(f"  Loaded {len(self.doc_origins)} document origins in {duration:.2f} seconds") # DEBUG
+        
+        print("SELECT key, value FROM metadata") # DEBUG
+        start = time.perf_counter() # DEBUG
         self._corpus_cursor.execute('''SELECT key, value FROM metadata''')
         metadata_rows = self._corpus_cursor.fetchall()
+        duration = time.perf_counter() - start # DEBUG
+        print(f"  Loaded {len(metadata_rows)} metadata rows in {duration:.2f} seconds") # DEBUG
 
         # load pmid_to_year mapping
+        print("Loading pmid_to_year mapping...") # DEBUG
+        start = time.perf_counter() # DEBUG
         pmid_to_pub_year_row = [row for row in metadata_rows if row[0] == 'pmid_to_year']
         if pmid_to_pub_year_row:
             data = pmid_to_pub_year_row[0][1]
             self.pmid_to_pub_year = np.frombuffer(data, dtype=np.uint16)
+        duration = time.perf_counter() - start # DEBUG
+        print(f"  Loaded pmid_to_year mapping in {duration:.2f} seconds") # DEBUG
 
         # load pmid_to_citation_count mapping
+        print("Loading pmid_to_citation_count mapping...") # DEBUG
+        start = time.perf_counter() # DEBUG
         pmid_to_citation_count_row = [row for row in metadata_rows if row[0] == 'pmid_to_citation_count']
         if pmid_to_citation_count_row:
             data = pmid_to_citation_count_row[0][1]
             self.pmid_to_citation_count = np.frombuffer(data, dtype=np.uint32)
+        duration = time.perf_counter() - start # DEBUG
+        print(f"  Loaded pmid_to_citation_count mapping in {duration:.2f} seconds") # DEBUG
 
         # count n_documents
         self.n_documents = np.count_nonzero(self.pmid_to_pub_year).item()
+        print("Done loading metadata.") # DEBUG
 
     def _refresh_metadata(self, new_docs: list[Document]) -> None:
         """Update the corpus database's metadata table."""
