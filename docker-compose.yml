@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     image: fast_km_new-server:build
     ports:
-      - "8000:8000"  # HOST_PORT:CONTAINER_PORT
+      - "${API_PORT}:${API_PORT}"  # HOST_PORT:CONTAINER_PORT
       - "8501:8501"
     volumes:
       - ./_data:/app/_data

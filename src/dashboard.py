@@ -130,7 +130,7 @@ for job in jobs:
 
     try:
         max_len = 80
-        description = job.description.split('.')[-1]
+        description = job.description if job.description else "No description"
         description = description if len(description) < max_len else description[:max_len - 3] + "..."
     except Exception:
         description = "exception"
