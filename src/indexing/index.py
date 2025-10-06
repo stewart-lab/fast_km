@@ -104,21 +104,28 @@ IMPLEMENTATION NOTES
 
 class Index():
     def __init__(self, data_dir: str):
+        print("Starting up index...")
         self.data_dir = data_dir
         self.n_documents = 0
         self.doc_origins = set[str]()
         self.pmid_to_pub_year = np.zeros(0, dtype=np.uint16) # saves memory vs python dict
         self.pmid_to_citation_count = np.zeros(0, dtype=np.uint32) # saves memory vs python dict
 
+        start = time.perf_counter() # DEBUG
+        print("Connecting to DBs...") # DEBUG
         self._initialize()
         self._corpus = self._get_db_connection("_corpus")
         self._index = self._get_db_connection("_index")
+        duration = time.perf_counter() - start # DEBUG
+        print(f"Connected to DBs in {duration:.2f} seconds") # DEBUG
+
         self._term_cache = dict[str, set[int]]()
         self._ngram_cache = dict[str, dict[int, list[int]]]()
         self._bi_grams_maybe_should_cache = dict[str, int]()
         self._idx_cursor = self._index.cursor()
         self._corpus_cursor = self._corpus.cursor()
         self._load_metadata()
+        print(f"Loaded index with {self.n_documents} documents")
 
     def add_or_update_documents(self, documents: list[Document]) -> None:
         """Add documents to the corpus"""
@@ -657,11 +664,16 @@ class Index():
             raise FastKmException("Citation counts not loaded, cannot sort by citation count")
 
         _sorted = sorted(pmids, key=lambda pmid: (self.pmid_to_citation_count[pmid], pmid), reverse=True)
-        return _sorted[:top_n]
+        top_n = _sorted[:top_n]
+        # for pmid in top_n:
+        #     print(f"PMID: {pmid}, Citation Count: {self.pmid_to_citation_count[pmid]}") # DEBUG
+        return top_n
 
     def top_n_pmids_by_impact_factor(self, pmids: set[int], top_n: int = 10) -> set[int]:
         """Given a set of PMIDs, return the top N PMIDs by impact factor (highest first). 
-        Impact factor is defined as citation count / (current year - publication year + 1). PMID is used as a tiebreaker."""
+        Impact factor is defined as citation count / (current year - publication year + 0.5). 
+        The 0.5 is added to avoid division by zero in all cases.
+        PMID is used as a tiebreaker."""
         if top_n < 1:
             return set()
 
@@ -669,7 +681,7 @@ class Index():
             raise FastKmException("Citation counts not loaded, cannot sort by impact factor")
 
         current_year = datetime.datetime.now().year
-        _sorted = sorted(pmids, key=lambda pmid: (self.pmid_to_citation_count[pmid] / max(1, (current_year - self.pmid_to_pub_year[pmid] + 1)), pmid), reverse=True)
+        _sorted = sorted(pmids, key=lambda pmid: (self.pmid_to_citation_count[pmid] / (current_year - self.pmid_to_pub_year[pmid] + 0.5), pmid), reverse=True)
         return _sorted[:top_n]
 
     def close(self) -> None:
@@ -700,6 +712,12 @@ class Index():
         return conn
 
     def _initialize(self) -> None:
+        _using_sqlite = not gvars.POSTGRES_HOST
+        _corpus_exists = os.path.exists(os.path.join(self.data_dir, "_corpus.db"))
+        _index_exists = os.path.exists(os.path.join(self.data_dir, "_index.db"))
+        if _using_sqlite and _corpus_exists and _index_exists:
+            return
+
         corpus = self._get_db_connection("_corpus")
         cur = corpus.cursor()
         cur.execute(f'''CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value {BINARY_TYPE})''')
@@ -734,29 +752,37 @@ class Index():
 
     def _load_metadata(self) -> None:
         """Load metadata about the corpus."""
-        # load list of indexed .xml files
+        print("Loading metadata...")
+        
+        # load list of .xml files
+        print("SELECT DISTINCT origin FROM doc_origins") # DEBUG
+        start = time.perf_counter() # DEBUG
         self._corpus_cursor.execute('''SELECT DISTINCT origin FROM doc_origins''')
         rows = self._corpus_cursor.fetchall()
         doc_origins = {row[0] for row in rows if row[0]}
         self.doc_origins = doc_origins
+        duration = time.perf_counter() - start # DEBUG
+        print(f"  Loaded {len(self.doc_origins)} document origins in {duration:.2f} seconds") # DEBUG
+        
+        # read pub years
+        pmid_to_year_file = "pmid_to_year.npy"
+        if os.path.exists(os.path.join(self.data_dir, pmid_to_year_file)):
+            with open(os.path.join(self.data_dir, pmid_to_year_file), 'rb') as f:
+                data_bytes = f.read()
+                self.pmid_to_pub_year = np.frombuffer(data_bytes, dtype=np.uint16)
 
-        self._corpus_cursor.execute('''SELECT key, value FROM metadata''')
-        metadata_rows = self._corpus_cursor.fetchall()
+        # read citation counts
+        pmid_to_citation_count_file = "pmid_to_citation_count.npy"
+        if os.path.exists(os.path.join(self.data_dir, pmid_to_citation_count_file)):
+            with open(os.path.join(self.data_dir, pmid_to_citation_count_file), 'rb') as f:
+                data_bytes = f.read()
+                self.pmid_to_citation_count = np.frombuffer(data_bytes, dtype=np.uint32)
 
-        # load pmid_to_year mapping
-        pmid_to_pub_year_row = [row for row in metadata_rows if row[0] == 'pmid_to_year']
-        if pmid_to_pub_year_row:
-            data = pmid_to_pub_year_row[0][1]
-            self.pmid_to_pub_year = np.frombuffer(data, dtype=np.uint16)
-
-        # load pmid_to_citation_count mapping
-        pmid_to_citation_count_row = [row for row in metadata_rows if row[0] == 'pmid_to_citation_count']
-        if pmid_to_citation_count_row:
-            data = pmid_to_citation_count_row[0][1]
-            self.pmid_to_citation_count = np.frombuffer(data, dtype=np.uint32)
-
-        # count n_documents
-        self.n_documents = np.count_nonzero(self.pmid_to_pub_year).item()
+        if self.pmid_to_pub_year.size:
+            self.n_documents = np.count_nonzero(self.pmid_to_pub_year).item()
+            print(f"  Loaded pmid_to_pub_year and pmid_to_citation_count from .npy files, n_documents = {self.n_documents}") # DEBUG
+        
+        print("Done loading metadata.") # DEBUG
 
     def _refresh_metadata(self, new_docs: list[Document]) -> None:
         """Update the corpus database's metadata table."""
@@ -809,12 +835,16 @@ class Index():
             _pmid_to_pub_year[pmid] = np.uint16(pub_year)
             _pmid_to_citation_count[pmid] = np.uint32(citation_count)
 
-        # save to metadata
+        # save to disk
+        pmid_to_year_file = "pmid_to_year.npy"
         packed_pub_years = np.ndarray.tobytes(_pmid_to_pub_year)
+        with open(os.path.join(self.data_dir, pmid_to_year_file), 'wb') as f:
+            f.write(packed_pub_years)
+
+        pmid_to_citation_count_file = "pmid_to_citation_count.npy"
         packed_citation_counts = np.ndarray.tobytes(_pmid_to_citation_count)
-        self._corpus_cursor.execute(f'''INSERT INTO metadata (key, value) VALUES ({PH}, {PH}) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value''', ('pmid_to_year', packed_pub_years))
-        self._corpus_cursor.execute(f'''INSERT INTO metadata (key, value) VALUES ({PH}, {PH}) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value''', ('pmid_to_citation_count', packed_citation_counts))
-        self._corpus.commit()
+        with open(os.path.join(self.data_dir, pmid_to_citation_count_file), 'wb') as f:
+            f.write(packed_citation_counts)
 
         # load the new metadata
         self._load_metadata()

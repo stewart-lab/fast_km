@@ -6,6 +6,7 @@ from src.jobs.kinderminer.params import KinderMinerJobParams, validate_params
 
 def run_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
     validate_params(params)
+    print("Running Kinderminer job...")
 
     if params.paired:
         return _run_paired_km(params)

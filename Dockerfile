@@ -12,6 +12,9 @@ RUN pip install --upgrade pip
 RUN pip install -q -r requirements.txt
 RUN pip install htcondor
 
+# install sqlite3, mostly for debugging
+RUN apt-get update && apt-get install -y sqlite3
+
 ## copy source code into Docker image.
 ## this is done last to take advantage of Docker layer caching
 ## so that we don't have to reinstall packages if only source code changes.
