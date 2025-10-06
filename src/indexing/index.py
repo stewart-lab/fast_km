@@ -104,20 +104,15 @@ IMPLEMENTATION NOTES
 
 class Index():
     def __init__(self, data_dir: str):
-        print("Starting up index...")
         self.data_dir = data_dir
         self.n_documents = 0
         self.doc_origins = set[str]()
         self.pmid_to_pub_year = np.zeros(0, dtype=np.uint16) # saves memory vs python dict
         self.pmid_to_citation_count = np.zeros(0, dtype=np.uint32) # saves memory vs python dict
 
-        start = time.perf_counter() # DEBUG
-        print("Connecting to DBs...") # DEBUG
         self._initialize()
         self._corpus = self._get_db_connection("_corpus")
         self._index = self._get_db_connection("_index")
-        duration = time.perf_counter() - start # DEBUG
-        print(f"Connected to DBs in {duration:.2f} seconds") # DEBUG
 
         self._term_cache = dict[str, set[int]]()
         self._ngram_cache = dict[str, dict[int, list[int]]]()
@@ -125,7 +120,6 @@ class Index():
         self._idx_cursor = self._index.cursor()
         self._corpus_cursor = self._corpus.cursor()
         self._load_metadata()
-        print(f"Loaded index with {self.n_documents} documents")
 
     def add_or_update_documents(self, documents: list[Document]) -> None:
         """Add documents to the corpus"""
@@ -665,8 +659,6 @@ class Index():
 
         _sorted = sorted(pmids, key=lambda pmid: (self.pmid_to_citation_count[pmid], pmid), reverse=True)
         top_n = _sorted[:top_n]
-        # for pmid in top_n:
-        #     print(f"PMID: {pmid}, Citation Count: {self.pmid_to_citation_count[pmid]}") # DEBUG
         return top_n
 
     def top_n_pmids_by_impact_factor(self, pmids: set[int], top_n: int = 10) -> set[int]:
@@ -752,17 +744,11 @@ class Index():
 
     def _load_metadata(self) -> None:
         """Load metadata about the corpus."""
-        print("Loading metadata...")
-        
         # load list of .xml files
-        print("SELECT DISTINCT origin FROM doc_origins") # DEBUG
-        start = time.perf_counter() # DEBUG
         self._corpus_cursor.execute('''SELECT DISTINCT origin FROM doc_origins''')
         rows = self._corpus_cursor.fetchall()
         doc_origins = {row[0] for row in rows if row[0]}
         self.doc_origins = doc_origins
-        duration = time.perf_counter() - start # DEBUG
-        print(f"  Loaded {len(self.doc_origins)} document origins in {duration:.2f} seconds") # DEBUG
         
         # read pub years
         pmid_to_year_file = "pmid_to_year.npy"
@@ -780,9 +766,6 @@ class Index():
 
         if self.pmid_to_pub_year.size:
             self.n_documents = np.count_nonzero(self.pmid_to_pub_year).item()
-            print(f"  Loaded pmid_to_pub_year and pmid_to_citation_count from .npy files, n_documents = {self.n_documents}") # DEBUG
-        
-        print("Done loading metadata.") # DEBUG
 
     def _refresh_metadata(self, new_docs: list[Document]) -> None:
         """Update the corpus database's metadata table."""
