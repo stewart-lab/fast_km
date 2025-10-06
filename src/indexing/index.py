@@ -572,7 +572,8 @@ class Index():
         if start_year > MIN_CENSOR_YEAR or end_year < MAX_CENSOR_YEAR:
             self.count_documents(start_year, end_year) # builds PMID set for this year range
             year_pmids = self._term_cache[(start_year, end_year)]
-            term_pmids = term_pmids & year_pmids
+            term_pmids = (term_pmids & year_pmids)
+            term_pmids = set(int(pmid) for pmid in term_pmids)
 
         # save in memcache
         self._term_cache[term] = term_pmids
