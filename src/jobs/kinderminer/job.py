@@ -34,7 +34,7 @@ def run_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
 
         idx.delete_term_from_memory(b_term)
 
-    results.sort(key=lambda ab: ab['ab_pred_score'], reverse=True)
+    results.sort(key=lambda ab: ab['ab_prediction_score'], reverse=True)
     idx.close()
 
     report_progress(1.0)
@@ -76,7 +76,7 @@ def _run_paired_km(params: KinderMinerJobParams) -> list[dict]:
         if b_term not in repeat_terms:
             idx.delete_term_from_memory(b_term)
 
-    results.sort(key=lambda ab: ab['ab_pred_score'], reverse=True)
+    results.sort(key=lambda ab: ab['ab_prediction_score'], reverse=True)
 
     idx.close()
     report_progress(1.0)
