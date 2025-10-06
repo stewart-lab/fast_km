@@ -8,14 +8,10 @@ services:
       - "8000:8000"  # HOST_PORT:CONTAINER_PORT
       - "8501:8501"
     volumes:
-      # - ./_data:/app/_data
+      - ./_data:/app/_data
       - /tmp:/tmp
     environment:
-      - REDIS=redis:6379 # set this to whatever you use in this docker-compose file
-      - POSTGRES_HOST=postgres # set this to whatever you use in this docker-compose file
-      - POSTGRES_PORT=5432 # set this to whatever you use in this docker-compose file
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - REDIS=redis:6379
       - HIGH=${HIGH}
       - MEDIUM=${MEDIUM}
       - LOW=${LOW}
@@ -27,19 +23,11 @@ services:
       - TIMEZONE=${TIMEZONE}
     depends_on:
       - redis
-      - postgres
     networks:
       - fast_km_new-network
 
   redis:
     image: redis
-    networks:
-      - fast_km_new-network
-
-  postgres:
-    image: postgres
-    volumes:
-      - ./_pgdata:/var/lib/postgresql/data
     networks:
       - fast_km_new-network
 

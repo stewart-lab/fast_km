@@ -271,7 +271,7 @@ class Index():
         n_docs_need_indexing = 0
         doc_tables_need_indexing = []
         for doc_table in doc_tables:
-            self._corpus_cursor.execute(f'''SELECT COUNT(*) FROM {doc_table} WHERE is_indexed = 0''')
+            self._corpus_cursor.execute(f'''SELECT COUNT(pmid) FROM {doc_table} WHERE is_indexed = 0''')
             n_docs_need_indexing_table = self._corpus_cursor.fetchone()[0]
             n_docs_need_indexing += n_docs_need_indexing_table
 
@@ -286,7 +286,7 @@ class Index():
         n_shards = len(shards)
 
         # count terms in the disk cache, this is used to estimate how long the cache refresh will take
-        self._idx_cursor.execute('''SELECT COUNT(*) FROM query_cache''')
+        self._idx_cursor.execute('''SELECT COUNT(term) FROM query_cache''')
         rows = self._idx_cursor.fetchone()
         cached_term_count = rows[0] if rows else 0
 
