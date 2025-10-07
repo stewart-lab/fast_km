@@ -7,7 +7,6 @@ from src.jobs.kinderminer.params import KinderMinerJobParams
 
 def run_serial_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
     validate_params(params)
-    print("Running Serial Kinderminer job...")
 
     if params.paired:
         return _run_paired_skim(params)
@@ -42,7 +41,7 @@ def run_serial_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
         idx.delete_term_from_memory(b_term)
 
     # take top N AB results
-    ab_results.sort(key=lambda ab: ab['ab_prediction_score'], reverse=True)
+    ab_results.sort(key=lambda ab: ab['ab_pred_score'], reverse=True)
     top_ab_results = ab_results[:params.top_n_ab + top_n_ab_padding]
 
     # test BC and AC pairs for each top AB result
@@ -94,8 +93,8 @@ def run_serial_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
 
         idx.delete_term_from_memory(c_term)
 
-    # sort by bc_prediction_score descending
-    abc_results.sort(key=lambda abc: abc['bc_prediction_score'], reverse=True)
+    # sort by bc_pred_score descending
+    abc_results.sort(key=lambda abc: abc['bc_pred_score'], reverse=True)
 
     if top_n_ab_padding > 0:
         # sometimes high prediction score A-B pairs with no valid B-C pairs will 
@@ -163,8 +162,8 @@ def _run_paired_skim(params: KinderMinerJobParams) -> list[dict]:
         if c_term not in repeat_terms:
             idx.delete_term_from_memory(c_term)
 
-    # sort by bc_prediction_score descending
-    abc_results.sort(key=lambda abc: abc['bc_prediction_score'], reverse=True)
+    # sort by bc_pred_score descending
+    abc_results.sort(key=lambda abc: abc['bc_pred_score'], reverse=True)
 
     idx.close()
     report_progress(1.0)

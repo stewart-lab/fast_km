@@ -25,7 +25,7 @@ def kinderminer_search(
 
     # search documents in the corpus for the ABC terms
     n_total_abstracts = idx.count_documents(censor_year_lower, censor_year_upper)
-    result['n_articles'] = n_total_abstracts
+    result['total_count'] = n_total_abstracts
     if a_term and b_term:
         a_term_set = idx.search_documents(a_term, censor_year_lower, censor_year_upper)
         b_term_set = idx.search_documents(b_term, censor_year_lower, censor_year_upper)
@@ -45,40 +45,40 @@ def kinderminer_search(
         ab_sort_ratio = _compute_sort_ratio(ab_table)
         ab_prediction_score = _compute_prediction_score(ab_pvalue, ab_sort_ratio)
         result['ab_sort_ratio'] = ab_sort_ratio
-        result['ab_prediction_score'] = ab_prediction_score
+        result['ab_pred_score'] = ab_prediction_score
         result['ab_pvalue'] = ab_pvalue
     if b_term and c_term:
         bc_pvalue = _compute_pvalue(bc_table, scoring)
         bc_sort_ratio = _compute_sort_ratio(bc_table)
         bc_prediction_score = _compute_prediction_score(bc_pvalue, bc_sort_ratio)
         result['bc_sort_ratio'] = bc_sort_ratio
-        result['bc_prediction_score'] = bc_prediction_score
+        result['bc_pred_score'] = bc_prediction_score
         result['bc_pvalue'] = bc_pvalue
     if a_term and c_term:
         ac_pvalue = _compute_pvalue(ac_table, scoring)
         ac_sort_ratio = _compute_sort_ratio(ac_table)
         ac_prediction_score = _compute_prediction_score(ac_pvalue, ac_sort_ratio)
         result['ac_sort_ratio'] = ac_sort_ratio
-        result['ac_prediction_score'] = ac_prediction_score
+        result['ac_pred_score'] = ac_prediction_score
         result['ac_pvalue'] = ac_pvalue
 
     # get information about the sets
     if a_term:
         result['a_term'] = a_term
-        result['len(a_term_set)'] = len(a_term_set)
+        result['a_count'] = len(a_term_set)
     if b_term:
         result['b_term'] = b_term
-        result['len(b_term_set)'] = len(b_term_set)
+        result['b_count'] = len(b_term_set)
     if c_term:
         result['c_term'] = c_term
-        result['len(c_term_set)'] = len(c_term_set)
+        result['c_count'] = len(c_term_set)
 
     if a_term and b_term:
-        result['len(a_b_intersect)'] = ab_table[0][0]
+        result['ab_count'] = ab_table[0][0]
     if b_term and c_term:
-        result['len(b_c_intersect)'] = bc_table[0][0]
+        result['bc_count'] = bc_table[0][0]
     if a_term and c_term:
-        result['len(a_c_intersect)'] = ac_table[0][0]
+        result['ac_count'] = ac_table[0][0]
 
     # report PMID intersections
     if return_pmids:
