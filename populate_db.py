@@ -1,6 +1,7 @@
 import sys
 import os
 import ftplib
+import json
 import time
 import requests
 from src.documents.xml_parsing import read_xml_content, parse_xml_content
@@ -27,10 +28,36 @@ def main():
         remote_filename = file[1]
         xml_content = _download_xml(ftp_dir, remote_filename, xml_folder)
         docs = parse_xml_content(xml_content, remote_filename)
-        docs_dicts = [doc.to_dict() for doc in docs]
+        payload = {"documents": [doc.to_dict() for doc in docs]}
 
-        response = requests.post(doc_url, json={"documents": docs_dicts}).json()
-        print(f"Added {len(docs_dicts)} documents from {remote_filename}")
+        response = requests.post(doc_url, json=payload).json()
+        print(f"Added {len(payload['documents'])} documents from {remote_filename}")
+
+    # add icite citation count data if available
+    # icite data can be downloaded from: https://nih.figshare.com/collections/iCite_Database_Snapshots_NIH_Open_Citation_Collection_/4586573
+    # download the .tar.gz and extract the .json files.
+    icite_folder = '_icite'
+    if os.path.exists(icite_folder):
+        icite_jsons = [f for f in os.listdir(icite_folder) if f.endswith('.json')]
+        for icite_json in icite_jsons:
+            print(f"Processing {icite_json}...")
+            payload = {"documents": []}
+            with open(os.path.join(icite_folder, icite_json), 'r') as f:
+                for line in f:
+                    try:
+                        _json = json.loads(line)
+                        pmid = _json['pmid']
+                        citation_count = _json.get('citation_count', 0)
+                        payload_item = {"pmid": pmid, "citation_count": citation_count}
+                        payload["documents"].append(payload_item)
+                    except json.JSONDecodeError:
+                        print(f"Error decoding JSON from line in {icite_json}: {line}")
+            
+            print(f"Adding citation count data for {len(payload['documents'])} documents from {icite_json}")
+            response = requests.post(doc_url, json=payload).json()
+            print(f"Response: {response}")
+    else:
+        print("No _icite folder found, skipping adding citation count data.")
     
     # index docs
     response = requests.post(indexing_url, json={}).json()
@@ -40,7 +67,7 @@ def main():
         print("Indexing status: ", response)
         if response['status'] in ['finished', 'failed']:
             break
-        time.sleep(10)
+        time.sleep(60)
 
 def _connect_to_ftp_server(ftp_dir: str, ftp_address: str = 'ftp.ncbi.nlm.nih.gov') -> ftplib.FTP:
     """Connect to the FTP server and return the FTP object."""
