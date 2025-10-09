@@ -12,10 +12,6 @@ env_workers_high   = os.getenv('HIGH', None)
 env_workers_medium = os.getenv('MEDIUM', None)
 env_workers_low    = os.getenv('LOW', None)
 env_redis          = os.getenv('REDIS', None)
-env_postgres_host  = os.getenv('POSTGRES_HOST', '')
-env_postgres_port  = os.getenv('POSTGRES_PORT', '')
-env_postgres_user  = os.getenv('POSTGRES_USER', '')
-env_postgres_pass  = os.getenv('POSTGRES_PASSWORD', '')
 env_api_port       = os.getenv('API_PORT', None)
 env_pubmed_key     = os.getenv('PUBMED_API_KEY', '')
 env_openai_key     = os.getenv('OPENAI_API_KEY', '')
@@ -57,10 +53,6 @@ gvars.SECRET_OPENAI_API_KEY = env_openai_key
 gvars.SECRET_HTCONDOR_TOKEN = env_htcondor_token
 gvars.SECRET_DEEPSEEK_API_KEY = env_deepseek_key
 gvars.timezone = args.timezone
-gvars.POSTGRES_HOST = env_postgres_host
-gvars.POSTGRES_PORT = int(env_postgres_port) if env_postgres_port else 0
-gvars.POSTGRES_USER = env_postgres_user
-gvars.POSTGRES_PASSWORD = env_postgres_pass
 
 if not gvars.SECRET_PUBMED_API_KEY:
     print("WARNING: No PubMed API key set. Hypothesis evaluation jobs will fail.")

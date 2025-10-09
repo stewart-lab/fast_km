@@ -6,12 +6,6 @@ redis_host = "no_redis_host"
 redis_port = 0
 fastapi_port = 0
 
-# postgres connection info
-POSTGRES_HOST = ""
-POSTGRES_PORT = 0
-POSTGRES_USER = ""
-POSTGRES_PASSWORD = ""
-
 # censoring year limits for KM/SKiM searches
 MIN_CENSOR_YEAR = 1000
 MAX_CENSOR_YEAR = 2100

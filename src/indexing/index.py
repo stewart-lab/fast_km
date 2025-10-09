@@ -6,7 +6,6 @@ import uuid
 import zlib
 import sqlite3
 import msgpack
-import psycopg
 import numpy as np
 from src.fast_km_exception import FastKmException
 from src.documents.document import Document
@@ -15,16 +14,14 @@ import src.global_vars as gvars
 
 MIN_CENSOR_YEAR = gvars.MIN_CENSOR_YEAR
 MAX_CENSOR_YEAR = gvars.MAX_CENSOR_YEAR
-BINARY_TYPE = "BLOB" if not gvars.POSTGRES_HOST else "BYTEA"
-PH = "?" if not gvars.POSTGRES_HOST else "%s"
 
 """
 PubMed Abstract Indexing System
 ================================================
 This overview was written by Claude Opus 4.1 and revised by a human for accuracy.
 
-This class implements an inverted index for searching ~40 million PubMed 
-abstracts with the goal of achieving:
+This class implements an inverted index for searching ~40 million PubMed abstracts 
+with the goal of achieving:
   - Query latency: <10ms per search (typically 1ms or less)
   - Memory usage: <8GB peak
   - Initial index build: ~24 hours
@@ -153,7 +150,7 @@ class Index():
                 doc_version_table_inserts = list[tuple]()
 
                 # look up existing documents
-                cursor.execute(f'''SELECT * FROM {doc_table} WHERE pmid in ({','.join(f'{PH}' for _ in batch)})''', batch)
+                cursor.execute(f'''SELECT * FROM {doc_table} WHERE pmid in ({','.join('?' for _ in batch)})''', batch)
                 current_doc_versions = cursor.fetchall()
                 current_versions = {doc[2]: doc for doc in current_doc_versions} # pmid -> row
 
@@ -217,7 +214,7 @@ class Index():
                                     body,
                                     origin,
                                     citation_count
-                                ) VALUES ({PH}, {PH}, {PH}, {PH}, {PH}, {PH}, {PH}, {PH}, {PH})
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT (pmid) DO UPDATE SET
                                     uuid = EXCLUDED.uuid,
                                     is_indexed = EXCLUDED.is_indexed,
@@ -240,7 +237,7 @@ class Index():
                                     body,
                                     origin,
                                     citation_count
-                                ) VALUES ({PH}, {PH}, {PH}, {PH}, {PH}, {PH}, {PH}, {PH}, {PH})
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT (uuid) DO UPDATE SET
                                     is_indexed = EXCLUDED.is_indexed,
                                     pmid = EXCLUDED.pmid,
@@ -255,7 +252,7 @@ class Index():
         # update the doc_origins table with new origin name(s) - likely just one .xml file
         origins = {abstract.origin for abstract in documents if abstract.origin}
         if origins:
-            cursor.executemany(f'''INSERT INTO doc_origins (origin) VALUES ({PH})''', [(origin,) for origin in origins])
+            cursor.executemany(f'''INSERT INTO doc_origins (origin) VALUES (?)''', [(origin,) for origin in origins])
 
         # commit changes
         self._corpus.commit()
@@ -326,7 +323,7 @@ class Index():
 
                 for fragmented_shard in sorted(shard_to_ngrams.keys()):
                     ngrams = shard_to_ngrams[fragmented_shard]
-                    self._idx_cursor.execute(f'''CREATE TABLE IF NOT EXISTS {fragmented_shard} (ngram TEXT, data {BINARY_TYPE})''')
+                    self._idx_cursor.execute(f'''CREATE TABLE IF NOT EXISTS {fragmented_shard} (ngram TEXT, data BLOB)''')
 
                     for ngram in ngrams:
                         data_fragment = index_update[ngram]
@@ -334,13 +331,13 @@ class Index():
                             data_fragment = list(data_fragment)
                         data_fragment_encoded = msgpack.dumps(data_fragment)
                         # TODO: bulk insert
-                        self._idx_cursor.execute(f'''INSERT INTO {fragmented_shard} (ngram, data) VALUES ({PH}, {PH})''', (ngram, data_fragment_encoded))
+                        self._idx_cursor.execute(f'''INSERT INTO {fragmented_shard} (ngram, data) VALUES (?, ?)''', (ngram, data_fragment_encoded))
 
                 # mark the documents as indexed
                 update_cursor = self._corpus.cursor()
                 for doc_row in batch:
                     pmid = doc_row[0]
-                    update_cursor.execute(f'''UPDATE {doc_table} SET is_indexed = 1 WHERE pmid = {PH}''', (pmid,))
+                    update_cursor.execute(f'''UPDATE {doc_table} SET is_indexed = 1 WHERE pmid = ?''', (pmid,))
 
                 # commit the batch
                 self._index.commit()
@@ -366,7 +363,7 @@ class Index():
             if indexed_versions:
                 # get the current versions
                 pmids = list(indexed_versions.keys())
-                self._corpus_cursor.execute(f'''SELECT pmid, uuid FROM {doc_table} WHERE pmid IN ({','.join(f'{PH}' for _ in pmids)})''', pmids)
+                self._corpus_cursor.execute(f'''SELECT pmid, uuid FROM {doc_table} WHERE pmid IN ({','.join('?' for _ in pmids)})''', pmids)
                 current_versions = {row[0]: row[1] for row in self._corpus_cursor.fetchall()}
 
                 # if indexed UUID != current UUID, then it requires re-indexing
@@ -376,7 +373,7 @@ class Index():
                 # the current version's data is in the fragmented shard.
                 # so all we have to do is delete the (old) indexed version's data from the shard
                 # and the defragmentation will take care of the rest.
-                self._corpus_cursor.execute('''SELECT pmid, pub_year, title, abstract, origin FROM document_versions WHERE is_indexed = 1 AND pmid IN ({})'''.format(','.join(f'{PH}' for _ in pmids_to_reindex)), pmids_to_reindex)
+                self._corpus_cursor.execute('''SELECT pmid, pub_year, title, abstract, origin FROM document_versions WHERE is_indexed = 1 AND pmid IN ({})'''.format(','.join('?' for _ in pmids_to_reindex)), pmids_to_reindex)
                 while True:
                     batch = self._corpus_cursor.fetchmany(doc_batch_size)
                     if not batch:
@@ -391,7 +388,7 @@ class Index():
                     # update the data for each n-gram
                     for ngram in index_update:
                         shard = _ngram_to_shard_name(ngram)
-                        self._idx_cursor.execute(f'''SELECT * FROM {shard} WHERE ngram = {PH}''', (ngram,))
+                        self._idx_cursor.execute(f'''SELECT * FROM {shard} WHERE ngram = ?''', (ngram,))
                         rows = self._idx_cursor.fetchall()
                         updated_rows = []
 
@@ -425,11 +422,11 @@ class Index():
                             updated_rows.append((uuid, ngram, encoded, size))
 
                         # delete old version's data from the shard
-                        self._idx_cursor.execute(f'''DELETE FROM {shard} WHERE uuid IN ({','.join(f'{PH}' for _ in updated_rows)})''', [row[0] for row in updated_rows])
+                        self._idx_cursor.execute(f'''DELETE FROM {shard} WHERE uuid IN ({','.join('?' for _ in updated_rows)})''', [row[0] for row in updated_rows])
 
                         # insert rows w/ updated data into the shard
                         for row in updated_rows:
-                            self._idx_cursor.execute(f'''INSERT INTO {shard} (uuid, ngram, data, size) VALUES ({PH}, {PH}, {PH}, {PH})''', row)
+                            self._idx_cursor.execute(f'''INSERT INTO {shard} (uuid, ngram, data, size) VALUES (?, ?, ?, ?)''', row)
 
                     # update document_versions table so there's no 'is_indexed' mismatch anymore
                     cursor = self._corpus.cursor()
@@ -437,8 +434,8 @@ class Index():
                         pmid = doc_row[0]
                         previous_version = indexed_versions[pmid]
                         current_version = current_versions[pmid]
-                        cursor.execute(f'''UPDATE document_versions SET is_indexed = 0 WHERE uuid = {PH}''', (previous_version,))
-                        cursor.execute(f'''UPDATE document_versions SET is_indexed = 1 WHERE uuid = {PH}''', (current_version,))
+                        cursor.execute(f'''UPDATE document_versions SET is_indexed = 0 WHERE uuid = ?''', (previous_version,))
+                        cursor.execute(f'''UPDATE document_versions SET is_indexed = 1 WHERE uuid = ?''', (current_version,))
                     self._corpus.commit()
                     cursor.close()
 
@@ -482,7 +479,7 @@ class Index():
     def get_document(self, pmid: int) -> Document | None:
         """Get a document from the corpus by PMID"""
         table_name = _pmid_to_table_name(pmid)
-        self._corpus_cursor.execute(f'''SELECT pmid, pub_year, title, abstract, body, origin, citation_count FROM {table_name} WHERE pmid = {PH}''', (pmid,))
+        self._corpus_cursor.execute(f'''SELECT pmid, pub_year, title, abstract, body, origin, citation_count FROM {table_name} WHERE pmid = ?''', (pmid,))
         row = self._corpus_cursor.fetchone()
         if row:
             return Document(
@@ -531,7 +528,7 @@ class Index():
 
             # check disk cache for bigrams+
             if gram_n > 1:
-                self._idx_cursor.execute(f'''SELECT data FROM query_cache WHERE term = {PH}''', (subterm,))
+                self._idx_cursor.execute(f'''SELECT data FROM query_cache WHERE term = ?''', (subterm,))
                 row = self._idx_cursor.fetchone()
                 if row:
                     data = row[0]
@@ -553,11 +550,9 @@ class Index():
                 cache_retries = 10
                 for _ in range(cache_retries):
                     try:
-                        if not gvars.POSTGRES_HOST:
-                            self._idx_cursor.execute(f'''INSERT OR REPLACE INTO query_cache (term, data) VALUES ({PH}, {PH})''', (subterm, data))
-                            self._index.commit()
-                            break
-                        # TODO: handle postgres case
+                        self._idx_cursor.execute(f'''INSERT OR REPLACE INTO query_cache (term, data) VALUES (?, ?)''', (subterm, data))
+                        self._index.commit()
+                        break
                     except Exception as e:
                         print(f"Error caching query '{subterm}' to disk, retrying. Error message: {e}")
                         time.sleep(0.1)
@@ -685,35 +680,19 @@ class Index():
         self._corpus.close()
 
     def _get_db_connection(self, db_name: str):
-        if gvars.POSTGRES_HOST:
-            # create db
-            conn = psycopg.connect(f"dbname=postgres user={gvars.POSTGRES_USER} password={gvars.POSTGRES_PASSWORD} host={gvars.POSTGRES_HOST} port={gvars.POSTGRES_PORT}")
-            conn.autocommit = True
-            with conn.cursor() as cur:
-                try:
-                    cur.execute(f"CREATE DATABASE {db_name}")
-                except psycopg.errors.DuplicateDatabase:
-                    pass
-            conn.close()
-
-            # connect to db
-            conn = psycopg.connect(f"dbname={db_name} user={gvars.POSTGRES_USER} password={gvars.POSTGRES_PASSWORD} host={gvars.POSTGRES_HOST} port={gvars.POSTGRES_PORT}")
-            # conn.autocommit = True
-        else:
-            os.makedirs(self.data_dir, exist_ok=True)
-            conn = sqlite3.connect(os.path.join(self.data_dir, f"{db_name}.db"))
+        os.makedirs(self.data_dir, exist_ok=True)
+        conn = sqlite3.connect(os.path.join(self.data_dir, f"{db_name}.db"))
         return conn
 
     def _initialize(self) -> None:
-        _using_sqlite = not gvars.POSTGRES_HOST
         _corpus_exists = os.path.exists(os.path.join(self.data_dir, "_corpus.db"))
         _index_exists = os.path.exists(os.path.join(self.data_dir, "_index.db"))
-        if _using_sqlite and _corpus_exists and _index_exists:
+        if _corpus_exists and _index_exists:
             return
 
         corpus = self._get_db_connection("_corpus")
         cur = corpus.cursor()
-        cur.execute(f'''CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value {BINARY_TYPE})''')
+        cur.execute(f'''CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value BLOB)''')
         cur.execute('''CREATE TABLE IF NOT EXISTS doc_origins (origin TEXT)''')
         cur.execute(f'''
                     CREATE TABLE IF NOT EXISTS document_versions (
@@ -734,10 +713,10 @@ class Index():
         # create index db
         index = self._get_db_connection("_index")
         cur = index.cursor()
-        cur.execute(f'''CREATE TABLE IF NOT EXISTS query_cache (term TEXT PRIMARY KEY, data {BINARY_TYPE})''')
+        cur.execute(f'''CREATE TABLE IF NOT EXISTS query_cache (term TEXT PRIMARY KEY, data BLOB)''')
         for i in range(1, 951):
             shard = f'shard_{i:04d}'
-            cur.execute(f'''CREATE TABLE IF NOT EXISTS {shard} (uuid TEXT PRIMARY KEY, ngram TEXT, data {BINARY_TYPE}, size INTEGER)''')
+            cur.execute(f'''CREATE TABLE IF NOT EXISTS {shard} (uuid TEXT PRIMARY KEY, ngram TEXT, data BLOB, size INTEGER)''')
         cur.execute(f'''CREATE INDEX IF NOT EXISTS idx_ngram_{shard} ON {shard} (ngram)''')
         index.commit()
         cur.close()
@@ -843,10 +822,7 @@ class Index():
             raise FastKmException(f"Unknown table type for like pattern: {like}")
 
         # fetch table names
-        if not gvars.POSTGRES_HOST:
-            cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '{like}'")
-        else:
-            cursor.execute(f"SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename LIKE '{like}'")
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '{like}'")
 
         rows = cursor.fetchall()
         tables = [row[0] for row in rows]
@@ -874,9 +850,8 @@ class Index():
             if ngram in self._ngram_cache:
                 ngrams_to_data[ngram] = self._ngram_cache[ngram]
                 continue
-
             shard_name = _ngram_to_shard_name(ngram)
-            self._idx_cursor.execute(f'''SELECT data FROM {shard_name} WHERE ngram = {PH}''', (ngram,))
+            self._idx_cursor.execute(f'''SELECT data FROM {shard_name} WHERE ngram = ?''', (ngram,))
             rows = self._idx_cursor.fetchall()
 
             if not rows:
@@ -960,7 +935,7 @@ class Index():
 
             # get (non-fragmented) shard data and add it to the dict
             ngrams = list(ngram_to_fragment_rows.keys())
-            shard_cursor.execute(f'''SELECT * FROM {shard} WHERE ngram IN ({','.join(f'{PH}' for _ in ngrams)}) AND size < {max_row_bytes}''', tuple(ngrams))
+            shard_cursor.execute(f'''SELECT * FROM {shard} WHERE ngram IN ({','.join('?' for _ in ngrams)}) AND size < {max_row_bytes}''', tuple(ngrams))
             shard_rows = shard_cursor.fetchall()
             for row in shard_rows:
                 ngram = row[1]
@@ -999,7 +974,7 @@ class Index():
                         defragmented_row_size = 0
 
             # insert into shard table
-            shard_cursor.executemany(f'''INSERT INTO {shard} (uuid, ngram, data, size) VALUES ({PH}, {PH}, {PH}, {PH}) ON CONFLICT (uuid) DO UPDATE SET ngram = EXCLUDED.ngram, data = EXCLUDED.data, size = EXCLUDED.size''', defragmented_rows)
+            shard_cursor.executemany(f'''INSERT INTO {shard} (uuid, ngram, data, size) VALUES (?, ?, ?, ?) ON CONFLICT (uuid) DO UPDATE SET ngram = EXCLUDED.ngram, data = EXCLUDED.data, size = EXCLUDED.size''', defragmented_rows)
 
             # reset for next batch
             ngram_to_fragment_rows.clear()

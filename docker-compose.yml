@@ -3,9 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: fast_km_new-server:build
+    image: fast_km:build
     ports:
-      - "${API_PORT}:8000"  # HOST_PORT:CONTAINER_PORT
+      - "${API_PORT}:8000"                   # HOST_PORT:CONTAINER_PORT
       - "8501:8501"
     volumes:
       - ./_data:/app/_data
@@ -20,16 +20,15 @@ services:
       - HTCONDOR_TOKEN=${HTCONDOR_TOKEN}     # optional, ok if env var is blank or not set
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY} # optional, ok if env var is blank or not set
       - TIMEZONE=${TIMEZONE}                 # optional, ok if env var is blank or not set
-      # - API_PORT=${API_PORT}               # map default port 8000 to HOST_PORT above instead of setting it here so default will work if env var not set
     depends_on:
       - redis
     networks:
-      - fast_km_new-network
+      - fast_km-network
 
   redis:
     image: redis
     networks:
-      - fast_km_new-network
+      - fast_km-network
 
 networks:
-  fast_km_new-network:
+  fast_km-network:
