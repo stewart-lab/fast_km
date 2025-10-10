@@ -62,8 +62,8 @@ networks:
 TODO: write docker-compose.yml, run docker compose
 
 The server will start with:
-- API server on port 8000 [http://localhost:8000](http://localhost:8000)
-- Dashboard on port 8501 [http://localhost:8501](http://localhost:8501)
+- API server on port 8000 ([http://localhost:8000](http://localhost:8000))
+- Dashboard on port 8501 ([http://localhost:8501](http://localhost:8501))
 
 ### Option 2: Build and Run with Docker Compose
 
