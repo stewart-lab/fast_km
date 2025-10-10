@@ -19,20 +19,50 @@ If you just want to run a query without starting your own server, please visit h
 
 ## Architecture Overview
 
-The server consists of several components:
+The system consists of several components:
 
-1. **FastAPI Server** - Web API endpoints for submitting jobs and getting their status, and for adding documents to the literature database
-2. **Redis Queue** - Job queue
-3. **RQ Workers** - Background processes that process jobs from the job queue
-4. **SQLite Database** - Stores literature database (PubMed abstracts)
-5. **Streamlit Dashboard** - Web UI for monitoring jobs and workers
+1. **Server** - FastAPI web server with endpoints for submitting jobs and getting their status, and for adding documents to the literature database
+2. **Job queue** - Redis instance that stores queued jobs
+3. **Workers** - Background processes that process jobs from the job queue
+4. **Database** - SQLite database that stores literature to search (PubMed abstracts)
+5. **Dashboard** - Streamlit web UI for monitoring jobs and workers
 6. **HTCondor** - An HTCondor cluster is required if running hypothesis evaluation jobs
 
 ## Running the Server
 
-### Option 1: Docker Compose (Recommended)
+### Option 1: Run with Docker Compose
+If you don't want to download or modify the code, you can use a pre-built image:
 
-The simplest way to run the server:
+```yaml
+services:
+  server:
+    image: rmillikin/fast-km:latest
+    ports:
+      - "8000:8000"
+      - "8501:8501"
+    volumes:
+      - ./_data:/app/_data
+      - /tmp:/tmp
+    environment:
+      - REDIS=redis:6379
+    depends_on:
+      - redis
+    networks:
+      - fast_km-network
+
+  redis:
+    image: redis
+    networks:
+      - fast_km-network
+
+networks:
+  fast_km-network:
+```
+
+
+### Option 2: Build and run with Docker Compose
+
+If you want to modify the code you can clone the repository and run:
 
 ```bash
 docker compose up --build
@@ -42,9 +72,10 @@ The server will start with:
 - API server on port 8000
 - Dashboard on port 8501
 
-### Option 2: Manual Setup
 
-If you prefer to run components separately:
+### Option 3: Manual Setup
+
+If you prefer to run components separately, which can be nice for debugging:
 
 ```bash
 # Start Redis
@@ -52,7 +83,7 @@ docker run --name redis -p 6379:6379 -d redis
 
 # Create virtual environment and install dependencies
 python3 -m venv .venv
-source ./.venv/bin/activate # on Windows, run .venv\Scripts\activate
+source ./.venv/bin/activate # if on Windows, run .venv\Scripts\activate
 pip install -r requirements.txt
 
 # Start the server
@@ -63,7 +94,9 @@ python3 app.py
 
 Configuration can be provided via environment variables:
 
-**Environment variables** (set in .env file; see env.example):
+**Environment variables** 
+Create an .env file; see env.example:
+
 ```bash
 HIGH=1   # number of workers for high-priority jobs
 MEDIUM=1 # number of workers for medium-priority jobs
