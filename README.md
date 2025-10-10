@@ -128,8 +128,8 @@ The dashboard shows:
 
 ## Adding Documents to the Database
 
-Before running queries, you need to add documents to the database. 
-You can add documents and index them for querying via the API:
+Before running KM/SKiM queries, you need to add documents to the database. 
+You can add documents via the API:
 
 ```python
 import requests
@@ -140,9 +140,7 @@ host = "http://localhost:8000"
 # add a document
 # https://pubmed.ncbi.nlm.nih.gov/1/
 doc = {'pmid': 1, 'pub_year': 1975, 'title': 'Formate assay in body fluids: application in methanol poisoning'}
-json_body = {'documents': [doc]}
-
-response = requests.post(f"{host}/api/documents", json=json_body).json()
+response = requests.post(f"{host}/api/documents", json={'documents': [doc]}).json()
 print("Add document response: ", response)
 
 # run an indexing job
