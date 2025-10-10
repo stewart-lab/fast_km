@@ -1,63 +1,159 @@
 # KinderMiner Web API Server
-Welcome to the codebase for the KinderMiner web API server. If you are interested 
-in running a KinderMiner query, please visit https://skim.morgridge.org/ .
+
+A web API server for running KinderMiner, Serial KinderMiner (SKiM), and hypothesis evaluation text mining queries against a biomedical literature database.
 
 ## What is KinderMiner?
-KinderMiner is a text search algorithm. https://pmc.ncbi.nlm.nih.gov/articles/PMC8756297/
 
-Serial KinderMiner is KinderMiner x2. https://pubmed.ncbi.nlm.nih.gov/37915001/
+KinderMiner is a literature-based discovery algorithm that identifies statistical associations between biomedical concepts (genes, diseases, drugs, etc.) by analyzing their co-occurrence patterns in PubMed abstracts.
 
-SKiM-GPT adds LLM stuff. https://www.biorxiv.org/content/10.1101/2025.07.28.664797v1.full
+- **KinderMiner** tests pairwise relationships between two sets of terms (A-terms and B-terms)
+- **Serial KinderMiner (SKiM)** extends this to discover indirect relationships through intermediate concepts (A→B→C)
+- **SKiM-GPT** adds LLM-based hypothesis evaluation to assess the biological plausibility of relationships discovered by KM or SKiM
 
-## Starting the server
-You can run the server with docker-compose:
+If you just want to run a query without starting your own server, please visit https://skim.morgridge.org/ .
+
+### Publications
+- [KinderMiner paper](https://pmc.ncbi.nlm.nih.gov/articles/PMC8756297/)
+- [Serial KinderMiner paper](https://pubmed.ncbi.nlm.nih.gov/37915001/)
+- [SKiM-GPT preprint](https://www.biorxiv.org/content/10.1101/2025.07.28.664797v1.full)
+
+## Architecture Overview
+
+The server consists of several components:
+
+1. **FastAPI Server** - Web API endpoints for submitting jobs and getting their status, and for adding documents to the literature database
+2. **Redis Queue** - Job queue
+3. **RQ Workers** - Background processes that process jobs from the job queue
+4. **SQLite Database** - Stores literature database (PubMed abstracts)
+5. **Streamlit Dashboard** - Web UI for monitoring jobs and workers
+6. **HTCondor** - An HTCondor cluster is required if running hypothesis evaluation jobs
+
+## Running the Server
+
+### Option 1: Docker Compose (Recommended)
+
+The simplest way to run the server:
+
 ```bash
-# build a container and run it
 docker compose up --build
-
-# or use a prebuilt image: rmillikin:fast-km
 ```
 
-or via shell script:
-```bash
-# make sure redis is running
-docker run --name some-redis -p 6379:6379 -d redis
+The server will start with:
+- API server on port 8000
+- Dashboard on port 8501
 
-# start the API server
+### Option 2: Manual Setup
+
+If you prefer to run components separately:
+
+```bash
+# Start Redis
+docker run --name redis -p 6379:6379 -d redis
+
+# Create virtual environment and install dependencies
+python3 -m venv .venv
+source ./.venv/bin/activate # on Windows, run .venv\Scripts\activate
+pip install -r requirements.txt
+
+# Start the server
 python3 app.py
 ```
 
-## Submitting queries
-You will need to build the database first. 
+### Configuration
 
-Then, run:
+Configuration can be provided via environment variables:
+
+**Environment variables** (set in .env file; see env.example):
+```bash
+HIGH=1   # number of workers for high-priority jobs
+MEDIUM=1 # number of workers for medium-priority jobs
+LOW=1    # number of workers for low-priority jobs
+REDIS=localhost:6379
+API_PORT=8000
+TIMEZONE=America/Chicago
+
+# Optional: API keys for hypothesis evaluation jobs
+PUBMED_API_KEY=your_key_here
+OPENAI_API_KEY=your_key_here
+HTCONDOR_TOKEN=your_token_here
+DEEPSEEK_API_KEY=your_key_here
+```
+
+## Populating the Database
+
+Before running queries, you need to populate the database with PubMed abstracts:
+
+```bash
+python3 populate_db.py
+```
+
+This script will:
+1. Check which files have already been downloaded
+2. Download XML files from PubMed's FTP server (baseline + updates)
+3. Parse and add documents to the database via the API
+4. Optionally add citation count data from iCite (if `_icite` folder exists)
+5. Build the search index
+
+**Citation data (optional):**
+To include citation counts, download iCite database snapshots from:
+https://nih.figshare.com/collections/iCite_Database_Snapshots_NIH_Open_Citation_Collection_/4586573
+
+Download the .tar.gz and extract the `.json` files into an `_icite` folder before running `populate_db.py`.
+
+**Note:** The initial indexing job can take many hours. Progress can be monitored via the dashboard.
+
+## Running Jobs
+
+### KinderMiner Query
+
+Test associations between disease terms and drug terms:
 
 ```python
 import requests
 import time
 
-# define the job parameters
-km_params = {'a_terms': ['breast cancer'], 'b_terms': ['ABEMACICLIB']}
+# Submit a KinderMiner job
+km_params = {
+    'a_terms': ['breast cancer', 'lung cancer'],
+    'b_terms': ['ABEMACICLIB', 'OSIMERTINIB'],
+    'return_pmids': True,
+    'top_n_articles_most_recent': 10
+}
 
-# submit the job
-job = requests.post('http://localhost:8000/api/kinderminer', json=km_params).json()
-print(f'Submitted job: {job['id']}')
+response = requests.post('http://localhost:8000/api/kinderminer', json=km_params)
+job = response.json()
+print(f'Submitted job: {job["id"]}')
 
-# wait for the job to complete
-for _ in range(30):
-    time.sleep(1)
-    job = requests.get(f'http://localhost:8000/api/kinderminer?id={job['id']}').json()
-
+# Wait for job to finish
+while True:
+    time.sleep(2)
+    response = requests.get(f'http://localhost:8000/api/kinderminer?id={job["id"]}')
+    job = response.json()
+    
     if job['status'] in ['finished', 'failed']:
-        print(f'Job ended with result: {job}')
+        print(f'Job completed: {job}')
         break
     else:
-        print(f'Job status: {job['status']}')
+        progress = job.get('progress', 0)
+        print(f'Progress: {progress:.1%}')
 ```
 
-## More stuff
-View the dashboard (server must be running)
-http://localhost:8501/
+### API Documentation
 
-View the autogenerated API docs (server must be running)
+Autogenerated API documentation:
+```
 http://localhost:8000/docs
+```
+
+## Monitoring
+
+View real-time job status and worker activity:
+```
+http://localhost:8501/
+```
+
+The dashboard shows:
+- Active workers and their current jobs
+- All queued, running, finished, and failed jobs
+- Job progress for running jobs
+- Buttons to cancel/delete jobs
