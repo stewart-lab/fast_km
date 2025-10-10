@@ -7,7 +7,7 @@ A web API server for running KinderMiner, Serial KinderMiner (SKiM), and hypothe
 KinderMiner is a literature-based discovery algorithm that identifies statistical associations between biomedical concepts (genes, diseases, drugs, etc.) by analyzing their co-occurrence patterns in PubMed abstracts.
 
 - **KinderMiner** tests pairwise relationships between two sets of terms (A-terms and B-terms)
-- **Serial KinderMiner (SKiM)** extends this to discover indirect relationships through intermediate concepts (A→B→C)
+- **Serial KinderMiner (SKiM)** discovers indirect A→C relationships through intermediate terms (A→B→C)
 - **SKiM-GPT** adds LLM-based hypothesis evaluation to assess the biological plausibility of relationships discovered by KM or SKiM
 
 If you just want to run a query without starting your own server, please visit https://skim.morgridge.org/ .
