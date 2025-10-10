@@ -132,11 +132,36 @@ Before running queries, you need to add documents to the database.
 You can add documents and index them for querying via the API:
 
 ```python
+import requests
+import time
+
+host = "http://localhost:8000"
+
 # add a document
 # https://pubmed.ncbi.nlm.nih.gov/1/
-doc = { 'pmid': 1, 'pub_year': 1975, 'title': 'Formate assay in body fluids: application in methanol poisoning' }
+doc = {'pmid': 1, 'pub_year': 1975, 'title': 'Formate assay in body fluids: application in methanol poisoning'}
+json_body = {'documents': [doc]}
+
+response = requests.post(f"{host}/api/documents", json=json_body).json()
+print("Add document response: ", response)
 
 # run an indexing job
+response = requests.post(f"{host}/api/index", json={}).json()
+while response['status'] not in ['finished', 'failed']:
+    time.sleep(1)
+    response = requests.get(f"{host}/api/index" + f"?id={response['id']}").json()
+    print("Indexing status: ", response['status'])
+
+# search for the document
+km_params = {'a_terms': ['formate'], 'b_terms': ['methanol poisoning']}
+response = requests.post(f"{host}/api/kinderminer", json=km_params).json()
+while response['status'] not in ['finished', 'failed']:
+    time.sleep(1)
+    response = requests.get(f"{host}/api/kinderminer" + f"?id={response['id']}").json()
+    print("Kinderminer status: ", response['status'])
+
+if response['status'] == 'finished':
+    print("Kinderminer result: ", response['result'])
 ```
 
 ### Populating the database
