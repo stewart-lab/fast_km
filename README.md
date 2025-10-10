@@ -31,8 +31,9 @@ The system consists of several components:
 ## Running the Server
 
 ### Option 1: Run with Docker Compose
-If you don't want to clone or modify the code, you can use a pre-built Docker image:
+If you don't want to clone or modify the code, you can use a pre-built Docker image.
 
+Create a `docker-compose.yml` file:
 ```yaml
 services:
   server:
@@ -59,7 +60,10 @@ networks:
   fast_km-network:
 ```
 
-TODO: write docker-compose.yml, run docker compose
+And then run:
+```bash
+docker compose up --build -d
+```
 
 The server will start with:
 - API server on port 8000 ([http://localhost:8000](http://localhost:8000))
@@ -155,7 +159,7 @@ km_params = {'a_terms': ['formate'], 'b_terms': ['methanol poisoning']}
 response = requests.post(f"{host}/api/kinderminer", json=km_params).json()
 while response['status'] not in ['finished', 'failed']:
     time.sleep(1)
-    response = requests.get(f"{host}/api/kinderminer" + f"?id={response['id']}").json()
+    response = requests.get(f"{host}/api/kinderminer?id={response['id']}").json()
     print("Kinderminer status: ", response['status'])
 
 if response['status'] == 'finished':
@@ -182,7 +186,7 @@ This script will:
 ### Citation counts
 
 KM and SKiM are able to return PMIDs ordered by citation counts and related statistics. 
-To enable this feature, you must upload citation count data; this can be downloaded from iCite's database snapshot repository:
+To enable this feature, you must add citation count data to the documents; this data can be downloaded from iCite's database snapshot repository:
 https://nih.figshare.com/collections/iCite_Database_Snapshots_NIH_Open_Citation_Collection_/4586573
 
 Download the .tar.gz and extract the `.json` files to the `_icite` folder and then run the `populate_db.py` script.
@@ -196,11 +200,12 @@ Example KM query to search for associations between diseases and drugs:
 ```python
 import requests
 import time
+import json
 
 # Submit a KinderMiner job
 km_params = {
-    'a_terms': ['breast cancer', 'lung cancer'],
-    'b_terms': ['ABEMACICLIB', 'OSIMERTINIB'],
+    'a_terms': ['breast cancer'],
+    'b_terms': ['ABEMACICLIB'],
     'return_pmids': True,
     'top_n_articles_most_recent': 10
 }
@@ -216,7 +221,7 @@ while True:
     job = response.json()
     
     if job['status'] in ['finished', 'failed']:
-        print(f'Job completed: {job}')
+        print(f'Job completed: {json.dumps(job, indent=2)}')
         break
     else:
         progress = job.get('progress', 0)
