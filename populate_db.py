@@ -11,6 +11,8 @@ km_url = 'http://localhost:' + str(port) + '/api/kinderminer'
 hyp_eval_url = 'http://localhost:' + str(port) + '/api/hypothesis_eval'
 indexing_url = 'http://localhost:' + str(port) + '/api/index'
 doc_url = 'http://localhost:' + str(port) + '/api/documents'
+icite_folder = './_icite'
+xml_folder = "./_xml"
 
 def main():
     # figure out what to download
@@ -21,7 +23,6 @@ def main():
     print(f"N Files to download: {len(files_to_download)}")
 
     # add docs
-    xml_folder = "_xml"
     os.makedirs(xml_folder, exist_ok=True)
     for file in files_to_download:
         ftp_dir = file[0]
@@ -31,18 +32,19 @@ def main():
         payload = {"documents": [doc.to_dict() for doc in docs]}
 
         response = requests.post(doc_url, json=payload).json()
-        print(f"Added {len(payload['documents'])} documents from {remote_filename}")
+        print(f"Added {len(payload['documents']):,} documents from {remote_filename}")
 
     # add icite citation count data if available
     # icite data can be downloaded from: https://nih.figshare.com/collections/iCite_Database_Snapshots_NIH_Open_Citation_Collection_/4586573
-    # download the .tar.gz and extract the .json files.
-    icite_folder = '_icite'
+    # scroll down and then download the .tar.gz and extract the .json files.
     if os.path.exists(icite_folder):
         icite_jsons = [f for f in os.listdir(icite_folder) if f.endswith('.json')]
+        print(f"Found {len(icite_jsons)} iCite JSON files to process.")
         for icite_json in icite_jsons:
             print(f"Processing {icite_json}...")
+            json_path = os.path.join(icite_folder, icite_json)
             payload = {"documents": []}
-            with open(os.path.join(icite_folder, icite_json), 'r') as f:
+            with open(json_path, 'r') as f:
                 for line in f:
                     try:
                         _json = json.loads(line)
@@ -52,10 +54,19 @@ def main():
                         payload["documents"].append(payload_item)
                     except json.JSONDecodeError:
                         print(f"Error decoding JSON from line in {icite_json}: {line}")
-            
-            print(f"Adding citation count data for {len(payload['documents'])} documents from {icite_json}")
+
+            print(f"Adding citation count data for {len(payload['documents']):,} documents from {icite_json}")
             response = requests.post(doc_url, json=payload).json()
-            print(f"Response: {response}")
+            
+            # rename .json file to .json.old to avoid reprocessing
+            if response.get('status', '') == 'finished':
+                old_json_path = os.path.join(icite_folder, icite_json + '.old')
+                if os.path.exists(old_json_path):
+                    os.remove(old_json_path)
+                os.rename(json_path, old_json_path)
+                print(f"Successfully added citation count data from {icite_json}. API response: {response}")
+            else:
+                raise ValueError(f"Failed to add citation count data from {icite_json}, API response: {response}")
     else:
         print("No _icite folder found, skipping adding citation count data.")
     
