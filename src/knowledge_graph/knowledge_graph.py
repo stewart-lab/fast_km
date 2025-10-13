@@ -39,7 +39,7 @@ class KnowledgeGraph:
             self.node_ids = dict()
             print('WARNING: Problem loading graph node IDs (expected path ' + kg_ids + '). knowledge graph queries may be slower than normal.')
 
-    def query(self, a_term: str, b_term: str, censor_year = None):
+    def query(self, a_term: str, b_term: str, censor_year_lower: int = None, censor_year: int = None):
         if not self.graph:
             return [self._construct_rel_response(a_term, '', b_term, '', 'neo4j connection error', [], self.graph_name)]
 
