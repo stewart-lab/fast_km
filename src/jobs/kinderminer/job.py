@@ -2,6 +2,7 @@ import src.global_vars as gvars
 import src.kinderminer_algorithm as km
 from src.jobs.job_util import report_progress
 from src.indexing.index import Index
+from src.knowledge_graph.knowledge_graph import KnowledgeGraph
 from src.jobs.kinderminer.params import KinderMinerJobParams, validate_params
 
 def run_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
@@ -11,6 +12,10 @@ def run_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
         return _run_paired_km(params)
     
     idx = Index(gvars.data_dir)
+
+    kg = None
+    if params.query_knowledge_graph:
+        kg = KnowledgeGraph(data_dir=gvars.data_dir)
 
     idx.prep_for_search(params.a_terms + params.b_terms)
     results = []
@@ -28,12 +33,20 @@ def run_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
                 top_n_articles_highest_impact_factor=params.top_n_articles_highest_impact_factor,
                 scoring=params.scoring,
             )
+
+            if kg and result['ab_pvalue'] <= params.rel_pvalue_cutoff:
+                result['ab_relationship'] = kg.get_relationships(a_term, b_term, params.censor_year_lower, params.censor_year_upper, idx)
+
             results.append(result)
             report_progress(_calculate_progress(b_i + 1, len(params.b_terms)))
 
         idx.delete_term_from_memory(b_term)
 
     results.sort(key=lambda ab: ab['ab_pred_score'], reverse=True)
+
+    if kg:
+        kg.close()
+
     idx.close()
 
     report_progress(1.0)
@@ -41,6 +54,10 @@ def run_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
 
 def _run_paired_km(params: KinderMinerJobParams) -> list[dict]:
     idx = Index(gvars.data_dir)
+
+    kg = None
+    if params.query_knowledge_graph:
+        kg = KnowledgeGraph(data_dir=gvars.data_dir)
 
     # track repeat terms to avoid deleting from cache too early
     repeat_terms = dict()
@@ -67,6 +84,10 @@ def _run_paired_km(params: KinderMinerJobParams) -> list[dict]:
             top_n_articles_highest_impact_factor=params.top_n_articles_highest_impact_factor,
             scoring=params.scoring,
         )
+
+        if kg and result['ab_pvalue'] <= params.rel_pvalue_cutoff:
+            result['ab_relationship'] = kg.get_relationships(a_term, b_term, params.censor_year_lower, params.censor_year_upper, idx)
+
         results.append(result)
         report_progress(_calculate_progress(i + 1, len(params.b_terms)))
 
@@ -76,6 +97,9 @@ def _run_paired_km(params: KinderMinerJobParams) -> list[dict]:
             idx.delete_term_from_memory(b_term)
 
     results.sort(key=lambda ab: ab['ab_pred_score'], reverse=True)
+
+    if kg:
+        kg.close()
 
     idx.close()
     report_progress(1.0)

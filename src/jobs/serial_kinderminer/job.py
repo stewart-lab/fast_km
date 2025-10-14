@@ -4,6 +4,7 @@ from src.jobs.job_util import report_progress
 from src.jobs.serial_kinderminer.params import validate_params
 from src.indexing.index import Index
 from src.jobs.kinderminer.params import KinderMinerJobParams
+from src.knowledge_graph.knowledge_graph import KnowledgeGraph
 
 def run_serial_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
     validate_params(params)
@@ -13,6 +14,10 @@ def run_serial_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
 
     top_n_ab_padding = 20 if params.valid_bc_hit_pval < 1.0 else 0
     idx = Index(gvars.data_dir)
+
+    kg = None
+    if params.query_knowledge_graph:
+        kg = KnowledgeGraph(data_dir=gvars.data_dir)
     
     # test AB pairs
     idx.prep_for_search(params.a_terms + params.b_terms)
@@ -32,7 +37,12 @@ def run_serial_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
                 scoring=params.scoring,
             )
 
-            if ab_result['ab_pvalue'] <= params.ab_fet_threshold:
+            is_valid_hit = ab_result['ab_pvalue'] <= params.ab_fet_threshold
+
+            if kg and ab_result['ab_pvalue'] <= params.rel_pvalue_cutoff and is_valid_hit:
+                ab_result['ab_relationship'] = kg.get_relationships(a_term, b_term, params.censor_year_lower, params.censor_year_upper, idx)
+
+            if is_valid_hit:
                 ab_results.append(ab_result)
             
             progress = _calculate_progress(a_i + 1, len(params.a_terms), b_i + 1, len(params.b_terms), 0, len(params.c_terms), params.top_n_ab + top_n_ab_padding)
@@ -81,11 +91,18 @@ def run_serial_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
                 scoring=params.scoring,
             )
 
+            is_valid_hit = abc_result['bc_pvalue'] <= params.bc_fet_threshold
+
+            if kg and ac_result['ac_pvalue'] <= params.rel_pvalue_cutoff and is_valid_hit:
+                ac_result['ac_relationship'] = kg.get_relationships(a_term, c_term, params.censor_year_lower, params.censor_year_upper, idx)
+            if kg and bc_result['bc_pvalue'] <= params.rel_pvalue_cutoff and is_valid_hit:
+                bc_result['bc_relationship'] = kg.get_relationships(b_term, c_term, params.censor_year_lower, params.censor_year_upper, idx)
+
             abc_result.update(ab_result)
             abc_result.update(bc_result)
             abc_result.update(ac_result)
 
-            if abc_result['bc_pvalue'] <= params.bc_fet_threshold:
+            if is_valid_hit:
                 abc_results.append(abc_result)
 
             progress = _calculate_progress(len(params.a_terms), len(params.a_terms), len(params.b_terms), len(params.b_terms), c_i + 1, len(params.c_terms), len(top_ab_results))
@@ -115,12 +132,19 @@ def run_serial_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
         # filter the ABC results
         abc_results = [abc for abc in abc_results if abc['b_term'] in ranked_top_n_valid_bs]
 
+    if kg:
+        kg.close()
+
     idx.close()
     report_progress(1.0)
     return abc_results
 
 def _run_paired_skim(params: KinderMinerJobParams) -> list[dict]:
     idx = Index(gvars.data_dir)
+
+    kg = None
+    if params.query_knowledge_graph:
+        kg = KnowledgeGraph(data_dir=gvars.data_dir)
     
     # track repeat terms to avoid deleting from cache too early
     repeat_terms = dict()
@@ -150,7 +174,16 @@ def _run_paired_skim(params: KinderMinerJobParams) -> list[dict]:
             scoring=params.scoring,
         )
 
-        if result['ab_pvalue'] <= params.ab_fet_threshold and result['bc_pvalue'] <= params.bc_fet_threshold:
+        is_valid_hit = result['ab_pvalue'] <= params.ab_fet_threshold and result['bc_pvalue'] <= params.bc_fet_threshold
+
+        if kg and result['ab_pvalue'] <= params.rel_pvalue_cutoff and is_valid_hit:
+            result['ab_relationship'] = kg.get_relationships(a_term, b_term, params.censor_year_lower, params.censor_year_upper, idx)
+        if kg and result['bc_pvalue'] <= params.rel_pvalue_cutoff and is_valid_hit:
+            result['bc_relationship'] = kg.get_relationships(b_term, c_term, params.censor_year_lower, params.censor_year_upper, idx)
+        if kg and result['ac_pvalue'] <= params.rel_pvalue_cutoff and is_valid_hit:
+            result['ac_relationship'] = kg.get_relationships(a_term, c_term, params.censor_year_lower, params.censor_year_upper, idx)
+
+        if is_valid_hit:
             abc_results.append(result)
 
         report_progress(i + 1, len(params.a_terms), 0, 1, 0, 0, 0)
@@ -164,6 +197,9 @@ def _run_paired_skim(params: KinderMinerJobParams) -> list[dict]:
 
     # sort by bc_pred_score descending
     abc_results.sort(key=lambda abc: abc['bc_pred_score'], reverse=True)
+
+    if kg:
+        kg.close()
 
     idx.close()
     report_progress(1.0)

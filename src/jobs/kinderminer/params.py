@@ -51,10 +51,6 @@ def validate_params(params: KinderMinerJobParams) -> None:
     params.censor_year_lower = max(MIN_CENSOR_YEAR, params.censor_year_lower)
     params.censor_year_upper = min(MAX_CENSOR_YEAR, params.censor_year_upper)
 
-    # not implemented yet
-    if params.query_knowledge_graph:
-        raise FastKmException('Knowledge graph is not implemented yet')
-
     # handle fatal errors
     if not params.a_terms:
         raise FastKmException('a_terms is required and must be a non-empty list')

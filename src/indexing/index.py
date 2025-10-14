@@ -564,15 +564,22 @@ class Index():
             term_pmids = _evaluate_composite_term(term, subterm_pmids)
 
         # date-censor the PMID set
-        if start_year > MIN_CENSOR_YEAR or end_year < MAX_CENSOR_YEAR:
-            self.count_documents(start_year, end_year) # builds PMID set for this year range
-            year_pmids = self._term_cache[(start_year, end_year)]
-            term_pmids = (term_pmids & year_pmids)
-            term_pmids = set(int(pmid) for pmid in term_pmids)
+        term_pmids = self.date_censor_pmids(term_pmids, start_year, end_year)
 
         # save in memcache
         self._term_cache[term] = term_pmids
         return term_pmids
+    
+    def date_censor_pmids(self, pmids: set[int], start_year: int = MIN_CENSOR_YEAR, end_year: int = MAX_CENSOR_YEAR) -> set[int]:
+        """Given a set of PMIDs, return the subset that fall within the specified year range"""
+        if start_year <= MIN_CENSOR_YEAR and end_year >= MAX_CENSOR_YEAR:
+            return pmids
+
+        self.count_documents(start_year, end_year) # builds PMID set for this year range
+        year_pmids = self._term_cache[(start_year, end_year)]
+        censored_pmids = (pmids & year_pmids)
+        censored_pmids = set(int(pmid) for pmid in censored_pmids)
+        return censored_pmids
 
     def count_documents(self, start_year: int = MIN_CENSOR_YEAR, end_year: int = MAX_CENSOR_YEAR) -> int:
         """Count total documents in the index with optional year filtering"""
