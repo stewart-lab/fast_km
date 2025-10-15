@@ -91,7 +91,7 @@ def run_serial_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
                 scoring=params.scoring,
             )
 
-            is_valid_hit = abc_result['bc_pvalue'] <= params.bc_fet_threshold
+            is_valid_hit = bc_result['bc_pvalue'] <= params.bc_fet_threshold
 
             if kg and ac_result['ac_pvalue'] <= params.rel_pvalue_cutoff and is_valid_hit:
                 ac_result['ac_relationship'] = kg.get_relationships(a_term, c_term, params.censor_year_lower, params.censor_year_upper, idx)
