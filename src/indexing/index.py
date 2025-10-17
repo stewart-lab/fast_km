@@ -120,8 +120,8 @@ class Index():
 
     def add_or_update_documents(self, documents: list[Document]) -> None:
         """Add documents to the corpus"""
-        if self.is_indexing_in_progress():
-            raise FastKmException("Indexing is currently in progress, or was interrupted. Indexing must be completed before adding new documents.")
+        # if self.is_indexing_in_progress():
+        #     raise FastKmException("Indexing is currently in progress, or was interrupted. Indexing must be completed before adding new documents.")
 
         cursor = self._corpus.cursor()
         doc_tables = set(_pmid_to_table_name(doc.pmid) for doc in documents)
@@ -361,14 +361,18 @@ class Index():
             self._corpus_cursor.execute('''SELECT pmid, uuid FROM document_versions WHERE is_indexed = 1''')
             indexed_versions = {row[0]: row[1] for row in self._corpus_cursor.fetchall()}
             if indexed_versions:
-                # get the current versions
+                # get the canonical versions
                 pmids = list(indexed_versions.keys())
-                self._corpus_cursor.execute(f'''SELECT pmid, uuid FROM {doc_table} WHERE pmid IN ({','.join('?' for _ in pmids)})''', pmids)
-                current_versions = {row[0]: row[1] for row in self._corpus_cursor.fetchall()}
+                canonical_versions = dict()
+                for i in range(0, len(pmids), 1000):
+                    batch_pmids = pmids[i:i + 1000]
+                    self._corpus_cursor.execute(f'''SELECT pmid, uuid FROM {doc_table} WHERE pmid IN ({','.join('?' for _ in batch_pmids)})''', batch_pmids)
+                    canonical_versions.update({row[0]: row[1] for row in self._corpus_cursor.fetchall()})
 
-                # if indexed UUID != current UUID, then it requires re-indexing
-                pmids_to_reindex = [pmid for pmid in pmids if indexed_versions[pmid] != current_versions[pmid]]
-            
+                # if indexed version UUID != canonical version UUID, then it requires re-indexing
+                # note that this only applies to PMIDs in this specific doc_table
+                pmids_to_reindex = [pmid for pmid in canonical_versions if pmid in indexed_versions and indexed_versions[pmid] != canonical_versions[pmid]]
+
             if pmids_to_reindex:
                 # the current version's data is in the fragmented shard.
                 # so all we have to do is delete the (old) indexed version's data from the shard
@@ -433,9 +437,9 @@ class Index():
                     for doc_row in batch:
                         pmid = doc_row[0]
                         previous_version = indexed_versions[pmid]
-                        current_version = current_versions[pmid]
+                        canonical_version = canonical_versions[pmid]
                         cursor.execute(f'''UPDATE document_versions SET is_indexed = 0 WHERE uuid = ?''', (previous_version,))
-                        cursor.execute(f'''UPDATE document_versions SET is_indexed = 1 WHERE uuid = ?''', (current_version,))
+                        cursor.execute(f'''UPDATE document_versions SET is_indexed = 1 WHERE uuid = ?''', (canonical_version,))
                     self._corpus.commit()
                     cursor.close()
 
