@@ -120,13 +120,11 @@ class Index():
 
     def add_or_update_documents(self, documents: list[Document]) -> None:
         """Add documents to the corpus"""
-        # if self.is_indexing_in_progress():
-        #     raise FastKmException("Indexing is currently in progress, or was interrupted. Indexing must be completed before adding new documents.")
-
         cursor = self._corpus.cursor()
+
+        # create document tables if they don't exist
         doc_tables = set(_pmid_to_table_name(doc.pmid) for doc in documents)
         for doc_table in doc_tables:
-            # create document table if it doesn't exist
             cursor.execute(f'''
                             CREATE TABLE IF NOT EXISTS {doc_table} (
                                 uuid TEXT NOT NULL, 
@@ -139,71 +137,37 @@ class Index():
                                 origin TEXT NOT NULL, 
                                 citation_count INTEGER NOT NULL 
                             )''')
-            pmids = [doc.pmid for doc in documents if _pmid_to_table_name(doc.pmid) == doc_table]
-            batch_size = 1000
 
-            for i in range(0, len(pmids), batch_size):
-                batch = pmids[i:i + batch_size]
-                batch_pmids = set(batch)
-                batch_docs = {doc for doc in documents if doc.pmid in batch_pmids}
-                doc_table_inserts = list[tuple]()
-                doc_version_table_inserts = list[tuple]()
+        # add or update documents
+        for new_doc in documents:
+            version_uuid = str(uuid.uuid4())
+            is_indexed = 0
+            doc_table = _pmid_to_table_name(new_doc.pmid)
 
-                # look up existing documents
-                cursor.execute(f'''SELECT * FROM {doc_table} WHERE pmid in ({','.join('?' for _ in batch)})''', batch)
-                current_doc_versions = cursor.fetchall()
-                current_versions = {doc[2]: doc for doc in current_doc_versions} # pmid -> row
+            # special case. if we're just updating a non-indexed field, just update that field. no need to create a new doc.
+            if new_doc.title is None and new_doc.abstract is None and new_doc.body is None:
+                if new_doc.citation_count is not None:
+                    cursor.execute(f'''UPDATE {doc_table} SET citation_count = ? WHERE pmid = ?''', (new_doc.citation_count, new_doc.pmid))
+                if new_doc.pub_year is not None:
+                    cursor.execute(f'''UPDATE {doc_table} SET pub_year = ? WHERE pmid = ?''', (new_doc.pub_year, new_doc.pmid))
+                if new_doc.origin is not None:
+                    cursor.execute(f'''UPDATE {doc_table} SET origin = ? WHERE pmid = ?''', (new_doc.origin, new_doc.pmid))
+                continue
 
-                for new_doc in batch_docs:
-                    # special case. if we're just updating a non-indexed field, just update that field. no need to create a new doc.
-                    if new_doc.title is None and new_doc.abstract is None and new_doc.body is None:
-                        if new_doc.citation_count is not None:
-                            cursor.execute(f'''UPDATE {doc_table} SET citation_count = ? WHERE pmid = ?''', (new_doc.citation_count, new_doc.pmid))
-                        if new_doc.pub_year is not None:
-                            cursor.execute(f'''UPDATE {doc_table} SET pub_year = ? WHERE pmid = ?''', (new_doc.pub_year, new_doc.pmid))
-                        if new_doc.origin is not None:
-                            cursor.execute(f'''UPDATE {doc_table} SET origin = ? WHERE pmid = ?''', (new_doc.origin, new_doc.pmid))
-                        continue
-
-                    current_version = current_versions.get(new_doc.pmid, None)
-
-                    version_uuid = str(uuid.uuid4())
-                    is_indexed = 0
-
-                    if current_version is not None:
-                        # update existing doc
-                        new_version = (
-                            version_uuid,
-                            is_indexed,
-                            new_doc.pmid,
-                            new_doc.pub_year if new_doc.pub_year is not None else current_version[3],
-                            new_doc.title if new_doc.title is not None else current_version[4],
-                            new_doc.abstract if new_doc.abstract is not None else current_version[5],
-                            new_doc.body if new_doc.body is not None else current_version[6],
-                            new_doc.origin if new_doc.origin is not None else current_version[7],
-                            new_doc.citation_count if new_doc.citation_count is not None else current_version[8]
-                        )
-                        doc_version_table_inserts.append(new_version)
-                        doc_version_table_inserts.append(current_version)
-                    else:
-                        # no existing version, insert new doc
-                        new_version = (
-                            version_uuid,
-                            is_indexed,
-                            new_doc.pmid,
-                            new_doc.pub_year,
-                            new_doc.title if new_doc.title is not None else "",
-                            new_doc.abstract if new_doc.abstract is not None else "",
-                            new_doc.body if new_doc.body is not None else "",
-                            new_doc.origin if new_doc.origin is not None else "",
-                            new_doc.citation_count if new_doc.citation_count is not None else 0
-                        )
-
-                    doc_table_inserts.append(new_version)
-
-                # bulk inserts
-                if doc_table_inserts:
-                    cursor.executemany(f'''
+            new_doc_row = (
+                version_uuid, 
+                is_indexed, 
+                new_doc.pmid, 
+                new_doc.pub_year, 
+                new_doc.title if new_doc.title is not None else "", 
+                new_doc.abstract if new_doc.abstract is not None else "", 
+                new_doc.body if new_doc.body is not None else "", 
+                new_doc.origin if new_doc.origin is not None else "", 
+                new_doc.citation_count if new_doc.citation_count is not None else 0
+            )
+            try:
+                # add doc to the corpus
+                cursor.execute(f'''
                                 INSERT INTO {doc_table} (
                                     uuid, 
                                     is_indexed, 
@@ -214,20 +178,56 @@ class Index():
                                     body,
                                     origin,
                                     citation_count
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                ON CONFLICT (pmid) DO UPDATE SET
-                                    uuid = EXCLUDED.uuid,
-                                    is_indexed = EXCLUDED.is_indexed,
-                                    pub_year = EXCLUDED.pub_year,
-                                    title = EXCLUDED.title,
-                                    abstract = EXCLUDED.abstract,
-                                    body = EXCLUDED.body,
-                                    origin = EXCLUDED.origin,
-                                    citation_count = EXCLUDED.citation_count
-                            ''', doc_table_inserts)
-                if doc_version_table_inserts:
-                    cursor.executemany(f'''
-                                INSERT INTO document_versions (
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', new_doc_row)
+                
+            except sqlite3.IntegrityError as e:
+                if 'PRIMARY KEY constraint failed' not in str(e) and 'UNIQUE constraint failed' not in str(e):
+                    raise e
+                
+                # get current canonical version
+                cursor.execute(f'''SELECT * FROM {doc_table} WHERE pmid = ?''', (new_doc.pmid,))
+                current_doc_row = cursor.fetchone()
+                
+                updated_doc_row = (
+                    version_uuid, 
+                    is_indexed, 
+                    new_doc.pmid, 
+                    new_doc.pub_year, 
+                    new_doc.title if new_doc.title is not None else current_doc_row[4], 
+                    new_doc.abstract if new_doc.abstract is not None else current_doc_row[5], 
+                    new_doc.body if new_doc.body is not None else current_doc_row[6], 
+                    new_doc.origin if new_doc.origin is not None else current_doc_row[7], 
+                    new_doc.citation_count if new_doc.citation_count is not None else current_doc_row[8]
+                )
+
+                # if the updated text/year/citations are identical to the current doc, skip
+                # this helps when the baseline year changes. no need to re-index if nothing changed.
+                if (updated_doc_row[3] == current_doc_row[3] and # same pub_year
+                    updated_doc_row[4] == current_doc_row[4] and # same title
+                    updated_doc_row[5] == current_doc_row[5] and # same abstract
+                    updated_doc_row[6] == current_doc_row[6] and # same body
+                    updated_doc_row[8] == current_doc_row[8]     # same citation_count
+                ):
+                    continue
+                
+                # replace the current version but save both current+new versions to the document_versions table.
+                doc_versions = [updated_doc_row, current_doc_row]
+                cursor.executemany('''
+                                    INSERT OR REPLACE INTO document_versions (
+                                        uuid, 
+                                        is_indexed, 
+                                        pmid, 
+                                        pub_year, 
+                                        title, 
+                                        abstract,
+                                        body,
+                                        origin,
+                                        citation_count
+                                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', doc_versions)
+                
+                # put the new version in the document table
+                cursor.execute(f'''
+                                INSERT OR REPLACE INTO {doc_table} (
                                     uuid, 
                                     is_indexed, 
                                     pmid, 
@@ -237,17 +237,7 @@ class Index():
                                     body,
                                     origin,
                                     citation_count
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                ON CONFLICT (uuid) DO UPDATE SET
-                                    is_indexed = EXCLUDED.is_indexed,
-                                    pmid = EXCLUDED.pmid,
-                                    pub_year = EXCLUDED.pub_year,
-                                    title = EXCLUDED.title,
-                                    abstract = EXCLUDED.abstract,
-                                    body = EXCLUDED.body,
-                                    origin = EXCLUDED.origin,
-                                    citation_count = EXCLUDED.citation_count
-                            ''', doc_version_table_inserts)
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', updated_doc_row)
 
         # update the doc_origins table with new origin name(s) - likely just one .xml file
         origins = {abstract.origin for abstract in documents if abstract.origin}
@@ -282,10 +272,15 @@ class Index():
         if n_docs_need_indexing > 0:
             print(f"Indexing {n_docs_need_indexing} documents...")
 
-        # count number of shards (fixed at 950 but retrieved here just in case we change it later) - used to estimate time to defrag
+        # count number of shards - used to estimate time to defrag
+        # generally there should be no fragmented shards unless we're resuming a run that was interrupted
         shards = self._get_tables("shard_%")
-        n_shards = len(shards)
-
+        fragmented_shards = self._get_tables("fragmented_%")
+        if not fragmented_shards:
+            n_shards = len(shards)
+        else:
+            n_shards = len(fragmented_shards)
+        
         # count terms in the disk cache, this is used to estimate how long the cache refresh will take
         self._idx_cursor.execute('''SELECT COUNT(term) FROM query_cache''')
         rows = self._idx_cursor.fetchone()
@@ -293,7 +288,7 @@ class Index():
 
         # estimate time to index, defrag, and refresh cache
         est_time_indexing_per_doc = 0.0003                                             # rough estimate, 0.3ms per doc
-        est_time_defrag_per_shard = max(1, (0.01 * n_docs_need_indexing) / n_shards)   # rough estimate, 10ms per doc
+        est_time_defrag_per_shard = max(1, (0.010 * n_docs_need_indexing) / n_shards)  # rough estimate, 10ms per doc
         est_time_cache_refresh_per_term = 0.005                                        # rough estimate, 5ms per term
         est_total_time = (est_time_indexing_per_doc * n_docs_need_indexing +
                           est_time_defrag_per_shard * n_shards +
@@ -355,8 +350,10 @@ class Index():
         # get the indexed doc versions
         self._corpus_cursor.execute('''SELECT pmid, uuid FROM document_versions WHERE is_indexed = 1''')
         indexed_versions = {row[0]: row[1] for row in self._corpus_cursor.fetchall()}
+        pmids_with_multiple_versions = list(indexed_versions.keys())
+        doc_tables = set(_pmid_to_table_name(pmid) for pmid in indexed_versions.keys())
 
-        for doc_table in doc_tables_need_indexing:
+        for doc_table in doc_tables:
             # handle version conflicts for this table
 
             # if an abstract has been updated, we need to delete the old version's data from the index.
@@ -365,9 +362,8 @@ class Index():
             # this is not the clearest situation, I'd like to make it more explicit at some point.
 
             # get the canonical versions
-            pmids_with_multiple_versions = list(indexed_versions.keys())
             pmids_in_table_with_multiple_versions = [pmid for pmid in pmids_with_multiple_versions if _pmid_to_table_name(pmid) == doc_table]
-            canonical_versions = dict()
+            canonical_versions = dict[int, str]()
             for i in range(0, len(pmids_in_table_with_multiple_versions), 1000):
                 batch_pmids = pmids_in_table_with_multiple_versions[i:i + 1000]
                 self._corpus_cursor.execute(f'''SELECT pmid, uuid FROM {doc_table} WHERE pmid IN ({','.join('?' for _ in batch_pmids)})''', batch_pmids)
@@ -375,82 +371,80 @@ class Index():
                 canonical_versions.update({row[0]: row[1] for row in rows})
 
             # if indexed version UUID != canonical version UUID, then it requires re-indexing
-            # note that this only applies to PMIDs in this specific doc_table
             pmids_to_reindex = [pmid for pmid in canonical_versions if pmid in indexed_versions and indexed_versions[pmid] != canonical_versions[pmid]]
 
-            if pmids_to_reindex:
-                # the current version's data is in the fragmented shard.
-                # so all we have to do is delete the (old) indexed version's data from the shard
-                # and the defragmentation will take care of the rest.
-                self._corpus_cursor.execute('''SELECT pmid, pub_year, title, abstract, origin FROM document_versions WHERE is_indexed = 1 AND pmid IN ({})'''.format(','.join('?' for _ in pmids_to_reindex)), pmids_to_reindex)
-                while True:
-                    batch = self._corpus_cursor.fetchmany(doc_batch_size)
-                    if not batch:
-                        break
+            if not pmids_to_reindex:
+                # this table has no version conflicts (canonical versions == indexed versions)
+                continue
 
-                    # figure out what n-grams we need to update
-                    index_update = dict()
-                    for doc_row in batch:
-                        doc = Document(pmid=doc_row[0], pub_year=doc_row[1], title=doc_row[2], abstract=doc_row[3], origin=doc_row[4])
-                        util.index_document(doc, index_update)
+            # the canonical version's data is in the fragmented shard.
+            # so all we have to do is delete the (old) indexed version's data from the shard,
+            # and the defragmentation will take care of the rest.
+            # TODO: this will crash if we have more than ~100k PMIDs to reindex in this table because of SQLite's max variable limit.
+            self._corpus_cursor.execute('''SELECT pmid, pub_year, title, abstract, origin FROM document_versions WHERE is_indexed = 1 AND pmid IN ({})'''.format(','.join('?' for _ in pmids_to_reindex)), pmids_to_reindex)
+            doc_rows = self._corpus_cursor.fetchall()
 
-                    # update the data for each n-gram
-                    for ngram in index_update:
-                        shard = _ngram_to_shard_name(ngram)
-                        self._idx_cursor.execute(f'''SELECT * FROM {shard} WHERE ngram = ?''', (ngram,))
-                        rows = self._idx_cursor.fetchall()
-                        updated_rows = []
+            # figure out what n-grams we need to update
+            index_update = dict()
+            for doc_row in doc_rows:
+                doc = Document(pmid=doc_row[0], pub_year=doc_row[1], title=doc_row[2], abstract=doc_row[3], origin=doc_row[4])
+                util.index_document(doc, index_update)
 
-                        for row in rows:
-                            uuid = row[0]
-                            ngram = row[1]
-                            data = row[2]
-                            size = row[3]
-                            is_updated_row = False
+            # update the data for each n-gram
+            for ngram in index_update:
+                shard = _ngram_to_shard_name(ngram)
+                self._idx_cursor.execute(f'''SELECT * FROM {shard} WHERE ngram = ?''', (ngram,))
+                rows = self._idx_cursor.fetchall()
+                updated_rows = []
 
-                            decoded = msgpack.loads(data, strict_map_key=False)
-                            if isinstance(decoded, list):
-                                decoded = set(decoded)
+                for row in rows:
+                    uuid = row[0]
+                    ngram = row[1]
+                    data = row[2]
+                    size = row[3]
+                    is_updated_row = False
 
-                            for pmid in pmids_to_reindex:
-                                if pmid in decoded:
-                                    if isinstance(decoded, set):
-                                        decoded.remove(pmid)
-                                    else:
-                                        del decoded[pmid]
-                                    is_updated_row = True
+                    decoded = msgpack.loads(data, strict_map_key=False)
+                    if isinstance(decoded, list):
+                        decoded = set(decoded)
 
-                            if not is_updated_row:
-                                continue
-
+                    for pmid in pmids_to_reindex:
+                        if pmid in decoded:
                             if isinstance(decoded, set):
-                                decoded = list(decoded)
-                            encoded = msgpack.dumps(decoded)
+                                decoded.remove(pmid)
+                            else:
+                                del decoded[pmid]
+                            is_updated_row = True
 
-                            # the size is wrong but it could mess things up if we correct it
-                            updated_rows.append((uuid, ngram, encoded, size))
+                    if not is_updated_row:
+                        continue
 
-                        # delete old version's data from the shard
-                        self._idx_cursor.execute(f'''DELETE FROM {shard} WHERE uuid IN ({','.join('?' for _ in updated_rows)})''', [row[0] for row in updated_rows])
+                    if isinstance(decoded, set):
+                        decoded = list(decoded)
+                    encoded = msgpack.dumps(decoded)
 
-                        # insert rows w/ updated data into the shard
-                        for row in updated_rows:
-                            self._idx_cursor.execute(f'''INSERT INTO {shard} (uuid, ngram, data, size) VALUES (?, ?, ?, ?)''', row)
+                    # the size is wrong but it could mess things up if we correct it
+                    updated_rows.append((uuid, ngram, encoded, size))
 
-                    # update document_versions table so there's no 'is_indexed' mismatch anymore
-                    cursor = self._corpus.cursor()
-                    for doc_row in batch:
-                        pmid = doc_row[0]
-                        previous_version = indexed_versions[pmid]
-                        canonical_version = canonical_versions[pmid]
-                        cursor.execute(f'''UPDATE document_versions SET is_indexed = 0 WHERE uuid = ?''', (previous_version,))
-                        cursor.execute(f'''UPDATE document_versions SET is_indexed = 1 WHERE uuid = ?''', (canonical_version,))
-                    self._corpus.commit()
-                    cursor.close()
+                # delete old version's data from the shard
+                self._idx_cursor.execute(f'''DELETE FROM {shard} WHERE uuid IN ({','.join('?' for _ in updated_rows)})''', [row[0] for row in updated_rows])
 
-                self._index.commit()
-                self._corpus.commit()
+                # insert rows w/ updated data into the shard
+                for row in updated_rows:
+                    self._idx_cursor.execute(f'''INSERT INTO {shard} (uuid, ngram, data, size) VALUES (?, ?, ?, ?)''', row)
+
+            # update document_versions table so there's no 'is_indexed' mismatch anymore
+            cursor = self._corpus.cursor()
+            for doc_row in batch:
+                pmid = doc_row[0]
+                previous_version = indexed_versions[pmid]
+                canonical_version = canonical_versions[pmid]
+                cursor.execute(f'''UPDATE document_versions SET is_indexed = 0 WHERE uuid = ?''', (previous_version,))
+                cursor.execute(f'''UPDATE document_versions SET is_indexed = 1 WHERE uuid = ?''', (canonical_version,))
             
+            self._corpus.commit()
+            self._index.commit()
+            cursor.close()
 
         ## --- defragment the shards ---
         print("Defragmenting shards...")
