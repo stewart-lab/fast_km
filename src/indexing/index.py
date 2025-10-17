@@ -262,7 +262,10 @@ class Index():
         cursor.close()
 
     def index_documents(self) -> Generator[float, None, None]:
+        print("Starting indexing...")
+
         ## --- determine what needs to be indexed ---
+        # count number of documents to index
         doc_tables = self._get_tables("documents_%")
         doc_tables.sort()
 
@@ -276,9 +279,9 @@ class Index():
             if n_docs_need_indexing_table > 0:
                 doc_tables_need_indexing.append(doc_table)
 
-        if n_docs_need_indexing == 0:
-            return
-        
+        if n_docs_need_indexing > 0:
+            print(f"Indexing {n_docs_need_indexing} documents...")
+
         # count number of shards (fixed at 950 but retrieved here just in case we change it later) - used to estimate time to defrag
         shards = self._get_tables("shard_%")
         n_shards = len(shards)
@@ -289,17 +292,17 @@ class Index():
         cached_term_count = rows[0] if rows else 0
 
         # estimate time to index, defrag, and refresh cache
-        est_time_indexing_per_doc = 0.0003          # rough estimate, 0.3ms per doc
-        est_time_defrag_per_shard = 10              # rough estimate, 10 seconds per shard
-        est_time_cache_refresh_per_term = 0.005     # rough estimate, 5ms per term
+        est_time_indexing_per_doc = 0.0003                                             # rough estimate, 0.3ms per doc
+        est_time_defrag_per_shard = max(1, (0.01 * n_docs_need_indexing) / n_shards)   # rough estimate, 10ms per doc
+        est_time_cache_refresh_per_term = 0.005                                        # rough estimate, 5ms per term
         est_total_time = (est_time_indexing_per_doc * n_docs_need_indexing +
                           est_time_defrag_per_shard * n_shards +
                           est_time_cache_refresh_per_term * cached_term_count)
 
         ## --- index the documents (builds the fragmented shards) ---
+        print("Building fragmented shards...")
         est_progress_time = 0.0 # in estimated seconds
         progress = 0.0
-        # n_indexed = 0
         doc_batch_size = 30_000
         for doc_table in doc_tables_need_indexing:
             # index the documents in this table
@@ -330,7 +333,6 @@ class Index():
                         if isinstance(data_fragment, set):
                             data_fragment = list(data_fragment)
                         data_fragment_encoded = msgpack.dumps(data_fragment)
-                        # TODO: bulk insert
                         self._idx_cursor.execute(f'''INSERT INTO {fragmented_shard} (ngram, data) VALUES (?, ?)''', (ngram, data_fragment_encoded))
 
                 # mark the documents as indexed
@@ -348,30 +350,33 @@ class Index():
                 progress = est_progress_time / est_total_time
                 yield progress
 
+        ## --- manage document version conflicts ---
+        print("Resolving document version conflicts...")
+        # get the indexed doc versions
+        self._corpus_cursor.execute('''SELECT pmid, uuid FROM document_versions WHERE is_indexed = 1''')
+        indexed_versions = {row[0]: row[1] for row in self._corpus_cursor.fetchall()}
 
+        for doc_table in doc_tables_need_indexing:
             # handle version conflicts for this table
 
             # if an abstract has been updated, we need to delete the old version's data from the index.
             # in these cases, there will be a mismatch between the 'is_indexed' columns in the 'documents' and 'document_versions' tables.
             # the 'is_indexed' column in document_versions will be 1 for the old version but the UUID will not match the document in the 'documents' table.
             # this is not the clearest situation, I'd like to make it more explicit at some point.
-            pmids_to_reindex = []
 
-            # get the indexed versions
-            self._corpus_cursor.execute('''SELECT pmid, uuid FROM document_versions WHERE is_indexed = 1''')
-            indexed_versions = {row[0]: row[1] for row in self._corpus_cursor.fetchall()}
-            if indexed_versions:
-                # get the canonical versions
-                pmids = list(indexed_versions.keys())
-                canonical_versions = dict()
-                for i in range(0, len(pmids), 1000):
-                    batch_pmids = pmids[i:i + 1000]
-                    self._corpus_cursor.execute(f'''SELECT pmid, uuid FROM {doc_table} WHERE pmid IN ({','.join('?' for _ in batch_pmids)})''', batch_pmids)
-                    canonical_versions.update({row[0]: row[1] for row in self._corpus_cursor.fetchall()})
+            # get the canonical versions
+            pmids_with_multiple_versions = list(indexed_versions.keys())
+            pmids_in_table_with_multiple_versions = [pmid for pmid in pmids_with_multiple_versions if _pmid_to_table_name(pmid) == doc_table]
+            canonical_versions = dict()
+            for i in range(0, len(pmids_in_table_with_multiple_versions), 1000):
+                batch_pmids = pmids_in_table_with_multiple_versions[i:i + 1000]
+                self._corpus_cursor.execute(f'''SELECT pmid, uuid FROM {doc_table} WHERE pmid IN ({','.join('?' for _ in batch_pmids)})''', batch_pmids)
+                rows = self._corpus_cursor.fetchall()
+                canonical_versions.update({row[0]: row[1] for row in rows})
 
-                # if indexed version UUID != canonical version UUID, then it requires re-indexing
-                # note that this only applies to PMIDs in this specific doc_table
-                pmids_to_reindex = [pmid for pmid in canonical_versions if pmid in indexed_versions and indexed_versions[pmid] != canonical_versions[pmid]]
+            # if indexed version UUID != canonical version UUID, then it requires re-indexing
+            # note that this only applies to PMIDs in this specific doc_table
+            pmids_to_reindex = [pmid for pmid in canonical_versions if pmid in indexed_versions and indexed_versions[pmid] != canonical_versions[pmid]]
 
             if pmids_to_reindex:
                 # the current version's data is in the fragmented shard.
@@ -448,6 +453,7 @@ class Index():
             
 
         ## --- defragment the shards ---
+        print("Defragmenting shards...")
         fragmented_shards = self._get_tables("fragmented_%")
         fragmented_shards.sort()
 
@@ -459,6 +465,7 @@ class Index():
 
 
         ## --- update disk cache ---
+        print("Refreshing query cache...")
         self._idx_cursor.execute("SELECT term FROM query_cache")
         rows = self._idx_cursor.fetchall()
         cached_terms = [row[0] for row in rows]
@@ -477,6 +484,7 @@ class Index():
             progress = est_progress_time / est_total_time
             yield progress
 
+        print("Indexing complete.")
         progress = 1.0
         yield progress
 
