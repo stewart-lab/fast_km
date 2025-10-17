@@ -200,8 +200,8 @@ class Index():
                     new_doc.citation_count if new_doc.citation_count is not None else current_doc_row[8]
                 )
 
-                # if the updated text/year/citations are identical to the current doc, skip
-                # this helps when the baseline year changes. no need to re-index if nothing changed.
+                # if the updated text/year/citations are identical to the current doc, skip.
+                # this helps when the baseline year changes. no need to re-index a doc if nothing changed.
                 if (updated_doc_row[3] == current_doc_row[3] and # same pub_year
                     updated_doc_row[4] == current_doc_row[4] and # same title
                     updated_doc_row[5] == current_doc_row[5] and # same abstract

@@ -6,7 +6,7 @@ from src.indexing.index import Index
 
 @pytest.fixture
 def temp_dir():
-    return os.path.join("/scratch", "tests", "tmp")
+    return os.path.join(os.getcwd(), "tests", "tmp")
 
 def test_tokenization():
     text = "The_quick brown fox jumped over the lazy dog."
