@@ -317,7 +317,6 @@ def _get_config_template():
     return {
         "JOB_TYPE": "km_with_gpt",  # Will be overridden based on data structure
         "KM_hypothesis": "",  # Will be injected from payload
-        "KM_direct_comp_hypothesis": "",
         "SKIM_hypotheses": {},
         "Evaluate_single_abstract": False,
         "GLOBAL_SETTINGS": {
@@ -363,41 +362,26 @@ def _get_config_template():
                 "A_TERM_LIST": False,
                 "A_TERMS_FILE": "",
                 "B_TERMS_FILE": "",
-                "NUM_B_TERMS": 25,
-                "km_with_gpt": {
-                    "ab_fet_threshold": 1,
-                    "censor_year_upper": 2024,
-                    "censor_year_lower": 0
-                }
-            },
-            "km_with_gpt_direct_comp": {
-                "position": False,
-                "A_TERM_LIST": False,
-                "A_TERMS_FILE": "",
-                "B_TERMS_FILE": "",
+                "is_dch": False,
                 "SORT_COLUMN": "ab_sort_ratio",
                 "NUM_B_TERMS": 25,
-                "km_with_gpt_direct_comp": {
-                    "ab_fet_threshold": 1,
-                    "censor_year_upper": 1990,
-                    "censor_year_lower": 0
-                }
+                "ab_fet_threshold": 1,
+                "censor_year_upper": 2024,
+                "censor_year_lower": 0
             },
             "skim_with_gpt": {
                 "position": True,
                 "A_TERM_LIST": True,
                 "A_TERMS_FILE": "",
                 "B_TERMS_FILE": "",
-                "NUM_B_TERMS": 20000,
                 "C_TERMS_FILE": "",
                 "SORT_COLUMN": "bc_pvalue",
-                "skim_with_gpt": {
-                    "ab_fet_threshold": 1,
-                    "bc_fet_threshold": 1,
-                    "censor_year_upper": 2025,
-                    "censor_year_lower": 0,
-                    "top_n": 300
-                }
+                "NUM_B_TERMS": 20000,
+                "ab_fet_threshold": 1,
+                "bc_fet_threshold": 1,
+                "censor_year_upper": 2025,
+                "censor_year_lower": 0,
+                "top_n": 300
             }
         }
     }
