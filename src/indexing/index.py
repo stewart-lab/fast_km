@@ -349,12 +349,13 @@ class Index():
         print("Resolving document version conflicts...")
         # get the indexed doc versions
         self._corpus_cursor.execute('''SELECT pmid, uuid FROM document_versions WHERE is_indexed = 1''')
-        indexed_versions = {row[0]: row[1] for row in self._corpus_cursor.fetchall()}
-        pmids_with_multiple_versions = list(indexed_versions.keys())
-        doc_tables = set(_pmid_to_table_name(pmid) for pmid in indexed_versions.keys())
+        indexed_versions = {row[0]: row[1] for row in self._corpus_cursor.fetchall()} # pmid -> uuid
+        canonical_versions = dict[int, str]() # pmid -> uuid
 
+        doc_tables = set(_pmid_to_table_name(pmid) for pmid in indexed_versions)
+        pmids_to_reindex = []
         for doc_table in doc_tables:
-            # handle version conflicts for this table
+            # get version conflicts for this table
 
             # if an abstract has been updated, we need to delete the old version's data from the index.
             # in these cases, there will be a mismatch between the 'is_indexed' columns in the 'documents' and 'document_versions' tables.
@@ -362,36 +363,37 @@ class Index():
             # this is not the clearest situation, I'd like to make it more explicit at some point.
 
             # get the canonical versions
-            pmids_in_table_with_multiple_versions = [pmid for pmid in pmids_with_multiple_versions if _pmid_to_table_name(pmid) == doc_table]
-            canonical_versions = dict[int, str]()
+            pmids_in_table_with_multiple_versions = [pmid for pmid in indexed_versions if _pmid_to_table_name(pmid) == doc_table]
             for i in range(0, len(pmids_in_table_with_multiple_versions), 1000):
                 batch_pmids = pmids_in_table_with_multiple_versions[i:i + 1000]
                 self._corpus_cursor.execute(f'''SELECT pmid, uuid FROM {doc_table} WHERE pmid IN ({','.join('?' for _ in batch_pmids)})''', batch_pmids)
                 rows = self._corpus_cursor.fetchall()
                 canonical_versions.update({row[0]: row[1] for row in rows})
 
-            # if indexed version UUID != canonical version UUID, then it requires re-indexing
-            pmids_to_reindex = [pmid for pmid in canonical_versions if pmid in indexed_versions and indexed_versions[pmid] != canonical_versions[pmid]]
+        # if indexed version UUID != canonical version UUID, then the PMID requires re-indexing
+        pmids_to_reindex = [pmid for pmid in canonical_versions if pmid in indexed_versions and indexed_versions[pmid] != canonical_versions[pmid]]
 
-            if not pmids_to_reindex:
-                # this table has no version conflicts (canonical versions == indexed versions)
-                continue
-
+        if pmids_to_reindex:
             # the canonical version's data is in the fragmented shard.
             # so all we have to do is delete the (old) indexed version's data from the shard,
             # and the defragmentation will take care of the rest.
-            # TODO: this will crash if we have more than ~100k PMIDs to reindex in this table because of SQLite's max variable limit.
-            self._corpus_cursor.execute('''SELECT pmid, pub_year, title, abstract, origin FROM document_versions WHERE is_indexed = 1 AND pmid IN ({})'''.format(','.join('?' for _ in pmids_to_reindex)), pmids_to_reindex)
-            doc_rows = self._corpus_cursor.fetchall()
+            batch_size = 1000
+            pmid_batches = [pmids_to_reindex[i:i + batch_size] for i in range(0, len(pmids_to_reindex), batch_size)]
 
             # figure out what n-grams we need to update
-            index_update = dict()
-            for doc_row in doc_rows:
-                doc = Document(pmid=doc_row[0], pub_year=doc_row[1], title=doc_row[2], abstract=doc_row[3], origin=doc_row[4])
-                util.index_document(doc, index_update)
+            index_update = dict[str, dict[int, list[int]]]()
+            for batch in pmid_batches:
+                self._corpus_cursor.execute('''SELECT pmid, pub_year, title, abstract, origin FROM document_versions WHERE is_indexed = 1 AND pmid IN ({})'''.format(','.join('?' for _ in batch)), batch)
+                doc_rows = self._corpus_cursor.fetchall()
+                if not doc_rows:
+                    break
+
+                for doc_row in doc_rows:
+                    doc = Document(pmid=doc_row[0], pub_year=doc_row[1], title=doc_row[2], abstract=doc_row[3], origin=doc_row[4])
+                    util.index_document(doc, index_update)
 
             # update the data for each n-gram
-            for ngram in index_update:
+            for i, ngram in enumerate(index_update):
                 shard = _ngram_to_shard_name(ngram)
                 self._idx_cursor.execute(f'''SELECT * FROM {shard} WHERE ngram = ?''', (ngram,))
                 rows = self._idx_cursor.fetchall()
@@ -433,15 +435,16 @@ class Index():
                 for row in updated_rows:
                     self._idx_cursor.execute(f'''INSERT INTO {shard} (uuid, ngram, data, size) VALUES (?, ?, ?, ?)''', row)
 
+                if i % 1000 == 0:
+                    self._index.commit()
+
             # update document_versions table so there's no 'is_indexed' mismatch anymore
             cursor = self._corpus.cursor()
-            for doc_row in batch:
-                pmid = doc_row[0]
+            for pmid in pmids_to_reindex:
                 previous_version = indexed_versions[pmid]
                 canonical_version = canonical_versions[pmid]
                 cursor.execute(f'''UPDATE document_versions SET is_indexed = 0 WHERE uuid = ?''', (previous_version,))
                 cursor.execute(f'''UPDATE document_versions SET is_indexed = 1 WHERE uuid = ?''', (canonical_version,))
-            
             self._corpus.commit()
             self._index.commit()
             cursor.close()
