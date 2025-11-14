@@ -148,7 +148,7 @@ class Config:
         
         # Hypotheses and job settings should be loaded BEFORE term lists
         self.km_hypothesis = self.job_config["KM_hypothesis"]
-        self.km_direct_comp_hypothesis = self.job_config["KM_direct_comp_hypothesis"]
+        # Removed legacy direct comparison hypothesis; DCH handled via is_dch flag
         self.skim_hypotheses = self.job_config["SKIM_hypotheses"]
         self.job_type = self.job_config.get("JOB_TYPE")
         self.filter_config = self.job_config["abstract_filter"]
@@ -157,7 +157,8 @@ class Config:
         self.test_leakage_type = self.filter_config["TEST_LEAKAGE_TYPE"]
         self.is_km_with_gpt = self.job_type == "km_with_gpt"
         self.is_skim_with_gpt = self.job_type == "skim_with_gpt"
-        self.is_km_with_gpt_direct_comp = self.job_type == "km_with_gpt_direct_comp"
+        # DCH mode (direct comparison) indicated via km_with_gpt job setting
+        self.is_dch = self.job_config.get("JOB_SPECIFIC_SETTINGS", {}).get("km_with_gpt", {}).get("is_dch", False) if self.job_type == "km_with_gpt" else False
         self.evaluate_single_abstract = self.job_config["Evaluate_single_abstract"]
         self.post_n = self.global_settings["POST_N"]
         self.top_n_articles_most_cited = self.global_settings["TOP_N_ARTICLES_MOST_CITED"]
@@ -317,9 +318,7 @@ class Config:
         """Load appropriate term lists based on job configuration"""
         if self.is_skim_with_gpt:
             self._load_skim_terms()
-        elif self.is_km_with_gpt_direct_comp:
-            self._load_km_direct_comp_terms()
-        elif not self.is_skim_with_gpt and not self.is_km_with_gpt_direct_comp:
+        elif not self.is_skim_with_gpt:
             self._load_km_terms()
         else:
             raise ValueError(f"Unknown job type: {self.job_type}")
@@ -362,21 +361,7 @@ class Config:
         b_terms_file = job_settings["B_TERMS_FILE"]
         self.b_terms = self._read_terms_from_file(b_terms_file)
 
-    def _load_km_direct_comp_terms(self):
-        """Load terms for km_with_gpt_direct_comp job type"""
-        job_settings = self.job_config["JOB_SPECIFIC_SETTINGS"]["km_with_gpt_direct_comp"]
-        self.position = job_settings["position"]
-        
-        # Load A terms
-        if job_settings.get("A_TERM_LIST", False):
-            a_terms_file = job_settings["A_TERMS_FILE"]
-            self.a_terms = self._read_terms_from_file(a_terms_file)
-        else:
-            self.a_terms = [self.global_settings["A_TERM"]]
-
-        # Load B terms for KM direct comp workflow
-        b_terms_file = job_settings["B_TERMS_FILE"]
-        self.b_terms = self._read_terms_from_file_for_km_direct_comp(b_terms_file)
+    # Removed legacy km_with_gpt_direct_comp loader
 
     def _read_terms_from_file(self, file_path: str) -> list:
         """Read terms from a text file (one term per line)"""
@@ -392,23 +377,7 @@ class Config:
             self.logger.error(f"Error reading terms file {file_path}: {str(e)}")
             raise
          
-    def _read_terms_from_file_for_km_direct_comp(self, file_path: str) -> list:
-        """Read terms from a text file (only one line allowed.)"""
-        try:
-            with open(file_path, "r") as f:
-                line = f.readline().strip()
-                if not line:
-                    self.logger.error(f"Empty file: {file_path}")
-                    raise ValueError(f"Empty file: {file_path}")
-                terms = [line]
-                self.logger.debug(f"Read {len(terms)} terms from {file_path}")
-                return terms
-        except FileNotFoundError:
-            self.logger.error(f"Terms file not found: {file_path}")
-            raise
-        except Exception as e:
-            self.logger.error(f"Error reading terms file {file_path}: {str(e)}")
-            raise
+    # Removed legacy direct-comp single-line term reader
 
     @property
     def job_specific_settings(self):
@@ -422,21 +391,18 @@ class Config:
     def fet_thresholds(self):
         if self.job_type == "skim_with_gpt":
             return {
-                "ab": self.job_specific_settings["skim"]["ab_fet_threshold"],
-                "bc": self.job_specific_settings["skim"]["bc_fet_threshold"]
-            }
-        elif self.is_km_with_gpt_direct_comp:
-            return {
-                "ab": self.job_specific_settings["km_with_gpt_direct_comp"]["ab_fet_threshold"]
+                "ab": self.job_specific_settings["ab_fet_threshold"],
+                "bc": self.job_specific_settings["bc_fet_threshold"]
             }
         else:
             return {
-                "ab": self.job_specific_settings["km_with_gpt"]["ab_fet_threshold"]
+                "ab": self.job_specific_settings["ab_fet_threshold"]
             }
 
     @property
     def censor_year(self):
-        return self.job_specific_settings.get("censor_year", 2024)
+        # Prefer upper bound if present; fallback to 2024 default
+        return self.job_specific_settings.get("censor_year_upper", 2024)
 
     def _validate_htcondor_config(self):
         """Validate required HTCondor settings"""
