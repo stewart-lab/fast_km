@@ -239,17 +239,17 @@ def gpt_score_hypothesis(json: dict) -> 'list[dict]':
     if not data or len(data) == 0:
         raise ValueError('data is required and must be a non-empty list')
     
-    # determine if KM or SKiM or direct comparison KM
+    # determine if KM or SKiM
     count_with_c = len([x for x in data if 'c_term' in x])
     if count_with_c != 0 and count_with_c != len(data):
         raise ValueError('data must be all KM or all SKiM')
     
     is_km = 'KM_hypothesis' in json
     is_skim = 'SKIM_hypotheses' in json
-    is_km_direct_comparison = 'KM_direct_comp_hypothesis' in json
+    is_dch = bool(json.get('is_dch', False))
 
-    if not (is_km or is_skim or is_km_direct_comparison):
-        raise ValueError('job must be KM, SKiM, or direct comparison KM')
+    if not (is_km or is_skim):
+        raise ValueError('job must be KM or SKiM')
 
     # validate data
     for item in data:
@@ -266,12 +266,7 @@ def gpt_score_hypothesis(json: dict) -> 'list[dict]':
             raise ValueError('bc_pmid_intersection is required for SKiM')
     
     # validate hypotheses
-    if is_km_direct_comparison:
-        if not isinstance(json['KM_direct_comp_hypothesis'], str):
-            raise ValueError('KM_direct_comp_hypothesis must be a string')
-        if '{a_term}' not in json['KM_direct_comp_hypothesis'] or '{b_term1}' not in json['KM_direct_comp_hypothesis'] or '{b_term2}' not in json['KM_direct_comp_hypothesis']:
-            raise ValueError('KM_direct_comp_hypothesis must contain {a_term}, {b_term1}, and {b_term2}')
-    elif is_km:
+    if is_km:
         if not isinstance(json['KM_hypothesis'], str):
             raise ValueError('KM_hypothesis must be a string')
         if '{a_term}' not in json['KM_hypothesis'] or '{b_term}' not in json['KM_hypothesis']:
@@ -301,9 +296,10 @@ def gpt_score_hypothesis(json: dict) -> 'list[dict]':
         if '{a_term}' not in json['SKIM_hypotheses']['ABC'] or '{b_term}' not in json['SKIM_hypotheses']['ABC'] or '{c_term}' not in json['SKIM_hypotheses']['ABC']:
             raise ValueError('ABC hypothesis must contain {a_term}, {b_term}, and {c_term}')
         
-    # set defaults for top_n_articles parameters
-    json['top_n_articles_most_cited'] = json.get('top_n_articles_most_cited', 3)
-    json['top_n_articles_most_recent'] = json.get('top_n_articles_most_recent', 2)
+    # DCH default: select 15 abstracts for each hypothesis when not provided
+    if is_dch:
+        json['top_n_articles_most_cited'] = json.get('top_n_articles_most_cited', 15)
+        json['top_n_articles_most_recent'] = json.get('top_n_articles_most_recent', 15)
 
     # create the job dir to store required files
     job = get_current_job()
