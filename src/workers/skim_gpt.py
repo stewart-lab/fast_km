@@ -46,27 +46,27 @@ def run_skim_gpt(job_dir: str, payload: dict) -> dict:
     data = payload['data']
     is_km = 'KM_hypothesis' in payload
     is_skim = 'SKIM_hypotheses' in payload
-    is_km_direct_comparison = 'KM_direct_comp_hypothesis' in payload
-
-    if not (is_km or is_skim or is_km_direct_comparison):
-        raise ValueError('job must be KM, SKiM, or direct comparison KM')
+    is_dch = bool(payload.get('is_dch', False))
+    if not (is_km or is_skim):
+        raise ValueError('job must be KM or SKiM')
     
     # Set job type
     if is_km:
         config['JOB_TYPE'] = 'km_with_gpt'
     elif is_skim:
         config['JOB_TYPE'] = 'skim_with_gpt'
-    elif is_km_direct_comparison:
-        config['JOB_TYPE'] = 'km_with_gpt_direct_comp'
     
     # Inject dynamic values from payload
     config['KM_hypothesis'] = payload.get('KM_hypothesis', '')
     config['SKIM_hypotheses'] = payload.get('SKIM_hypotheses', {})
-    config['KM_direct_comp_hypothesis'] = payload.get('KM_direct_comp_hypothesis', '')
     config['GLOBAL_SETTINGS']['MODEL'] = payload.get('model', 'o3-mini')
     config['GLOBAL_SETTINGS']['TOP_N_ARTICLES_MOST_CITED'] = payload.get('top_n_articles_most_cited', 50)
     config['GLOBAL_SETTINGS']['TOP_N_ARTICLES_MOST_RECENT'] = payload.get('top_n_articles_most_recent', 50)
     config['GLOBAL_SETTINGS']['POST_N'] = payload.get('post_n', 5)
+
+    # Propagate DCH flag into job-specific settings for km_with_gpt
+    if 'JOB_SPECIFIC_SETTINGS' in config and 'km_with_gpt' in config['JOB_SPECIFIC_SETTINGS']:
+        config['JOB_SPECIFIC_SETTINGS']['km_with_gpt']['is_dch'] = is_dch
 
     # Set up secrets
     secrets = {
@@ -98,7 +98,7 @@ def run_skim_gpt(job_dir: str, payload: dict) -> dict:
     # Write data.tsv
     data_tsv_path = os.path.join(job_dir, 'data.tsv')
     with open(data_tsv_path, 'w') as f:
-        if is_km or is_km_direct_comparison:
+        if is_km:
             f.write('a_term\tb_term\tab_pmid_intersection\n')
             for item in data:
                 ab_pmid_list = [str(p) for p in item['ab_pmid_intersection']]
@@ -340,7 +340,7 @@ def _get_config_template():
         "HTCONDOR": {
             "collector_host": "cm.chtc.wisc.edu",
             "submit_host": "ap2002.chtc.wisc.edu",
-            "docker_image": "docker://stewartlab/skimgpt:1.1",
+            "docker_image": "docker://stewartlab/skimgpt:v1.1",
             "request_gpus": "1",
             "request_cpus": "1",
             "request_memory": "15GB",
