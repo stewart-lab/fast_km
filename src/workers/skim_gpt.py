@@ -270,23 +270,29 @@ def _parse_json_result(json_result_file: str) -> 'list[dict]':
     for json_result in results_json:
         parsed_result = dict()
 
-        if 'A_B_C_Relationship' in json_result: # SKiM only
+        # Direct comparison (DCH) results bundle hypotheses together
+        if 'Hypothesis_Comparison' in json_result:
+            comparison = json_result['Hypothesis_Comparison']
+            parsed_result['hypothesis1'] = comparison.get('hypothesis1')
+            parsed_result['hypothesis2'] = comparison.get('hypothesis2')
+
+        if 'A_B_C_Relationship' in json_result:  # SKiM only
             parsed_result['a_term'] = json_result['A_B_C_Relationship']['a_term']
             parsed_result['b_term'] = json_result['A_B_C_Relationship']['b_term']
             parsed_result['c_term'] = json_result['A_B_C_Relationship']['c_term']
             parsed_result['abc_result'] = json_result['A_B_C_Relationship']['Result']
-        if 'A_B_Relationship' in json_result: # KM and SKiM
+        if 'A_B_Relationship' in json_result:  # KM and SKiM
             parsed_result['a_term'] = json_result['A_B_Relationship']['a_term']
             parsed_result['b_term'] = json_result['A_B_Relationship']['b_term']
             parsed_result['ab_result'] = json_result['A_B_Relationship']['Result']
-        if 'A_C_Relationship' in json_result: # SKiM only
+        if 'A_C_Relationship' in json_result:  # SKiM only
             parsed_result['a_term'] = json_result['A_C_Relationship']['a_term']
             parsed_result['c_term'] = json_result['A_C_Relationship']['c_term']
             parsed_result['ac_result'] = json_result['A_C_Relationship']['Result']
 
         parsed_result['original_json'] = json_result
 
-        if not parsed_result:
+        if len(parsed_result) == 1 and 'original_json' in parsed_result:
             raise ValueError(f"Result is empty for {json_result}")
 
         parsed_results.append(parsed_result)
