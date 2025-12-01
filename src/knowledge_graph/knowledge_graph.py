@@ -98,7 +98,13 @@ class KnowledgeGraph:
         self._conn.close()
 
     def _connect(self):
-        return sqlite3.connect(os.path.join(self.data_dir, "_kg.db"))
+        conn =  sqlite3.connect(os.path.join(self.data_dir, "_kg.db"))
+
+        # use WAL and full synchronous for better corruption resistance
+        conn.execute('PRAGMA journal_mode=WAL;')
+        conn.execute('PRAGMA synchronous=FULL;')
+        
+        return conn
     
     def _create_db(self):
         os.makedirs(self.data_dir, exist_ok=True)

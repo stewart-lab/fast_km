@@ -288,7 +288,7 @@ class Index():
 
         # estimate time to index, defrag, and refresh cache
         est_time_indexing_per_doc = 0.0003                                             # rough estimate, 0.3ms per doc
-        est_time_defrag_per_shard = max(1, (0.010 * n_docs_need_indexing) / n_shards)  # rough estimate, 10ms per doc
+        est_time_defrag_per_shard = max(1, (0.0003 * n_docs_need_indexing) / n_shards) # rough estimate, 0.3ms per doc
         est_time_cache_refresh_per_term = 0.005                                        # rough estimate, 5ms per term
         est_total_time = (est_time_indexing_per_doc * n_docs_need_indexing +
                           est_time_defrag_per_shard * n_shards +
@@ -698,11 +698,36 @@ class Index():
     def _get_db_connection(self, db_name: str):
         os.makedirs(self.data_dir, exist_ok=True)
         conn = sqlite3.connect(os.path.join(self.data_dir, f"{db_name}.db"))
+
+        # use WAL and full synchronous for better corruption resistance
+        conn.execute('PRAGMA journal_mode=WAL;')
+        conn.execute('PRAGMA synchronous=FULL;')
+
         return conn
 
     def _initialize(self) -> None:
         _corpus_exists = os.path.exists(os.path.join(self.data_dir, "_corpus.db"))
         _index_exists = os.path.exists(os.path.join(self.data_dir, "_index.db"))
+
+        # check that the shards have an index on ngram
+        if _index_exists:
+            index = self._get_db_connection("_index")
+            cur = index.cursor()
+            cur.execute('''SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'shard_%' ''')
+            shard_tables = [row[0] for row in cur.fetchall()]
+            for shard in shard_tables:
+                cur.execute(f'''PRAGMA index_list({shard})''')
+                indexes = [row[1] for row in cur.fetchall()]
+                if f'idx_ngram_{shard}' not in indexes:
+                    print(f"Ngram column index is missing from shard {shard}, creating it now.")
+
+                    # index the ngram column
+                    cur.execute(f'''CREATE INDEX IF NOT EXISTS idx_ngram_{shard} ON {shard} (ngram)''')
+                    index.commit()
+
+            cur.close()
+            index.close()
+
         if _corpus_exists and _index_exists:
             return
 
