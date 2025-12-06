@@ -104,8 +104,8 @@ def verify_password(credentials: HTTPBasicCredentials = Depends(security)):
     return True
 
 ### Job management endpoints
-@app.post("/api/kinderminer", tags=km_tags)
-@app.post('/skim/api/jobs', tags=deprecated_tags)  # old endpoint for SKiM/KM
+@app.post("/api/kinderminer", tags=km_tags, status_code=status.HTTP_202_ACCEPTED)
+@app.post('/skim/api/jobs', tags=deprecated_tags, status_code=status.HTTP_202_ACCEPTED)  # old endpoint for SKiM/KM
 def submit_kinderminer_job(params: KinderMinerJobParams, authorized: bool = Depends(verify_password)) -> dict:
     if params.c_terms:
         priority = 'HIGH' if len(params.a_terms) + len(params.b_terms) + len(params.c_terms) <= 50 else 'MEDIUM'
@@ -114,12 +114,12 @@ def submit_kinderminer_job(params: KinderMinerJobParams, authorized: bool = Depe
         priority = 'HIGH' if len(params.a_terms) + len(params.b_terms) <= 50 else 'MEDIUM'
         return queue_job(run_kinderminer_job, priority, params)
 
-@app.post("/api/hypothesis_eval", tags=hyp_tags)
-@app.post('/hypothesis_eval/api/jobs/', tags=deprecated_tags)  # old endpoint for hypothesis eval
+@app.post("/api/hypothesis_eval", tags=hyp_tags, status_code=status.HTTP_202_ACCEPTED)
+@app.post('/hypothesis_eval/api/jobs/', tags=deprecated_tags, status_code=status.HTTP_202_ACCEPTED)  # old endpoint for hypothesis eval
 def submit_hypothesis_eval_job(params: HypothesisEvalJobParams, authorized: bool = Depends(verify_password)) -> dict:
     return queue_job(run_hypothesis_eval_job, 'LOW', params)
 
-@app.post("/api/index", tags=index_tags)
+@app.post("/api/index", tags=index_tags, status_code=status.HTTP_202_ACCEPTED)
 def submit_index_job(params: IndexingJobParams, authorized: bool = Depends(verify_password)) -> dict:
     return queue_indexing_job(params)
 
