@@ -1,68 +1,34 @@
-version: "3.3"
 services:
   server:
     build:
       context: .
-      dockerfile: ./src/server/Dockerfile
-    image: fast_km-server:build
-    command: --pw ${PASSWORD_HASH}  # edit .env file to change password
+      dockerfile: Dockerfile
+    image: fast_km:build
     ports:
-      - "5099:5000"  # HOST_PORT:CONTAINER_PORT
-    depends_on:
-      - redis
-    networks:
-      - fast_km-network
-
-  workers:
-    build:
-      context: .
-      dockerfile: ./src/workers/Dockerfile
-    image: fast_km-worker:build
-    command: --workers 3 --neo4j_address neo4j_kg:7687,neo4j_semmeddb:7687 --pubmed_api_key ${PUBMED_API_KEY} --openai_api_key ${OPENAI_API_KEY} --htcondor_token ${HTCONDOR_TOKEN} --deepseek_api_key ${DEEPSEEK_API_KEY}
+      - "${API_PORT}:8000"                   # HOST_PORT:CONTAINER_PORT
+      - "8501:8501"
     volumes:
-      - ${PUBMED_DIR}:/mnt/pubmed  # edit .env file to change pubmed dir
+      - ./_data:/app/_data
       - /tmp:/tmp
+    environment:
+      - REDIS=redis:6379
+      - HIGH=${HIGH}                         # optional, ok if env var is blank or not set
+      - MEDIUM=${MEDIUM}                     # optional, ok if env var is blank or not set
+      - LOW=${LOW}                           # optional, ok if env var is blank or not set
+      - PUBMED_API_KEY=${PUBMED_API_KEY}     # optional, ok if env var is blank or not set
+      - OPENAI_API_KEY=${OPENAI_API_KEY}     # optional, ok if env var is blank or not set
+      - HTCONDOR_TOKEN=${HTCONDOR_TOKEN}     # optional, ok if env var is blank or not set
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY} # optional, ok if env var is blank or not set
+      - TIMEZONE=${TIMEZONE}                 # optional, ok if env var is blank or not set
     depends_on:
       - redis
-    networks:
-      - fast_km-network
-
-  mongo:
-    image: mongo
-    command: --quiet --logpath /dev/null
     networks:
       - fast_km-network
 
   redis:
-    image: redis:7.0.10
+    image: redis
     networks:
       - fast_km-network
-
-  # neo4j_kg:
-  #   image: neo4j:4.4.16
-  #   environment:
-  #     NEO4J_AUTH: neo4j/mypassword
-  #   volumes:
-  #     - ${NEO4J_KG_DIR}/data:/data
-  #     - ${NEO4J_KG_DIR}/logs:/logs
-  #   expose:
-  #     - 7474
-  #     - 7687
-  #   networks:
-  #     - fast_km-network
-
-  # neo4j_semmeddb:
-  #   image: neo4j:4.4.16
-  #   environment:
-  #     NEO4J_AUTH: neo4j/mypassword
-  #   volumes:
-  #     - ${NEO4J_SEMMEDDB_DIR}/data:/data
-  #     - ${NEO4J_SEMMEDDB_DIR}/logs:/logs
-  #   expose:
-  #     - 7474
-  #     - 7687
-  #   networks:
-  #     - fast_km-network
 
 networks:
   fast_km-network:

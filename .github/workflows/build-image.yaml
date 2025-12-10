@@ -1,0 +1,20 @@
+name: Build image
+
+on:
+  push:
+    branches: ["master"]
+    tags:
+      - 'v*.*.*' # glob for semver tags (including prereleases)
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  call-build-web-image:
+    uses: osg-htc/build-push/.github/workflows/build-push.yaml@main
+    secrets:
+      username: ${{ secrets.ROBOT_USERNAME }}
+      password: ${{ secrets.ROBOT_USER_PASSWORD }}
+    with:
+      image: 'hub.opensciencegrid.org/stewart-lab/fast_km'
+      file: 'Dockerfile'
