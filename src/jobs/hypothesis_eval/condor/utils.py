@@ -402,7 +402,17 @@ class Config:
     @property
     def censor_year(self):
         # Prefer upper bound if present; fallback to 2024 default
-        return self.job_specific_settings.get("censor_year_upper", 2024)
+        return self.job_specific_settings.get("censor_year_upper", 2025)
+
+    @property
+    def censor_year_upper(self):
+        """Upper bound for censor year; defaults to censor_year value"""
+        return self.job_specific_settings.get("censor_year_upper", self.censor_year)
+
+    @property
+    def censor_year_lower(self):
+        """Lower bound for censor year; defaults to 0 if not provided"""
+        return self.job_specific_settings.get("censor_year_lower", 0)
 
     def _validate_htcondor_config(self):
         """Validate required HTCondor settings"""
