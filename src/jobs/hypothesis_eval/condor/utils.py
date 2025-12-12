@@ -389,7 +389,7 @@ class Config:
 
     @property
     def fet_thresholds(self):
-        if self.job_type == "skim_with_gpt":
+        if self.is_skim_with_gpt:
             return {
                 "ab": self.job_specific_settings["ab_fet_threshold"],
                 "bc": self.job_specific_settings["bc_fet_threshold"]
