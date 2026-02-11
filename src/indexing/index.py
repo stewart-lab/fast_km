@@ -253,9 +253,11 @@ class Index():
 
     def index_documents(self) -> Generator[float, None, None]:
         print("Starting indexing...")
+        yield 0.0
 
-        ## --- determine what needs to be indexed ---
-        # count number of documents to index
+        ## --- index the documents (builds the fragmented shards) ---
+
+        # count number of documents to be indexed so we can calculate progress
         doc_tables = self._get_tables("documents_%")
         doc_tables.sort()
 
@@ -270,34 +272,11 @@ class Index():
                 doc_tables_need_indexing.append(doc_table)
 
         if n_docs_need_indexing > 0:
-            print(f"Indexing {n_docs_need_indexing} documents...")
-
-        # count number of shards - used to estimate time to defrag
-        # generally there should be no fragmented shards unless we're resuming a run that was interrupted
-        shards = self._get_tables("shard_%")
-        fragmented_shards = self._get_tables("fragmented_%")
-        if not fragmented_shards:
-            n_shards = len(shards)
+            print("Building fragmented shards...")
         else:
-            n_shards = len(fragmented_shards)
-        
-        # count terms in the disk cache, this is used to estimate how long the cache refresh will take
-        self._idx_cursor.execute('''SELECT COUNT(term) FROM query_cache''')
-        rows = self._idx_cursor.fetchone()
-        cached_term_count = rows[0] if rows else 0
+            print("No documents to index, skipping building fragmented shards.")
 
-        # estimate time to index, defrag, and refresh cache
-        est_time_indexing_per_doc = 0.0003                                             # rough estimate, 0.3ms per doc
-        est_time_defrag_per_shard = max(1, (0.0003 * n_docs_need_indexing) / n_shards) # rough estimate, 0.3ms per doc
-        est_time_cache_refresh_per_term = 0.005                                        # rough estimate, 5ms per term
-        est_total_time = (est_time_indexing_per_doc * n_docs_need_indexing +
-                          est_time_defrag_per_shard * n_shards +
-                          est_time_cache_refresh_per_term * cached_term_count)
-
-        ## --- index the documents (builds the fragmented shards) ---
-        print("Building fragmented shards...")
-        est_progress_time = 0.0 # in estimated seconds
-        progress = 0.0
+        docs_indexed = 0
         doc_batch_size = 30_000
         for doc_table in doc_tables_need_indexing:
             # index the documents in this table
@@ -325,9 +304,7 @@ class Index():
 
                     for ngram in ngrams:
                         data_fragment = index_update[ngram]
-                        if isinstance(data_fragment, set):
-                            data_fragment = list(data_fragment)
-                        data_fragment_encoded = msgpack.dumps(data_fragment)
+                        data_fragment_encoded = _msgpack_dump(data_fragment)
                         self._idx_cursor.execute(f'''INSERT INTO {fragmented_shard} (ngram, data) VALUES (?, ?)''', (ngram, data_fragment_encoded))
 
                 # mark the documents as indexed
@@ -341,63 +318,92 @@ class Index():
                 self._corpus.commit()
                 update_cursor.close()
 
-                est_progress_time += est_time_indexing_per_doc * len(batch)
-                progress = est_progress_time / est_total_time
+                # calculate/report progress.
+                # this is step 1 of 4, so max progress is 25% for this step.
+                docs_indexed += len(batch)
+                progress = (docs_indexed / n_docs_need_indexing) * 0.25
                 yield progress
 
+        # step 1 of 4 complete
+        progress = 0.25
+        yield progress
+
         ## --- manage document version conflicts ---
-        print("Resolving document version conflicts...")
-        # get the indexed doc versions
-        self._corpus_cursor.execute('''SELECT pmid, uuid FROM document_versions WHERE is_indexed = 1''')
-        indexed_versions = {row[0]: row[1] for row in self._corpus_cursor.fetchall()} # pmid -> uuid
-        canonical_versions = dict[int, str]() # pmid -> uuid
+        print("Checking for version conflicts...")
+        # get the indexed version UUIDs of all docs that have >1 version
+        version_cursor = self._corpus.cursor()
+        version_cursor.execute('''SELECT pmid, uuid FROM document_versions WHERE is_indexed = 1''')
+        
+        pmids_to_reindex = dict[int, list[str]]() # pmid -> list of n-grams that need to be re-indexed for this doc
+        indexed_versions = dict[int, str]() # pmid -> uuid, for the version that is currently indexed in the defragmented shard
+        canonical_versions = dict[int, str]() # pmid -> uuid, for the version that is in the document corpus (the 'canonical' version)
 
-        doc_tables = set(_pmid_to_table_name(pmid) for pmid in indexed_versions)
-        pmids_to_reindex = []
-        for doc_table in doc_tables:
-            # get version conflicts for this table
+        while True:
+            # get the indexed version UUID
+            indexed_version_row = version_cursor.fetchone()
+            if not indexed_version_row:
+                break
+            pmid = indexed_version_row[0]
+            indexed_version_uuid = indexed_version_row[1]
 
-            # if an abstract has been updated, we need to delete the old version's data from the index.
-            # in these cases, there will be a mismatch between the 'is_indexed' columns in the 'documents' and 'document_versions' tables.
-            # the 'is_indexed' column in document_versions will be 1 for the old version but the UUID will not match the document in the 'documents' table.
-            # this is not the clearest situation, I'd like to make it more explicit at some point.
+            # get the canonical version UUID
+            doc_table = _pmid_to_table_name(pmid)
+            self._corpus_cursor.execute(f'''SELECT pmid, uuid FROM {doc_table} WHERE pmid = ?''', (pmid,))
+            canonical_version_row = self._corpus_cursor.fetchone()
+            canonical_version_uuid = canonical_version_row[1]
 
-            # get the canonical versions
-            pmids_in_table_with_multiple_versions = [pmid for pmid in indexed_versions if _pmid_to_table_name(pmid) == doc_table]
-            for i in range(0, len(pmids_in_table_with_multiple_versions), 1000):
-                batch_pmids = pmids_in_table_with_multiple_versions[i:i + 1000]
-                self._corpus_cursor.execute(f'''SELECT pmid, uuid FROM {doc_table} WHERE pmid IN ({','.join('?' for _ in batch_pmids)})''', batch_pmids)
-                rows = self._corpus_cursor.fetchall()
-                canonical_versions.update({row[0]: row[1] for row in rows})
-
-        # if indexed version UUID != canonical version UUID, then the PMID requires re-indexing
-        pmids_to_reindex = [pmid for pmid in canonical_versions if pmid in indexed_versions and indexed_versions[pmid] != canonical_versions[pmid]]
-
+            # determine if there's a version conflict
+            if indexed_version_uuid != canonical_version_uuid:
+                pmids_to_reindex[pmid] = []
+                indexed_versions[pmid] = indexed_version_uuid
+                canonical_versions[pmid] = canonical_version_uuid
+        
+        version_cursor.close()
+                
         if pmids_to_reindex:
-            # the canonical version's data is in the fragmented shard.
-            # so all we have to do is delete the (old) indexed version's data from the shard,
-            # and the defragmentation will take care of the rest.
-            batch_size = 1000
-            pmid_batches = [pmids_to_reindex[i:i + batch_size] for i in range(0, len(pmids_to_reindex), batch_size)]
+            print(f"Found {len(pmids_to_reindex)} documents with version conflicts to resolve.")
+        else:
+            print("No version conflicts found.")
 
-            # figure out what n-grams we need to update
-            index_update = dict[str, dict[int, list[int]]]()
-            for batch in pmid_batches:
-                self._corpus_cursor.execute('''SELECT pmid, pub_year, title, abstract, origin FROM document_versions WHERE is_indexed = 1 AND pmid IN ({})'''.format(','.join('?' for _ in batch)), batch)
-                doc_rows = self._corpus_cursor.fetchall()
-                if not doc_rows:
-                    break
+        # if an abstract has been updated, we need to delete the old version's data from the index.
+        # in these cases, there will be a mismatch between the 'is_indexed' columns in the 'documents' and 'document_versions' tables.
+        # the 'is_indexed' column in document_versions will be 1 for the old version but the UUID will not match the document in the 'documents' table.
+        # this is not the clearest situation, I'd like to make it more explicit at some point.
 
-                for doc_row in doc_rows:
-                    doc = Document(pmid=doc_row[0], pub_year=doc_row[1], title=doc_row[2], abstract=doc_row[3], origin=doc_row[4])
-                    util.index_document(doc, index_update)
 
-            # update the data for each n-gram
-            for i, ngram in enumerate(index_update):
+        count_done = 0
+        ngrams_indexed = dict[str, dict[int, list[int]]]()    # saves memory
+        ngrams_canonical = dict[str, dict[int, list[int]]]()  # saves memory
+        cursor = self._corpus.cursor()
+        for pmid in pmids_to_reindex.keys():
+            ngrams_indexed.clear()
+            ngrams_canonical.clear()
+
+            # retrieve the indexed version (by uuid, primary key)
+            indexed_uuid = indexed_versions[pmid]
+            self._corpus_cursor.execute(f'''SELECT pmid, uuid, title, abstract FROM document_versions WHERE uuid = ?''', (indexed_uuid,))
+            indexed_version = self._corpus_cursor.fetchone()
+            indexed_doc = Document(pmid=pmid, pub_year=0, title=indexed_version[2], abstract=indexed_version[3], origin='')
+            util.index_document(indexed_doc, ngrams_indexed)
+
+            # retrieve the canonical version (by pmid, primary key)
+            doc_table = _pmid_to_table_name(pmid)
+            self._corpus_cursor.execute(f'''SELECT pmid, uuid, title, abstract FROM {doc_table} WHERE pmid = ?''', (pmid,))
+            canonical_version = self._corpus_cursor.fetchone()
+            canonical_doc = Document(pmid=pmid, pub_year=0, title=canonical_version[2], abstract=canonical_version[3], origin='')
+            util.index_document(canonical_doc, ngrams_canonical)
+
+            # determine if any n-grams have been deleted in the canonical version
+            deleted_ngrams = set[str]()
+            for ngram in ngrams_indexed:
+                if ngram not in ngrams_canonical:
+                    deleted_ngrams.add(ngram)
+
+            for ngram in deleted_ngrams:
+                # delete the data from the index for this n-gram
                 shard = _ngram_to_shard_name(ngram)
                 self._idx_cursor.execute(f'''SELECT * FROM {shard} WHERE ngram = ?''', (ngram,))
                 rows = self._idx_cursor.fetchall()
-                updated_rows = []
 
                 for row in rows:
                     uuid = row[0]
@@ -406,63 +412,80 @@ class Index():
                     size = row[3]
                     is_updated_row = False
 
-                    decoded = msgpack.loads(data, strict_map_key=False)
-                    if isinstance(decoded, list):
-                        decoded = set(decoded)
+                    decoded = _msgpack_load(data)
 
-                    for pmid in pmids_to_reindex:
-                        if pmid in decoded:
-                            if isinstance(decoded, set):
-                                decoded.remove(pmid)
-                            else:
-                                del decoded[pmid]
-                            is_updated_row = True
+                    if pmid in decoded:
+                        if isinstance(decoded, set):
+                            decoded.remove(pmid)
+                        else:
+                            del decoded[pmid]
+                        is_updated_row = True
 
                     if not is_updated_row:
                         continue
 
-                    if isinstance(decoded, set):
-                        decoded = list(decoded)
-                    encoded = msgpack.dumps(decoded)
-
-                    # the size is wrong but it could mess things up if we correct it
-                    updated_rows.append((uuid, ngram, encoded, size))
-
-                # delete old version's data from the shard
-                self._idx_cursor.execute(f'''DELETE FROM {shard} WHERE uuid IN ({','.join('?' for _ in updated_rows)})''', [row[0] for row in updated_rows])
-
-                # insert rows w/ updated data into the shard
-                for row in updated_rows:
-                    self._idx_cursor.execute(f'''INSERT INTO {shard} (uuid, ngram, data, size) VALUES (?, ?, ?, ?)''', row)
-
-                if i % 1000 == 0:
-                    self._index.commit()
+                    encoded = _msgpack_dump(decoded)
+                    self._idx_cursor.execute(f'''UPDATE {shard} SET data = ? WHERE uuid = ?''', (encoded, uuid))
 
             # update document_versions table so there's no 'is_indexed' mismatch anymore
-            cursor = self._corpus.cursor()
-            for pmid in pmids_to_reindex:
-                previous_version = indexed_versions[pmid]
-                canonical_version = canonical_versions[pmid]
-                cursor.execute(f'''UPDATE document_versions SET is_indexed = 0 WHERE uuid = ?''', (previous_version,))
-                cursor.execute(f'''UPDATE document_versions SET is_indexed = 1 WHERE uuid = ?''', (canonical_version,))
-            self._corpus.commit()
-            self._index.commit()
-            cursor.close()
+            previous_version_uuid = indexed_versions[pmid]
+            canonical_version_uuid = canonical_versions[pmid]
+            cursor.execute(f'''UPDATE document_versions SET is_indexed = 0 WHERE uuid = ?''', (previous_version_uuid,))
+            cursor.execute(f'''UPDATE document_versions SET is_indexed = 1 WHERE uuid = ?''', (canonical_version_uuid,))
+
+            # calculate progress for step 2
+            count_done += 1
+            progress = count_done / len(pmids_to_reindex) * 0.25 + 0.25 
+            yield progress
+
+            if count_done % 1000 == 0:
+                self._corpus.commit()
+                self._index.commit()
+
+        self._corpus.commit()
+        self._index.commit()
+        cursor.close()
+
+        # step 2 of 4 complete
+        progress = 0.5
+        yield progress
 
         ## --- defragment the shards ---
-        print("Defragmenting shards...")
         fragmented_shards = self._get_tables("fragmented_%")
         fragmented_shards.sort()
 
+        if fragmented_shards:
+            print("Defragmenting shards...")
+        else:
+            print("No shards to defragment.")
+
+        n_defragmented = 0
         for fragmented_shard in fragmented_shards:
             self._defragment_shard(fragmented_shard)
-            est_progress_time += est_time_defrag_per_shard
-            progress = est_progress_time / est_total_time
+
+            # calculate progress for step 3
+            n_defragmented += 1
+            progress = (n_defragmented / len(fragmented_shards)) * 0.25 + 0.5
             yield progress
 
 
+        # step 3 of 4 complete
+        progress = 0.75
+        yield progress
+
+
         ## --- update disk cache ---
-        print("Refreshing query cache...")
+
+        # count terms in the disk cache, this is used to estimate how long the cache refresh will take
+        self._idx_cursor.execute('''SELECT COUNT(term) FROM query_cache''')
+        rows = self._idx_cursor.fetchone()
+        cached_term_count = rows[0] if rows else 0
+
+        if cached_term_count > 0:
+            print("Refreshing query cache...")
+        else:
+            print("No terms in query cache, skipping cache refresh.")
+
         self._idx_cursor.execute("SELECT term FROM query_cache")
         rows = self._idx_cursor.fetchall()
         cached_terms = [row[0] for row in rows]
@@ -471,16 +494,18 @@ class Index():
         self._index.commit()
 
         self.prep_for_search(cached_terms)
+        terms_refreshed = 0
         for cached_term in cached_terms:
             self.search_documents(cached_term)
 
             # we don't need to cache the term in memory, just on disk
             self.delete_term_from_memory(cached_term)
 
-            est_progress_time += est_time_cache_refresh_per_term
-            progress = est_progress_time / est_total_time
+            terms_refreshed += 1
+            progress = (terms_refreshed / cached_term_count) * 0.25 + 0.75
             yield progress
 
+        # step 4 of 4 complete
         print("Indexing complete.")
         progress = 1.0
         yield progress
@@ -541,11 +566,7 @@ class Index():
                 row = self._idx_cursor.fetchone()
                 if row:
                     data = row[0]
-                    this_subterm_pmids = msgpack.loads(data, strict_map_key=False)
-
-                    if isinstance(this_subterm_pmids, list):
-                        this_subterm_pmids = set(this_subterm_pmids)
-
+                    this_subterm_pmids = _msgpack_load(data)
                     subterm_pmids[subterm] = this_subterm_pmids
                     continue
 
@@ -555,7 +576,7 @@ class Index():
 
             # cache bigrams+ on disk
             if gram_n > 1:
-                data = msgpack.dumps(list(this_subterm_pmids))
+                data = _msgpack_dump(this_subterm_pmids)
                 cache_retries = 10
                 for _ in range(cache_retries):
                     try:
@@ -902,11 +923,7 @@ class Index():
 
             for row in rows:
                 data = row[0]
-                pmids_maybe_with_positions = msgpack.loads(data, strict_map_key=False)
-
-                if isinstance(pmids_maybe_with_positions, list):
-                    pmids_maybe_with_positions = set(pmids_maybe_with_positions)
-
+                pmids_maybe_with_positions = _msgpack_load(data)
                 if ngram not in ngrams_to_data or ngrams_to_data[ngram] is None:
                     ngrams_to_data[ngram] = pmids_maybe_with_positions
                 else:
@@ -948,80 +965,140 @@ class Index():
         return pmids
 
     def _defragment_shard(self, fragmented_shard: str) -> None:
-        # start_time = time.perf_counter()
         shard = fragmented_shard.replace('fragmented_', '')
         fragment_cursor = self._index.cursor()
         shard_cursor = self._index.cursor()
         max_row_bytes = 1_000_000
-        max_batch_bytes = 50 * max_row_bytes
-        max_batch_terms = 100
+        
+        from itertools import groupby
 
+        # get fragmented shard data and group by ngram
         fragment_cursor.execute(f'''SELECT ngram, data FROM {fragmented_shard} ORDER BY ngram''')
-        ngram_to_fragment_rows = dict[str, list[tuple[str, str, bytes, int]]]()
-        batch_bytes = 0
-        while True:
-            # get fragmented shard data and add it to the dict
-            fragmented_shard_rows = fragment_cursor.fetchmany(max_batch_terms)
-            if not fragmented_shard_rows:
-                break
-
-            for ngram, data in fragmented_shard_rows:
-                if ngram not in ngram_to_fragment_rows:
-                    ngram_to_fragment_rows[ngram] = []
-                ngram_to_fragment_rows[ngram].append(("", ngram, data, len(data)))
-                batch_bytes += len(data)
-
-            if len(ngram_to_fragment_rows) < max_batch_terms and batch_bytes < max_batch_bytes and len(fragmented_shard_rows) == max_batch_terms:
-                continue
-
-            # get (non-fragmented) shard data and add it to the dict
-            ngrams = list(ngram_to_fragment_rows.keys())
-            shard_cursor.execute(f'''SELECT * FROM {shard} WHERE ngram IN ({','.join('?' for _ in ngrams)}) AND size < {max_row_bytes}''', tuple(ngrams))
+        for ngram, rows in groupby(fragment_cursor, key=lambda row: row[0]):
+            fragment_rows = [("", ngram, data, len(data)) for _, data in rows]
+            
+            # get existing shard rows for this ngram
+            shard_cursor.execute(f'''SELECT * FROM {shard} WHERE ngram = ?''', (ngram,))
             shard_rows = shard_cursor.fetchall()
-            for row in shard_rows:
-                ngram = row[1]
-                ngram_to_fragment_rows[ngram].append(row)
+
+            # get the shard row to add to, if any
+            # shard table structure: uuid TEXT PRIMARY KEY, ngram TEXT, data BLOB, size INTEGER
+            active_shard_row = [shard_row for shard_row in shard_rows if shard_row[3] < max_row_bytes]
+            active_shard_row = active_shard_row[0] if active_shard_row else None
+
+            # insert the active shard row so it gets combined with the fragments
+            if active_shard_row:
+                fragment_rows.insert(0, active_shard_row)
 
             # combine fragments
+            gram_n = util.get_ngram_n(ngram)
+            existing_uuid = fragment_rows[0][0] # empty string if there is no existing shard data for this term
+            
             defragmented_rows = []
-            for i, ngram in enumerate(ngram_to_fragment_rows):
-                fragment_rows = ngram_to_fragment_rows[ngram]
-                fragment_rows.reverse() # reverse the list so the existing shard data (if any) is first in the list
-                gram_n = util.get_ngram_n(ngram)
-                existing_uuid = fragment_rows[0][0] # empty string if there is no existing shard data for this term
-                
-                defragmented_row_data = set() if gram_n == 1 else dict()
-                defragmented_row_size = 0
-                defragmented_row_uuid = str(uuid.uuid4()) if not existing_uuid else existing_uuid
-                for i, fragment_row in enumerate(fragment_rows):
-                    encoded_fragment = fragment_row[2]
-                    decoded_fragment = msgpack.loads(encoded_fragment, strict_map_key=False)
-                    defragmented_row_data.update(decoded_fragment)
-                    defragmented_row_size += len(encoded_fragment)
+            defragmented_row_data = set() if gram_n == 1 else dict()
+            defragmented_row_size = 0
+            defragmented_row_uuid = str(uuid.uuid4()) if not existing_uuid else existing_uuid
+            for i, fragment_row in enumerate(fragment_rows):
+                encoded_fragment = fragment_row[2]
+                decoded_fragment = _msgpack_load(encoded_fragment)
+                defragmented_row_data.update(decoded_fragment)
+                defragmented_row_size += len(encoded_fragment)
 
-                    if defragmented_row_size > max_row_bytes or i == len(fragment_rows) - 1:
-                        # msgpack cannot serialize sets, convert to list
-                        if isinstance(defragmented_row_data, set):
-                            defragmented_row_data = list(defragmented_row_data)
-                        defragmented_row_data_bytes = msgpack.dumps(defragmented_row_data) 
+                if defragmented_row_size > max_row_bytes or i == len(fragment_rows) - 1:
+                    defragmented_row_data_bytes = _msgpack_dump(defragmented_row_data) 
 
-                        # defragmented_row_size is technically wrong here (too high). but if we insert two rows with size <1_000_000
-                        # into the shard, that will mess everything up.
-                        defragmented_rows.append((defragmented_row_uuid, ngram, defragmented_row_data_bytes, defragmented_row_size))
+                    # defragmented_row_size is technically wrong here (too high). but if we insert two rows with size <1_000_000
+                    # into the shard, that will mess everything up.
+                    defragmented_rows.append((defragmented_row_uuid, ngram, defragmented_row_data_bytes, defragmented_row_size))
 
-                        # reset for next row (really only needed if defragmented_row_size > 1_000_000)
-                        defragmented_row_data = set() if gram_n == 1 else dict()
-                        defragmented_row_uuid = str(uuid.uuid4())
-                        defragmented_row_size = 0
+                if defragmented_row_size > max_row_bytes:
+                    # reset for next row
+                    defragmented_row_data = set() if gram_n == 1 else dict()
+                    defragmented_row_size = 0
+                    defragmented_row_uuid = str(uuid.uuid4())
 
             # insert into shard table
             shard_cursor.executemany(f'''INSERT INTO {shard} (uuid, ngram, data, size) VALUES (?, ?, ?, ?) ON CONFLICT (uuid) DO UPDATE SET ngram = EXCLUDED.ngram, data = EXCLUDED.data, size = EXCLUDED.size''', defragmented_rows)
 
-            # reset for next batch
-            ngram_to_fragment_rows.clear()
-            batch_bytes = 0
 
-        # commit the inserts to the shard
+
+            # --- data integrity check for ngrams with >1 defragmented row (rare) ---
+            shard_cursor.execute(f'''SELECT COUNT(*) FROM {shard} WHERE ngram = ?''', (ngram,))
+            row = shard_cursor.fetchone()
+            n_defragmented_rows = row[0] if row else 0
+            if n_defragmented_rows <= 1:
+                continue
+
+            # each PMID should only be observed once.
+            # if it is observed >1 time, we need to figure out which version is correct.
+            pmid_counts = dict[int, int]()
+            shard_cursor.execute(f'''SELECT * FROM {shard} WHERE ngram = ?''', (ngram,))
+            rows = shard_cursor.fetchall()
+            for row in rows:
+                data = row[2]
+                decoded = _msgpack_load(data)
+
+                for pmid in decoded:
+                    if pmid not in pmid_counts:
+                        pmid_counts[pmid] = 0
+                    pmid_counts[pmid] += 1
+
+            duplicate_pmids = [pmid for pmid, count in pmid_counts.items() if count > 1]
+            if not duplicate_pmids:
+                # data integrity for this n-gram is OK, no duplicate PMIDs found
+                continue
+
+            # delete the duplicate PMID data from all rows for this n-gram
+            for row in rows:
+                _uuid = row[0]
+                ngram = row[1]
+                data = row[2]
+                size = row[3]
+
+                decoded = _msgpack_load(data)
+                is_updated_row = False
+
+                for pmid in duplicate_pmids:
+                    if pmid in decoded:
+                        if isinstance(decoded, set):
+                            decoded.remove(pmid)
+                        else:
+                            del decoded[pmid]
+                        is_updated_row = True
+
+                if not is_updated_row:
+                    continue
+
+                encoded = _msgpack_dump(decoded)
+                shard_cursor.execute(f'''UPDATE {shard} SET data = ? WHERE uuid = ?''', (encoded, _uuid))
+            
+            # fetch a shard row for this ngram (doesn't really matter which row)
+            shard_cursor.execute(f'''SELECT * FROM {shard} WHERE ngram = ?''', (ngram,))
+            row = shard_cursor.fetchone()
+            data = row[2]
+            decoded = _msgpack_load(data)
+
+            # re-index these PMIDs so the data is correct
+            temp_index = dict()
+            for pmid in duplicate_pmids:
+                temp_index.clear()
+
+                # get the canonical version of this document and re-index it
+                doc_table = _pmid_to_table_name(pmid)
+                self._corpus_cursor.execute(f'''SELECT title, abstract FROM {doc_table} WHERE pmid = ?''', (pmid,))
+                doc_row = self._corpus_cursor.fetchone()
+                indexed_doc = Document(pmid=pmid, pub_year=0, title=doc_row[0], abstract=doc_row[1], origin='')
+                util.index_document(indexed_doc, temp_index)
+
+                # update the shard row with correct data
+                correct_ngram_data = temp_index.get(ngram, set() if util.get_ngram_n(ngram) == 1 else dict())
+                decoded.update(correct_ngram_data)
+            
+            encoded = _msgpack_dump(decoded)
+            shard_cursor.execute(f'''UPDATE {shard} SET data = ? WHERE ngram = ?''', (encoded, ngram))
+            
+
+        # commit the changes to the shard
         self._index.commit()
 
         # drop the fragmented shard table
@@ -1031,9 +1108,6 @@ class Index():
         # close cursors
         fragment_cursor.close()
         shard_cursor.close()
-
-        # duration = time.perf_counter() - start_time
-        # print(f"Defragmented shard {fragmented_shard} in {duration:.2f} seconds")
 
 def _ngram_to_shard_name(ngram: str, get_fragmented_name: bool = False) -> str:
     # sqlite has a max num tables of 2000, so if we want 2 tables per shard,
@@ -1082,3 +1156,14 @@ def _evaluate_composite_term(composite_term: str, pmids: dict[str, set[int]]) ->
         # raise FastKmException(f"Malformed expression: {composite_term}")
         print(f"Error evaluating composite term '{composite_term}': {e}")
         return set()
+    
+def _msgpack_load(data: bytes) -> set[int] | dict[int, list[int]]:
+    decoded = msgpack.loads(data, strict_map_key=False)
+    if isinstance(decoded, list):
+        return set(decoded)
+    return decoded
+
+def _msgpack_dump(data: set[int] | dict[int, list[int]]) -> bytes:
+    if isinstance(data, set):
+        data = list(data)
+    return msgpack.dumps(data)
