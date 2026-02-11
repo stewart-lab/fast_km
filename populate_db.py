@@ -29,6 +29,8 @@ def main():
         remote_filename = file[1]
         xml_content = _download_xml(ftp_dir, remote_filename, xml_folder)
         docs = parse_xml_content(xml_content, remote_filename)
+        for doc in docs:
+            doc.citation_count = None
         payload = {"documents": [doc.to_dict() for doc in docs]}
 
         response = requests.post(doc_url, json=payload).json()
