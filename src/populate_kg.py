@@ -8,7 +8,7 @@ kg_url = 'http://localhost:' + str(port) + '/api/knowledge_graph'
 kg_file = "./_data/aggregated_rels.tsv" # header: NAME, TAG, REL, NAME, TAG, PMID
 SOURCE = "DATA SOURCE GOES HERE"       # set this to the source of the data, e.g. "SemMedDB 2023"
 
-def main():
+def populate_kg():
     rels = []
     with open(kg_file, 'r') as f:
         for line in f:
@@ -60,4 +60,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    populate_kg()
