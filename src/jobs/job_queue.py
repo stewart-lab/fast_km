@@ -55,7 +55,6 @@ def queue_indexing_job(params: BaseModel) -> dict:
     job = _index_queue.enqueue(
         run_indexing_job, 
         params, 
-        job_timeout=72 * HOUR,
         failure_ttl=7 * 24 * HOUR,
         depends_on=dependencies if dependencies else None,
         job_id=job_id
