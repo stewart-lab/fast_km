@@ -1075,6 +1075,7 @@ class Index():
             # fetch a shard row for this ngram (doesn't really matter which row)
             shard_cursor.execute(f'''SELECT * FROM {shard} WHERE ngram = ?''', (ngram,))
             row = shard_cursor.fetchone()
+            _uuid = row[0]
             data = row[2]
             decoded = _msgpack_load(data)
 
@@ -1095,7 +1096,7 @@ class Index():
                 decoded.update(correct_ngram_data)
             
             encoded = _msgpack_dump(decoded)
-            shard_cursor.execute(f'''UPDATE {shard} SET data = ? WHERE ngram = ?''', (encoded, ngram))
+            shard_cursor.execute(f'''UPDATE {shard} SET data = ? WHERE uuid = ?''', (encoded, _uuid))
             
 
         # commit the changes to the shard
