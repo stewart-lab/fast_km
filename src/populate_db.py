@@ -14,7 +14,7 @@ doc_url = 'http://localhost:' + str(port) + '/api/documents'
 icite_folder = './_icite'
 xml_folder = "./_xml"
 
-def main():
+def populate_db():
     # figure out what to download
     max_files = sys.maxsize
     response = requests.get(doc_url + "/origins").json()
@@ -137,4 +137,4 @@ def _download_xml(ftp_dir: str, remote_filename: str, xml_dir: str) -> str:
     return xml_content
 
 if __name__ == '__main__':
-    main()
+    populate_db()

@@ -1,11 +1,15 @@
 import os
 import argparse
 import subprocess
-from dotenv import load_dotenv 
+import datetime
+from dotenv import load_dotenv
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from contextlib import asynccontextmanager
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import src.global_vars as gvars
+from fastapi.responses import JSONResponse
 
 # load environment variables
 load_dotenv()
@@ -77,8 +81,24 @@ from src.knowledge_graph.knowledge_graph import KnowledgeGraph
 from src.auth.functions import authenticate
 from src.jobs.workers import run_workers
 from src.jobs.job_queue import queue_job, queue_indexing_job, get_job, cancel_job
+from src.populate_db import populate_db
+from src.populate_kg import populate_kg
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(populate_db, "cron", day_of_week="sat", hour=5, minute=0)
+    # run populate_kg once, shortly after the app starts serving requests
+    run_time = datetime.datetime.now() + datetime.timedelta(seconds=5)
+    scheduler.add_job(populate_kg, "date", run_date=run_time)
+    scheduler.start()
+
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 deprecated_tags = ["deprecated endpoints"]
 km_tags = ["kinderminer"]
 hyp_tags = ["hypothesis evaluation"]
@@ -103,25 +123,34 @@ def verify_password(credentials: HTTPBasicCredentials = Depends(security)):
         )
     return True
 
+
+@app.get("/health")
+def health_check() -> dict:
+    return {"status": "healthy"}
+
+
 ### Job management endpoints
 @app.post("/api/kinderminer", tags=km_tags, status_code=status.HTTP_202_ACCEPTED)
 @app.post('/skim/api/jobs', tags=deprecated_tags, status_code=status.HTTP_202_ACCEPTED)  # old endpoint for SKiM/KM
-def submit_kinderminer_job(params: KinderMinerJobParams, authorized: bool = Depends(verify_password)) -> dict:
+def submit_kinderminer_job(params: KinderMinerJobParams, authorized: bool = Depends(verify_password)) -> JSONResponse:
     if params.c_terms:
         priority = 'HIGH' if len(params.a_terms) + len(params.b_terms) + len(params.c_terms) <= 50 else 'MEDIUM'
-        return queue_job(run_serial_kinderminer_job, priority, params)
+        result = queue_job(run_serial_kinderminer_job, priority, params)
     else:
         priority = 'HIGH' if len(params.a_terms) + len(params.b_terms) <= 50 else 'MEDIUM'
-        return queue_job(run_kinderminer_job, priority, params)
+        result = queue_job(run_kinderminer_job, priority, params)
+    return JSONResponse(content=result, status_code=202)
 
 @app.post("/api/hypothesis_eval", tags=hyp_tags, status_code=status.HTTP_202_ACCEPTED)
 @app.post('/hypothesis_eval/api/jobs/', tags=deprecated_tags, status_code=status.HTTP_202_ACCEPTED)  # old endpoint for hypothesis eval
-def submit_hypothesis_eval_job(params: HypothesisEvalJobParams, authorized: bool = Depends(verify_password)) -> dict:
-    return queue_job(run_hypothesis_eval_job, 'LOW', params)
+def submit_hypothesis_eval_job(params: HypothesisEvalJobParams, authorized: bool = Depends(verify_password)) -> JSONResponse:
+    result = queue_job(run_hypothesis_eval_job, 'LOW', params)
+    return JSONResponse(content=result, status_code=202)
 
 @app.post("/api/index", tags=index_tags, status_code=status.HTTP_202_ACCEPTED)
-def submit_index_job(params: IndexingJobParams, authorized: bool = Depends(verify_password)) -> dict:
-    return queue_indexing_job(params)
+def submit_index_job(params: IndexingJobParams, authorized: bool = Depends(verify_password)) -> JSONResponse:
+    result = queue_indexing_job(params)
+    return JSONResponse(content=result, status_code=202)
 
 @app.post("/api/cancel_job", tags=cancel_tags)
 @app.post('/cancel_job/api/jobs/', tags=deprecated_tags)  # old endpoint for cancel job
