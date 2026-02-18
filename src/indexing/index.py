@@ -608,7 +608,6 @@ class Index():
         self.count_documents(start_year, end_year) # builds PMID set for this year range
         year_pmids = self._term_cache[(start_year, end_year)]
         censored_pmids = (pmids & year_pmids)
-        censored_pmids = set(int(pmid) for pmid in censored_pmids)
         return censored_pmids
 
     def count_documents(self, start_year: int = MIN_CENSOR_YEAR, end_year: int = MAX_CENSOR_YEAR) -> int:
@@ -623,7 +622,7 @@ class Index():
             return len(pmid_set)
 
         year_mask = (self.pmid_to_pub_year >= start_year) & (self.pmid_to_pub_year <= end_year)
-        pmid_set = set(np.flatnonzero(year_mask).astype(int))
+        pmid_set = set(int(pmid) for pmid in np.flatnonzero(year_mask))
     
         # cache the pmid set
         self._term_cache[year_tuple] = pmid_set
@@ -674,33 +673,32 @@ class Index():
         if sanitized in self._term_cache:
             del self._term_cache[sanitized]
 
-    def top_n_pmids_by_year(self, pmids: set[int], top_n: int = 10) -> set[int]:
+    def top_n_pmids_by_year(self, pmids: set[int], top_n: int = 10) -> list[int]:
         """Given a set of PMIDs, return the top N PMIDs by publication year (most recent first). PMID is used as a tiebreaker."""
         if top_n < 1:
-            return set()
+            return list()
 
         _sorted = sorted(pmids, key=lambda pmid: (self.pmid_to_pub_year[pmid], pmid), reverse=True)
         return _sorted[:top_n]
     
-    def top_n_pmids_by_citation_count(self, pmids: set[int], top_n: int = 10) -> set[int]:
+    def top_n_pmids_by_citation_count(self, pmids: set[int], top_n: int = 10) -> list[int]:
         """Given a set of PMIDs, return the top N PMIDs by citation count (highest first). PMID is used as a tiebreaker."""
         if top_n < 1:
-            return set()
+            return list()
 
         if not self.pmid_to_citation_count.size:
             raise FastKmException("Citation counts not loaded, cannot sort by citation count")
 
         _sorted = sorted(pmids, key=lambda pmid: (self.pmid_to_citation_count[pmid], pmid), reverse=True)
-        top_n = _sorted[:top_n]
-        return top_n
+        return _sorted[:top_n]
 
-    def top_n_pmids_by_impact_factor(self, pmids: set[int], top_n: int = 10) -> set[int]:
+    def top_n_pmids_by_impact_factor(self, pmids: set[int], top_n: int = 10) -> list[int]:
         """Given a set of PMIDs, return the top N PMIDs by impact factor (highest first). 
         Impact factor is defined as citation count / (current year - publication year + 0.5). 
         The 0.5 is added to avoid division by zero in all cases.
         PMID is used as a tiebreaker."""
         if top_n < 1:
-            return set()
+            return list()
 
         if not self.pmid_to_citation_count.size:
             raise FastKmException("Citation counts not loaded, cannot sort by impact factor")
@@ -779,7 +777,7 @@ class Index():
         for i in range(1, 951):
             shard = f'shard_{i:04d}'
             cur.execute(f'''CREATE TABLE IF NOT EXISTS {shard} (uuid TEXT PRIMARY KEY, ngram TEXT, data BLOB, size INTEGER)''')
-        cur.execute(f'''CREATE INDEX IF NOT EXISTS idx_ngram_{shard} ON {shard} (ngram)''')
+            cur.execute(f'''CREATE INDEX IF NOT EXISTS idx_ngram_{shard} ON {shard} (ngram)''')
         index.commit()
         cur.close()
         index.close()
