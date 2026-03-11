@@ -7,4 +7,5 @@ rq                       # redis-based job queue
 fastapi[standard]        # web api server
 msgpack                  # safe/fast serialization
 streamlit                # dashboard ui for job monitoring
+APScheduler              # scheduling recurring jobs
 # htcondor               # htcondor job scheduler. only available on linux and requires a running condor server
