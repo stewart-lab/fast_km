@@ -88,12 +88,15 @@ from src.populate_kg import populate_kg
 @asynccontextmanager
 async def lifespan(app: FastAPI):
 
-    scheduler = AsyncIOScheduler()
-    scheduler.add_job(populate_db, "cron", day_of_week="sat", hour=5, minute=0)
-    # run populate_kg once, shortly after the app starts serving requests
-    run_time = datetime.datetime.now() + datetime.timedelta(seconds=5)
-    scheduler.add_job(populate_kg, "date", run_date=run_time)
-    scheduler.start()
+    # Allow opting into server managed updates and population of the DBs
+    if os.environ.get("AUTOMATE_UPDATES", "False").lower() == "true":
+
+        scheduler = AsyncIOScheduler()
+        scheduler.add_job(populate_db, "cron", day_of_week="sat", hour=5, minute=0)
+        # run populate_kg once, shortly after the app starts serving requests
+        run_time = datetime.datetime.now() + datetime.timedelta(seconds=5)
+        scheduler.add_job(populate_kg, "date", run_date=run_time)
+        scheduler.start()
 
     yield
 
