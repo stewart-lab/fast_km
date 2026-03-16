@@ -6,10 +6,11 @@ from dotenv import load_dotenv
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from contextlib import asynccontextmanager
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-import src.global_vars as gvars
 from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+import src.global_vars as gvars
 
 # load environment variables
 load_dotenv()
@@ -24,6 +25,7 @@ env_htcondor_token = os.getenv('HTCONDOR_TOKEN', '')
 env_deepseek_key   = os.getenv('DEEPSEEK_API_KEY', '')
 env_timezone       = os.getenv('TIMEZONE', '')
 env_password       = os.getenv('PASSWORD', '')
+env_cron           = os.getenv('CRON', '')  # for scheduling updates and population of DBs
 
 # parse command line args
 parser = argparse.ArgumentParser()
@@ -86,18 +88,16 @@ from src.populate_kg import populate_kg
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-
-    # Allow opting into server managed updates and population of the DBs
-    if os.environ.get("AUTOMATE_UPDATES", "False").lower() == "true":
-
-        scheduler = AsyncIOScheduler()
-        scheduler.add_job(populate_db, "cron", day_of_week="sat", hour=5, minute=0)
-        # run populate_kg once, shortly after the app starts serving requests
-        run_time = datetime.datetime.now() + datetime.timedelta(seconds=5)
-        scheduler.add_job(populate_kg, "date", run_date=run_time)
+async def lifespan(app):
+    # schedule database population if CRON schedule is set
+    if env_cron:
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(populate_db, trigger=CronTrigger.from_crontab(env_cron))
+        # scheduler.add_job(populate_db, trigger="date") # run at startup
         scheduler.start()
-
+        print(f"INFO: Scheduled database population with CRON schedule: {env_cron}")
+    else:
+        print("INFO: No CRON schedule set for database population.")
     yield
 
 
@@ -130,7 +130,6 @@ def verify_password(credentials: HTTPBasicCredentials = Depends(security)):
 @app.get("/health")
 def health_check() -> dict:
     return {"status": "healthy"}
-
 
 ### Job management endpoints
 @app.post("/api/kinderminer", tags=km_tags, status_code=status.HTTP_202_ACCEPTED)
