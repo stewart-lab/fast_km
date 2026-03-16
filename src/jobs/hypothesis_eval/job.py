@@ -18,7 +18,10 @@ def run_hypothesis_eval_job(params: HypothesisEvalJobParams) -> dict:
     job = get_current_job()
     if not job:
         raise RuntimeError("Could not get current RQ job")
-    temp_dir = os.path.join(gvars.data_dir, "jobs", "job-" + job.id)
+    
+    # note that this needs to be an absolute path because we change the CWD below.
+    # TODO: this assumes a certain structure of the file system that is generally only true in the docker build.
+    temp_dir = os.path.join("/app", "_data", "jobs", "job-" + job.id)
     os.makedirs(temp_dir, exist_ok=True)
 
     # run the condor job
