@@ -18,7 +18,8 @@ def run_hypothesis_eval_job(params: HypothesisEvalJobParams) -> dict:
     job = get_current_job()
     if not job:
         raise RuntimeError("Could not get current RQ job")
-    temp_dir = os.path.join('/tmp', "job-" + job.id)
+    temp_dir = os.path.join(gvars.data_dir, "jobs", "job-" + job.id)
+    os.makedirs(temp_dir, exist_ok=True)
 
     # run the condor job
     results = _run_skim_gpt(temp_dir, params)

@@ -5,16 +5,17 @@ import json
 import time
 import requests
 from src.documents.xml_parsing import read_xml_content, parse_xml_content
+from src.global_vars import data_dir, fastapi_port
 
-port = 8000
+port = fastapi_port
 km_url = 'http://localhost:' + str(port) + '/api/kinderminer'
 hyp_eval_url = 'http://localhost:' + str(port) + '/api/hypothesis_eval'
 indexing_url = 'http://localhost:' + str(port) + '/api/index'
 doc_url = 'http://localhost:' + str(port) + '/api/documents'
-icite_folder = './_icite'
-xml_folder = "./_xml"
+icite_folder = os.path.join(data_dir, '_icite')
+xml_folder = os.path.join(data_dir, '_xml')
 
-def main():
+def populate_db():
     # figure out what to download
     max_files = sys.maxsize
     response = requests.get(doc_url + "/origins").json()
@@ -137,4 +138,4 @@ def _download_xml(ftp_dir: str, remote_filename: str, xml_dir: str) -> str:
     return xml_content
 
 if __name__ == '__main__':
-    main()
+    populate_db()

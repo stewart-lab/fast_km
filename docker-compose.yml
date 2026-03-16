@@ -9,7 +9,6 @@ services:
       - "8501:8501"
     volumes:
       - ./_data:/app/_data
-      - /tmp:/tmp
     environment:
       - REDIS=redis:6379
       - HIGH=${HIGH}                         # optional, ok if env var is blank or not set
@@ -20,6 +19,7 @@ services:
       - HTCONDOR_TOKEN=${HTCONDOR_TOKEN}     # optional, ok if env var is blank or not set
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY} # optional, ok if env var is blank or not set
       - TIMEZONE=${TIMEZONE}                 # optional, ok if env var is blank or not set
+      - CRON=${CRON}                         # optional, ok if env var is blank or not set
     depends_on:
       - redis
     networks:
