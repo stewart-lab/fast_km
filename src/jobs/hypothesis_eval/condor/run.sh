@@ -15,4 +15,4 @@ export HF_METRICS_CACHE=$_CONDOR_SCRATCH_DIR/metrics
 # Set GPU mode for skimgpt package
 export SKIMGPT_GPU_MODE=true
 
-skimgpt-relevance --km_output "$files_txt" --config "$config_json" --secrets "$secrets_json"
+skimgpt-relevance --km_output "$files_txt" --config "$config_json"
