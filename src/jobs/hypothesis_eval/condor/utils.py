@@ -150,7 +150,7 @@ class Config:
         self.km_hypothesis = self.job_config["KM_hypothesis"]
         self.skim_hypotheses = self.job_config["SKIM_hypotheses"]
         self.job_type = self.job_config.get("JOB_TYPE")
-        self.filter_config = self.job_config["abstract_filter"]
+        self.filter_config = self.job_config["relevance_filter"]
         self.debug = self.filter_config["DEBUG"]
         self.test_leakage = self.filter_config["TEST_LEAKAGE"]
         self.test_leakage_type = self.filter_config["TEST_LEAKAGE_TYPE"]
@@ -184,7 +184,7 @@ class Config:
         # Add HTCondor configuration
         self.htcondor_config = self.job_config.get("HTCONDOR", {})
         
-        # Add abstract filter configuration
+        # Add relevance filter configuration
         self.temperature = self.filter_config["TEMPERATURE"]
         self.top_k = self.filter_config["TOP_K"]
         self.top_p = self.filter_config["TOP_P"]
@@ -394,17 +394,24 @@ class Config:
     def fet_thresholds(self):
         if self.job_type == "skim_with_gpt":
             return {
-                "ab": self.job_specific_settings["skim"]["ab_fet_threshold"],
-                "bc": self.job_specific_settings["skim"]["bc_fet_threshold"]
+                "ab": self.job_specific_settings["ab_fet_threshold"],
+                "bc": self.job_specific_settings["bc_fet_threshold"]
             }
         else:
             return {
-                "ab": self.job_specific_settings["km_with_gpt"]["ab_fet_threshold"]
+                "ab": self.job_specific_settings["ab_fet_threshold"]
             }
 
     @property
-    def censor_year(self):
-        return self.job_specific_settings.get("censor_year", 2024)
+    def censor_year_upper(self):
+        return self.job_specific_settings.get(
+            "censor_year_upper",
+            self.job_specific_settings.get("censor_year", 2024),
+        )
+
+    @property
+    def censor_year_lower(self):
+        return self.job_specific_settings.get("censor_year_lower", 0)
 
     def _validate_htcondor_config(self):
         """Validate required HTCondor settings"""
