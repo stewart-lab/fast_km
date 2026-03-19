@@ -10,6 +10,8 @@ from src.jobs.hypothesis_eval.params import HypothesisEvalJobParams, validate_pa
 from src.jobs.hypothesis_eval.condor.condor_helper import HTCondorHelper
 from src.jobs.hypothesis_eval.condor.utils import Config
 import src.global_vars as gvars
+from src.jobs.kinderminer.job import run_kinderminer_job
+from src.jobs.kinderminer.params import KinderMinerJobParams
 
 def run_hypothesis_eval_job(params: HypothesisEvalJobParams) -> dict:
     validate_params(params)
@@ -19,14 +21,44 @@ def run_hypothesis_eval_job(params: HypothesisEvalJobParams) -> dict:
     if not job:
         raise RuntimeError("Could not get current RQ job")
     
-    # note that this needs to be an absolute path because we change the CWD below.
-    # TODO: this assumes a certain structure of the file system that is generally only true in the docker build.
-    temp_dir = os.path.join("/app", "_data", "jobs", "job-" + job.id)
+    temp_dir = os.path.join('/tmp', "job-" + job.id)
     os.makedirs(temp_dir, exist_ok=True)
 
     # run the condor job
     results = _run_skim_gpt(temp_dir, params)
     return results
+
+def _populate_pmid_intersections(data: list[dict]) -> None:
+    """Run KinderMiner searches to populate ab_pmid_intersection for each data entry.
+
+    Used by DCH jobs where the caller provides empty PMID lists and expects
+    fast_km to compute the full A-B PMID intersection internally.
+    Delegates to run_kinderminer_job which handles Index lifecycle and searching.
+    """
+    a_terms = list({item['a_term'] for item in data})
+    b_terms = [item['b_term'] for item in data]
+
+    params = KinderMinerJobParams(
+        a_terms=a_terms,
+        b_terms=b_terms,
+        return_pmids=True,
+        top_n_articles_most_recent=999999,
+    )
+
+    results = run_kinderminer_job(params)
+
+    for item in data:
+        matched = False
+        for result in results:
+            if result['a_term'] == item['a_term'] and result['b_term'] == item['b_term']:
+                item['ab_pmid_intersection'] = result.get('ab_pmid_intersection', [])
+                print(f"DCH: Found {len(item['ab_pmid_intersection'])} PMIDs for "
+                      f"({item['a_term']}, {item['b_term']})")
+                matched = True
+                break
+        if not matched:
+            print(f"DCH WARNING: No KM result found for ({item['a_term']}, {item['b_term']})")
+            item['ab_pmid_intersection'] = []
 
 def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     """
@@ -66,23 +98,24 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     data = params.data
     is_km = params.KM_hypothesis is not None
     is_skim = params.SKIM_hypotheses is not None
-    is_km_direct_comparison = params.KM_direct_comp_hypothesis is not None
 
-    if not (is_km or is_skim or is_km_direct_comparison):
-        raise FastKmException('job must be KM, SKiM, or direct comparison KM')
+    if not (is_km or is_skim):
+        raise FastKmException('job must be KM or SKiM')
 
-    # Set job type
-    if is_km:
+    # DCH: populate PMID intersections and configure as km_with_gpt variant
+    if params.is_dch:
+        print("DCH mode: running KinderMiner searches to populate PMID intersections...")
+        _populate_pmid_intersections(data)
+        config['JOB_TYPE'] = 'km_with_gpt'
+        config['JOB_SPECIFIC_SETTINGS']['km_with_gpt']['is_dch'] = True
+    elif is_km:
         config['JOB_TYPE'] = 'km_with_gpt'
     elif is_skim:
         config['JOB_TYPE'] = 'skim_with_gpt'
-    elif is_km_direct_comparison:
-        config['JOB_TYPE'] = 'km_with_gpt_direct_comp'
     
     # Inject dynamic values from payload
     config['KM_hypothesis'] = params.KM_hypothesis
     config['SKIM_hypotheses'] = params.SKIM_hypotheses
-    config['KM_direct_comp_hypothesis'] = params.KM_direct_comp_hypothesis
     config['GLOBAL_SETTINGS']['MODEL'] = params.model
     config['GLOBAL_SETTINGS']['TOP_N_ARTICLES_MOST_CITED'] = params.top_n_articles_most_cited
     config['GLOBAL_SETTINGS']['TOP_N_ARTICLES_MOST_RECENT'] = params.top_n_articles_most_recent
@@ -118,7 +151,7 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     # Write data.tsv
     data_tsv_path = os.path.join(job_dir, 'data.tsv')
     with open(data_tsv_path, 'w') as f:
-        if is_km or is_km_direct_comparison:
+        if is_km:
             f.write('a_term\tb_term\tab_pmid_intersection\n')
             for item in data:
                 ab_pmid_list = [str(p) for p in item['ab_pmid_intersection']]
@@ -283,23 +316,43 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
 def _parse_json_result(json_result_file: str) -> list[dict]:
     parsed_results = []
 
-    # read json
     with open(json_result_file, 'r') as f:
         results_json = json.load(f)
+
+    if not isinstance(results_json, list):
+        results_json = [results_json]
 
     for json_result in results_json:
         parsed_result = dict()
 
-        if 'A_B_C_Relationship' in json_result: # SKiM only
+        if 'Hypothesis_Comparison' in json_result:
+            hc = json_result['Hypothesis_Comparison']
+            parsed_result['hypothesis1'] = hc.get('hypothesis1', '')
+            parsed_result['hypothesis2'] = hc.get('hypothesis2', '')
+            results_list = hc.get('Result', [])
+            if not isinstance(results_list, list):
+                results_list = [results_list]
+            for result_entry in results_list:
+                if not isinstance(result_entry, dict):
+                    continue
+                parsed_result['score'] = result_entry.get('score')
+                parsed_result['decision'] = result_entry.get('decision')
+                tallies = result_entry.get('tallies', {}) or {}
+                parsed_result['support_H1'] = tallies.get('support_H1', 0)
+                parsed_result['support_H2'] = tallies.get('support_H2', 0)
+                parsed_result['both'] = tallies.get('both', 0)
+                parsed_result['neither_or_inconclusive'] = tallies.get('neither_or_inconclusive', 0)
+            parsed_result['total_relevant_abstracts'] = json_result.get('total_relevant_abstracts')
+        elif 'A_B_C_Relationship' in json_result:
             parsed_result['a_term'] = json_result['A_B_C_Relationship']['a_term']
             parsed_result['b_term'] = json_result['A_B_C_Relationship']['b_term']
             parsed_result['c_term'] = json_result['A_B_C_Relationship']['c_term']
             parsed_result['abc_result'] = json_result['A_B_C_Relationship']['Result']
-        if 'A_B_Relationship' in json_result: # KM and SKiM
+        if 'A_B_Relationship' in json_result:
             parsed_result['a_term'] = json_result['A_B_Relationship']['a_term']
             parsed_result['b_term'] = json_result['A_B_Relationship']['b_term']
             parsed_result['ab_result'] = json_result['A_B_Relationship']['Result']
-        if 'A_C_Relationship' in json_result: # SKiM only
+        if 'A_C_Relationship' in json_result:
             parsed_result['a_term'] = json_result['A_C_Relationship']['a_term']
             parsed_result['c_term'] = json_result['A_C_Relationship']['c_term']
             parsed_result['ac_result'] = json_result['A_C_Relationship']['Result']
@@ -337,7 +390,6 @@ def _get_config_template():
     return {
         "JOB_TYPE": "km_with_gpt",  # Will be overridden based on data structure
         "KM_hypothesis": "",  # Will be injected from payload
-        "KM_direct_comp_hypothesis": "",
         "SKIM_hypotheses": {},
         "Evaluate_single_abstract": False,
         "GLOBAL_SETTINGS": {
@@ -383,23 +435,11 @@ def _get_config_template():
                 "A_TERM_LIST": False,
                 "A_TERMS_FILE": "",
                 "B_TERMS_FILE": "",
+                "is_dch": False,
                 "NUM_B_TERMS": 25,
                 "km_with_gpt": {
                     "ab_fet_threshold": 1,
                     "censor_year_upper": 2024,
-                    "censor_year_lower": 0
-                }
-            },
-            "km_with_gpt_direct_comp": {
-                "position": False,
-                "A_TERM_LIST": False,
-                "A_TERMS_FILE": "",
-                "B_TERMS_FILE": "",
-                "SORT_COLUMN": "ab_sort_ratio",
-                "NUM_B_TERMS": 25,
-                "km_with_gpt_direct_comp": {
-                    "ab_fet_threshold": 1,
-                    "censor_year_upper": 1990,
                     "censor_year_lower": 0
                 }
             },
