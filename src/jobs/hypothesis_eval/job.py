@@ -9,7 +9,7 @@ import src.global_vars as gvars
 from src.jobs.kinderminer.job import run_kinderminer_job
 from src.jobs.kinderminer.params import KinderMinerJobParams
 
-SKIMGPT_IMAGE = "stewartlab/skimgpt:2.0.1"
+SKIMGPT_IMAGE = os.environ.get("SKIMGPT_IMAGE", "stewartlab/skimgpt:2.0.1")
 
 def run_hypothesis_eval_job(params: HypothesisEvalJobParams) -> dict:
     validate_params(params)
@@ -62,7 +62,7 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     """Run skimgpt-relevance in a local Docker container (Triton-first, CHTC fallback).
 
     Creates the job files (config.json, data.tsv, files.txt, secrets.json) in
-    job_dir, then runs stewartlab/skimgpt:2.0.1 as a sibling container.  The
+    job_dir, then runs the SKIMGPT_IMAGE as a sibling container.  The
     container tries Triton remote inference first; if Triton is unreachable it
     falls back to submitting an HTCondor GPU job internally.
     """
@@ -311,7 +311,7 @@ def _get_config_template():
         "HTCONDOR": {
             "collector_host": "cm.chtc.wisc.edu",
             "submit_host": "ap2002.chtc.wisc.edu",
-            "docker_image": "docker://stewartlab/skimgpt:2.0.1",
+            "docker_image": f"docker://{SKIMGPT_IMAGE}",
             "request_gpus": "1",
             "request_cpus": "1",
             "request_memory": "15GB",
