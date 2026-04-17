@@ -1,15 +1,17 @@
 import os
 import json
 from glob import glob
+import sys
 import docker
 from rq import get_current_job
 from src.fast_km_exception import FastKmException
 from src.jobs.hypothesis_eval.params import HypothesisEvalJobParams, validate_params
 import src.global_vars as gvars
-from src.jobs.kinderminer.job import run_kinderminer_job
-from src.jobs.kinderminer.params import KinderMinerJobParams
+from src.kinderminer_algorithm import kinderminer_search
+from src.indexing.index import Index
 
-SKIMGPT_IMAGE = os.environ.get("SKIMGPT_IMAGE", "stewartlab/skimgpt:2.0.1")
+IMAGE_VERSION = os.environ.get("SKIMGPT_IMAGE", "latest")
+SKIMGPT_IMAGE = f"stewartlab/skimgpt:{IMAGE_VERSION}"
 
 def run_hypothesis_eval_job(params: HypothesisEvalJobParams) -> dict:
     validate_params(params)
@@ -19,44 +21,14 @@ def run_hypothesis_eval_job(params: HypothesisEvalJobParams) -> dict:
     if not job:
         raise RuntimeError("Could not get current RQ job")
     
-    temp_dir = os.path.join('/tmp', "job-" + job.id)
+    # note that this needs to be an absolute path because we change the CWD below.
+    # TODO: this assumes a certain structure of the file system that is generally only true in the docker build.
+    temp_dir = os.path.join("/app", "_data", "jobs", "job-" + job.id)
     os.makedirs(temp_dir, exist_ok=True)
 
     # run the condor job
     results = _run_skim_gpt(temp_dir, params)
     return results
-
-def _populate_pmid_intersections(data: list[dict]) -> None:
-    """Run KinderMiner searches to populate ab_pmid_intersection for each data entry.
-
-    Used by DCH jobs where the caller provides empty PMID lists and expects
-    fast_km to compute the full A-B PMID intersection internally.
-    Delegates to run_kinderminer_job which handles Index lifecycle and searching.
-    """
-    a_terms = list({item['a_term'] for item in data})
-    b_terms = [item['b_term'] for item in data]
-
-    params = KinderMinerJobParams(
-        a_terms=a_terms,
-        b_terms=b_terms,
-        return_pmids=True,
-        top_n_articles_most_recent=999999,
-    )
-
-    results = run_kinderminer_job(params)
-
-    for item in data:
-        matched = False
-        for result in results:
-            if result['a_term'] == item['a_term'] and result['b_term'] == item['b_term']:
-                item['ab_pmid_intersection'] = result.get('ab_pmid_intersection', [])
-                print(f"DCH: Found {len(item['ab_pmid_intersection'])} PMIDs for "
-                      f"({item['a_term']}, {item['b_term']})")
-                matched = True
-                break
-        if not matched:
-            print(f"DCH WARNING: No KM result found for ({item['a_term']}, {item['b_term']})")
-            item['ab_pmid_intersection'] = []
 
 def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     """Run skimgpt-relevance in a local Docker container (Triton-first, CHTC fallback).
@@ -77,17 +49,18 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
 
     if not (is_km or is_skim):
         raise FastKmException('job must be KM or SKiM')
+    
+    data = _populate_pmid_intersections(data)
 
-    # DCH: populate PMID intersections and configure as km_with_gpt variant
     if params.is_dch:
-        print("DCH mode: running KinderMiner searches to populate PMID intersections...")
-        _populate_pmid_intersections(data)
         config['JOB_TYPE'] = 'km_with_gpt'
         config['JOB_SPECIFIC_SETTINGS']['km_with_gpt']['is_dch'] = True
     elif is_km:
         config['JOB_TYPE'] = 'km_with_gpt'
     elif is_skim:
         config['JOB_TYPE'] = 'skim_with_gpt'
+    else:
+        raise FastKmException('Unable to determine job type (KM vs SKiM vs KM-DCH)')
     
     # Inject dynamic values from payload
     config['KM_hypothesis'] = params.KM_hypothesis
@@ -163,7 +136,7 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     print(f"Running {SKIMGPT_IMAGE} locally (Triton-first)...")
     client = docker.from_env()
 
-    container_workdir = "/work"
+    container_workdir = os.path.join(job_dir, "container_workdir")
     container = client.containers.run(
         image=SKIMGPT_IMAGE,
         command=f"skimgpt-relevance --km_output {container_workdir}/files.txt --config {container_workdir}/config.json",
@@ -357,3 +330,54 @@ def _get_config_template():
             }
         }
     }
+
+def _populate_pmid_intersections(data: list[dict]) -> list[dict]:
+    """Run KinderMiner searches to populate ab_pmid_intersection for each data entry.
+
+    Used by DCH jobs where the caller provides empty PMID lists and expects
+    fast_km to compute the full A-B PMID intersection internally.
+    Delegates to run_kinderminer_job which handles Index lifecycle and searching.
+    """
+    # data structure example:
+
+    # KM:
+    # data = [
+    #     { 
+    #         'a_term': 'breast cancer', 
+    #         'b_term': 'ABEMACICLIB', 
+    #         'ab_pmid_intersection': ['28580882', '28968163', '31250942', '33029704', '32955138']
+    #     },
+    # ]
+
+    # SKiM:
+    # data = [
+    #     { 
+    #         'a_term': 'breast cancer', 
+    #         'b_term': 'CDK4', 
+    #         'c_term': 'ABEMACICLIB',
+    #         'ab_pmid_intersection': ['26030518', '19874578', '32940689', '33260316', '30130984'],
+    #         'bc_pmid_intersection': ['27030077', '27217383', '34657059', '34958115', '37382948'],
+    #         'ac_pmid_intersection': ['28580882', '28968163', '31250942', '33029704', '32955138']
+    #     },
+    # ]
+
+    idx = Index(gvars.data_dir)
+
+    for result in data:
+        a_term = result["a_term"]
+        b_term = result["b_term"]
+        c_term = result.get("c_term")
+
+        # populate PMID intersections if not provided by the user
+        if not result.get("ab_pmid_intersection"):
+            result["ab_pmid_intersection"] = kinderminer_search(idx, a_term, b_term, 
+                                                                return_pmids=True, top_n_articles_most_recent=sys.maxsize)["ab_pmid_intersection"]
+        if c_term and not result.get("bc_pmid_intersection"):
+            result["bc_pmid_intersection"] = kinderminer_search(idx, b_term, c_term, 
+                                                                return_pmids=True, top_n_articles_most_recent=sys.maxsize)["bc_pmid_intersection"]
+        if c_term and not result.get("ac_pmid_intersection"):
+            result["ac_pmid_intersection"] = kinderminer_search(idx, a_term, c_term, 
+                                                                return_pmids=True, top_n_articles_most_recent=sys.maxsize)["ac_pmid_intersection"]
+
+    idx.close()
+    return data

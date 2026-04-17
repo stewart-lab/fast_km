@@ -3,7 +3,11 @@ import numpy as np
 import pandas as pd
 import json
 import os
-import logging  
+import logging
+import src.global_vars as gvars
+
+MIN_CENSOR_YEAR = gvars.MIN_CENSOR_YEAR
+MAX_CENSOR_YEAR = gvars.MAX_CENSOR_YEAR
 
 class RaggedTensor:
     def __init__(self, data, break_point=[]):
@@ -397,21 +401,23 @@ class Config:
                 "ab": self.job_specific_settings["ab_fet_threshold"],
                 "bc": self.job_specific_settings["bc_fet_threshold"]
             }
-        else:
+        elif self.job_type == "km_with_gpt":
             return {
                 "ab": self.job_specific_settings["ab_fet_threshold"]
             }
+        else:
+            raise ValueError(f"Unknown job type: {self.job_type}")
 
     @property
     def censor_year_upper(self):
         return self.job_specific_settings.get(
             "censor_year_upper",
-            self.job_specific_settings.get("censor_year", 2024),
+            self.job_specific_settings.get("censor_year", MAX_CENSOR_YEAR),
         )
 
     @property
     def censor_year_lower(self):
-        return self.job_specific_settings.get("censor_year_lower", 0)
+        return self.job_specific_settings.get("censor_year_lower", MIN_CENSOR_YEAR)
 
     def _validate_htcondor_config(self):
         """Validate required HTCondor settings"""

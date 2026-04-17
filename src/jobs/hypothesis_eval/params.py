@@ -5,7 +5,7 @@ class HypothesisEvalJobParams(BaseModel):
     data: list[dict] = Field(..., description="KM/SKiM results to use to evaluate the hypotheses.")
     KM_hypothesis: str | None = Field(None, description="Hypothesis to evaluate using KM results.")
     SKIM_hypotheses: dict | None = Field(None, description="Hypotheses to evaluate using SKiM results.")
-    is_dch: bool = Field(False, description="If True, run as a Direct Comparison Hypothesis job. Requires exactly 2 data entries and KM_hypothesis. PMID intersections will be computed internally.")
+    is_dch: bool = Field(False, description="If True, run as a Direct Comparison Hypothesis job. Requires exactly 2 data entries with the same A-term, and KM_hypothesis.")
     model: str = Field("o3-mini", description="LLM to use to evaluate the hypotheses.")
     top_n_articles_most_cited: int = Field(5, description="Number of most cited articles to include in the context provided to the LLM.")
     top_n_articles_most_recent: int = Field(5, description="Number of most recent articles to include in the context provided to the LLM.")
