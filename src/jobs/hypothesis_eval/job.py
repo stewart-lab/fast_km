@@ -12,8 +12,12 @@ from src.indexing.index import Index
 
 IMAGE_VERSION = os.environ.get("SKIMGPT_IMAGE", "latest")
 SKIMGPT_IMAGE = f"stewartlab/skimgpt:{IMAGE_VERSION}"
+HOST_DATA_DIR = os.environ.get("HOST_DATA_DIR")
 
 def run_hypothesis_eval_job(params: HypothesisEvalJobParams) -> dict:
+    if not HOST_DATA_DIR:
+        raise ValueError("HOST_DATA_DIR environment variable is not set")
+
     validate_params(params)
 
     # create the job dir to store required files
@@ -136,12 +140,14 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     print(f"Running {SKIMGPT_IMAGE} locally (Triton-first)...")
     client = docker.from_env()
 
-    container_workdir = os.path.join(job_dir, "container_workdir")
+    job_id = os.path.basename(job_dir)
+    host_job_dir = os.path.join(HOST_DATA_DIR, "jobs", job_id)
+
     container = client.containers.run(
         image=SKIMGPT_IMAGE,
-        command=f"skimgpt-relevance --km_output {container_workdir}/files.txt --config {container_workdir}/config.json",
-        volumes={job_dir: {"bind": container_workdir, "mode": "rw"}},
-        working_dir=container_workdir,
+        command=f"skimgpt-relevance --km_output {files_txt_path} --config {config_json_path}",
+        volumes={host_job_dir: {"bind": job_dir, "mode": "rw"}},
+        working_dir=job_dir,
         environment={"HTCONDOR_TOKEN": secrets["HTCONDOR_TOKEN"]},
         network_mode="host",
         detach=True,
