@@ -1,8 +1,8 @@
 import os
 import json
 from glob import glob
+import subprocess
 import sys
-import docker
 from rq import get_current_job
 from src.fast_km_exception import FastKmException
 from src.jobs.hypothesis_eval.params import HypothesisEvalJobParams, validate_params
@@ -11,13 +11,9 @@ from src.kinderminer_algorithm import kinderminer_search
 from src.indexing.index import Index
 
 IMAGE_VERSION = os.environ.get("SKIMGPT_IMAGE", "latest")
-SKIMGPT_IMAGE = f"stewartlab/skimgpt:{IMAGE_VERSION}"
-HOST_DATA_DIR = os.environ.get("HOST_DATA_DIR")
+SKIMGPT_IMAGE = f"docker://stewartlab/skimgpt:{IMAGE_VERSION}"
 
 def run_hypothesis_eval_job(params: HypothesisEvalJobParams) -> dict:
-    if not HOST_DATA_DIR:
-        raise ValueError("HOST_DATA_DIR environment variable is not set")
-
     validate_params(params)
 
     # create the job dir to store required files
@@ -138,37 +134,31 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
 
     # Run skimgpt-relevance via local Docker container (Triton-first, CHTC fallback)
     print(f"Running {SKIMGPT_IMAGE} locally (Triton-first)...")
-    client = docker.from_env()
 
-    job_id = os.path.basename(job_dir)
-    host_job_dir = os.path.join(HOST_DATA_DIR, "jobs", job_id)
+    result = subprocess.run([
+        "apptainer", 
+        "exec", 
+        "--nv",
+        "--bind", f"{job_dir}:{job_dir}",
+        "--cwd", job_dir,
+        "--env", f"HTCONDOR_TOKEN={secrets['HTCONDOR_TOKEN']}",
+        SKIMGPT_IMAGE,
+        "skimgpt-relevance",
+        "--km_output", files_txt_path,
+        "--config", config_json_path
+    ], 
+    capture_output=True, 
+    text=True,
+    check=True)
 
-    container = client.containers.run(
-        image=SKIMGPT_IMAGE,
-        command=f"skimgpt-relevance --km_output {files_txt_path} --config {config_json_path}",
-        volumes={host_job_dir: {"bind": job_dir, "mode": "rw"}},
-        working_dir=job_dir,
-        environment={"HTCONDOR_TOKEN": secrets["HTCONDOR_TOKEN"]},
-        network_mode="host",
-        detach=True,
-        auto_remove=False,
-    )
+    logs = result.stdout
+    print(logs)
 
-    try:
-        for line in container.logs(stream=True, follow=True):
-            print(line.decode("utf-8", errors="replace"), end="")
-
-        result = container.wait()
-        exit_code = result.get("StatusCode", -1)
-        if exit_code != 0:
-            raise RuntimeError(
-                f"skimgpt-relevance container exited with code {exit_code}"
-            )
-    finally:
-        try:
-            container.remove(force=True)
-        except Exception:
-            pass
+    exit_code = result.returncode
+    if exit_code != 0:
+        print(f"skimgpt-relevance container exited with code {exit_code}")
+        print(f"stderr: {result.stderr}")
+        raise RuntimeError(f"skimgpt-relevance container exited with code {exit_code}")
 
     # Collect result JSON files from both possible output locations:
     #   - Triton success: written to job_dir root by run_relevance_pipeline

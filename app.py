@@ -26,7 +26,6 @@ env_deepseek_key   = os.getenv('DEEPSEEK_API_KEY', '')
 env_timezone       = os.getenv('TIMEZONE', '')
 env_password       = os.getenv('PASSWORD', '')
 env_cron           = os.getenv('CRON', '')  # for scheduling updates and population of DBs
-os.environ["DOCKER_HOST"] = f"unix:///var/run/docker.sock"
 
 # parse command line args
 parser = argparse.ArgumentParser()

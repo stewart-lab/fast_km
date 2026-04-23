@@ -4,12 +4,12 @@ services:
       context: .
       dockerfile: Dockerfile
     image: fast_km:build
+    privileged: true
     ports:
       - "${API_PORT}:8000"                   # HOST_PORT:CONTAINER_PORT
-      - "8501:8501"
+      - "8502:8501"
     volumes:
-      - ${DOCKER_SOCKET}:/var/run/docker.sock
-      - ./_data:/app/_data
+      - /scratch/_data:/app/_data
     environment:
       - REDIS=redis:6379
       - HIGH=${HIGH}                         # optional, ok if env var is blank or not set
@@ -21,7 +21,6 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY} # optional, ok if env var is blank or not set
       - TIMEZONE=${TIMEZONE}                 # optional, ok if env var is blank or not set
       - CRON=${CRON}                         # optional, ok if env var is blank or not set
-      - HOST_DATA_DIR=./_data         # must match the host dir in the volumes section
     depends_on:
       - redis
     networks:
