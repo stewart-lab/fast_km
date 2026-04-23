@@ -24,14 +24,15 @@ def validate_params(params: HypothesisEvalJobParams) -> None:
             raise FastKmException('DCH requires exactly 2 data entries')
         if params.KM_hypothesis is None:
             raise FastKmException('DCH requires KM_hypothesis')
-        a_terms = set(item.get('a_term', '') for item in data)
-        if len(a_terms) != 1:
-            raise FastKmException('DCH requires the same a_term in both data entries')
         for item in data:
             if 'a_term' not in item:
                 raise FastKmException('a_term is required')
             if 'b_term' not in item:
                 raise FastKmException('b_term is required')
+        a_terms = {item['a_term'] for item in data}
+        b_terms = {item['b_term'] for item in data}
+        if len(a_terms) != 1 and len(b_terms) != 1:
+            raise FastKmException('DCH requires the two entries to share either an a_term or a b_term')
         if '{a_term}' not in params.KM_hypothesis or '{b_term}' not in params.KM_hypothesis:
             raise FastKmException('KM_hypothesis must contain {a_term} and {b_term}')
         return
