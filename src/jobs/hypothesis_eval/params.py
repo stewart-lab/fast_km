@@ -1,16 +1,19 @@
 from pydantic import BaseModel, Field
 from src.fast_km_exception import FastKmException
+from src.global_vars import MAX_CENSOR_YEAR, MIN_CENSOR_YEAR
 
 class HypothesisEvalJobParams(BaseModel):
-    data: list[dict] = Field(..., description="KM/SKiM results to use to evaluate the hypotheses.")
-    KM_hypothesis: str | None = Field(None, description="Hypothesis to evaluate using KM results.")
-    SKIM_hypotheses: dict | None = Field(None, description="Hypotheses to evaluate using SKiM results.")
-    is_dch: bool = Field(False, description="If True, run as a Direct Comparison Hypothesis job. Requires exactly 2 data entries with the same A-term, and KM_hypothesis.")
-    model: str = Field("o3-mini", description="LLM to use to evaluate the hypotheses.")
-    top_n_articles_most_cited: int = Field(5, description="Number of most cited articles to include in the context provided to the LLM.")
-    top_n_articles_most_recent: int = Field(5, description="Number of most recent articles to include in the context provided to the LLM.")
-    post_n: int = Field(5, description=".")
-    id: str | None = Field(None, description="Optional job ID. If not provided, an ID will be generated.")
+    data: list[dict] =                Field(...,                                     description="KM/SKiM results to use to evaluate the hypotheses.")
+    KM_hypothesis: str | None =       Field(None,                                    description="Hypothesis to evaluate using KM results.")
+    SKIM_hypotheses: dict | None =    Field(None,                                    description="Hypotheses to evaluate using SKiM results.")
+    is_dch: bool =                    Field(False,                                   description="If True, run as a Direct Comparison Hypothesis job. Requires exactly 2 data entries with the same A-term, and KM_hypothesis.")
+    model: str =                      Field("o3-mini",                               description="LLM to use to evaluate the hypotheses.")
+    top_n_articles_most_cited: int =  Field(5,                                       description="Number of most cited articles to include in the context provided to the LLM.")
+    top_n_articles_most_recent: int = Field(5,                                       description="Number of most recent articles to include in the context provided to the LLM.")
+    post_n: int =                     Field(5,                                       description=".")
+    censor_year_lower: int =          Field(MIN_CENSOR_YEAR,                         description="Lower bound of publication year for article censoring (inclusive). Ignored if a PMID list is supplied.")
+    censor_year_upper: int =          Field(MAX_CENSOR_YEAR,   alias="censor_year",  description="Upper bound of publication year for article censoring (inclusive). Ignored if a PMID list is supplied.")
+    id: str | None =                  Field(None,                                    description="Optional job ID. If not provided, an ID will be generated.")
 
 def validate_params(params: HypothesisEvalJobParams) -> None:
     data = params.data

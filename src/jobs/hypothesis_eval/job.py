@@ -50,7 +50,7 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     if not (is_km or is_skim):
         raise FastKmException('job must be KM or SKiM')
     
-    data = _populate_pmid_intersections(data)
+    data = _populate_pmid_intersections(data, censor_year_lower=params.censor_year_lower, censor_year_upper=params.censor_year_upper)
 
     if params.is_dch:
         config['JOB_TYPE'] = 'km_with_gpt'
@@ -69,6 +69,10 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     config['GLOBAL_SETTINGS']['TOP_N_ARTICLES_MOST_CITED'] = params.top_n_articles_most_cited
     config['GLOBAL_SETTINGS']['TOP_N_ARTICLES_MOST_RECENT'] = params.top_n_articles_most_recent
     config['GLOBAL_SETTINGS']['POST_N'] = params.post_n
+    config['JOB_SPECIFIC_SETTINGS']['km_with_gpt']['censor_year_upper'] = params.censor_year_upper
+    config['JOB_SPECIFIC_SETTINGS']['km_with_gpt']['censor_year_lower'] = params.censor_year_lower
+    config['JOB_SPECIFIC_SETTINGS']['skim_with_gpt']['censor_year_upper'] = params.censor_year_upper
+    config['JOB_SPECIFIC_SETTINGS']['skim_with_gpt']['censor_year_lower'] = params.censor_year_lower
 
     # Set up secrets
     secrets = {
@@ -280,7 +284,7 @@ def _get_config_template():
         "HTCONDOR": {
             "collector_host": "cm.chtc.wisc.edu",
             "submit_host": "ap2002.chtc.wisc.edu",
-            "docker_image": f"docker://{SKIMGPT_IMAGE}",
+            "docker_image": f"{SKIMGPT_IMAGE}",
             "request_gpus": "1",
             "request_cpus": "1",
             "request_memory": "15GB",
@@ -308,8 +312,8 @@ def _get_config_template():
                 "SORT_COLUMN": "ab_sort_ratio",
                 "NUM_B_TERMS": 25,
                 "ab_fet_threshold": 1,
-                "censor_year_upper": 2024,
-                "censor_year_lower": 0
+                "censor_year_upper": gvars.MAX_CENSOR_YEAR,
+                "censor_year_lower": gvars.MIN_CENSOR_YEAR
             },
             "skim_with_gpt": {
                 "position": True,
@@ -321,13 +325,13 @@ def _get_config_template():
                 "SORT_COLUMN": "bc_sort_ratio",
                 "ab_fet_threshold": 1,
                 "bc_fet_threshold": 1,
-                "censor_year_upper": 2025,
-                "censor_year_lower": 0
+                "censor_year_upper": gvars.MAX_CENSOR_YEAR,
+                "censor_year_lower": gvars.MIN_CENSOR_YEAR
             }
         }
     }
 
-def _populate_pmid_intersections(data: list[dict]) -> list[dict]:
+def _populate_pmid_intersections(data: list[dict], censor_year_lower: int, censor_year_upper: int) -> list[dict]:
     """Run KinderMiner searches to populate ab_pmid_intersection for each data entry.
 
     Used by DCH jobs where the caller provides empty PMID lists and expects
@@ -367,12 +371,15 @@ def _populate_pmid_intersections(data: list[dict]) -> list[dict]:
         # populate PMID intersections if not provided by the user
         if not result.get("ab_pmid_intersection"):
             result["ab_pmid_intersection"] = kinderminer_search(idx, a_term, b_term, 
+                                                                censor_year_lower=censor_year_lower, censor_year_upper=censor_year_upper,
                                                                 return_pmids=True, top_n_articles_most_recent=sys.maxsize)["ab_pmid_intersection"]
         if c_term and not result.get("bc_pmid_intersection"):
             result["bc_pmid_intersection"] = kinderminer_search(idx, b_term, c_term, 
+                                                                censor_year_lower=censor_year_lower, censor_year_upper=censor_year_upper,
                                                                 return_pmids=True, top_n_articles_most_recent=sys.maxsize)["bc_pmid_intersection"]
         if c_term and not result.get("ac_pmid_intersection"):
             result["ac_pmid_intersection"] = kinderminer_search(idx, a_term, c_term, 
+                                                                censor_year_lower=censor_year_lower, censor_year_upper=censor_year_upper,
                                                                 return_pmids=True, top_n_articles_most_recent=sys.maxsize)["ac_pmid_intersection"]
 
     idx.close()
