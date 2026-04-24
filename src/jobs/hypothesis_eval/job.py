@@ -138,9 +138,9 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     result = subprocess.run([
         "apptainer", 
         "exec", 
-        "--nv",
         "--bind", f"{job_dir}:{job_dir}",
         "--cwd", job_dir,
+        "--cleanenv",
         "--env", f"HTCONDOR_TOKEN={secrets['HTCONDOR_TOKEN']}",
         SKIMGPT_IMAGE,
         "skimgpt-relevance",
