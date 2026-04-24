@@ -59,11 +59,6 @@ def validate_params(params: HypothesisEvalJobParams) -> None:
             raise FastKmException('b_term is required')
         if is_skim and 'c_term' not in item:
             raise FastKmException('c_term is required for SKiM')
-        
-        if 'ab_pmid_intersection' not in item or len(item['ab_pmid_intersection']) == 0:
-            raise FastKmException('ab_pmid_intersection is required')
-        if is_skim and ('bc_pmid_intersection' not in item or len(item['bc_pmid_intersection'])) == 0:
-            raise FastKmException('bc_pmid_intersection is required for SKiM')
     
     # validate hypotheses
     if is_km:

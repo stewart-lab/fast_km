@@ -10,7 +10,7 @@ import src.global_vars as gvars
 from src.kinderminer_algorithm import kinderminer_search
 from src.indexing.index import Index
 
-IMAGE_VERSION = os.environ.get("SKIMGPT_IMAGE", "latest")
+IMAGE_VERSION = os.environ.get("SKIMGPT_IMAGE", "2.0.1")
 SKIMGPT_IMAGE = f"docker://stewartlab/skimgpt:{IMAGE_VERSION}"
 
 def run_hypothesis_eval_job(params: HypothesisEvalJobParams) -> dict:
@@ -136,6 +136,35 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     with open(secrets_json_path, "w") as f:
         json.dump(secrets, f, indent=4)
 
+    # pull SKiM-GPT image if it's not present
+    sif_image_dir = os.path.join("/app", "_data", "images")
+    os.makedirs(sif_image_dir, exist_ok=True)
+    safe_name = SKIMGPT_IMAGE.replace("docker://", "").replace("/", "_").replace(":", "_").replace(".", "_")
+    local_image_path = os.path.join(sif_image_dir, f"{safe_name}.sif")
+    if not os.path.exists(local_image_path):
+        print(f"Pulling {SKIMGPT_IMAGE} to {local_image_path}...")
+        tmp_path = os.path.join(job_dir, f"{safe_name}.sif") # avoids race conditions if two jobs try to pull the image at the same time
+        proc = subprocess.Popen([
+            "apptainer", 
+            "pull", 
+            tmp_path,
+            SKIMGPT_IMAGE
+        ], 
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,    # merge stderr into stdout so we can see all output
+        text=True,
+        bufsize=1,                   # line-buffered
+        )
+
+        for line in proc.stdout:
+            print(line, end="")
+
+        exit_code = proc.wait()
+        if exit_code != 0:
+            raise RuntimeError(f"skimgpt-relevance container pull failed with code {exit_code}")
+        
+        os.rename(tmp_path, local_image_path)
+
     # spawn a child container (using apptainer) to run the hypothesis evaluation pipeline
     print(f"Running {SKIMGPT_IMAGE}...")
 
@@ -162,7 +191,6 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
 
     exit_code = proc.wait()
     if exit_code != 0:
-        print(f"skimgpt-relevance container exited with code {exit_code}")
         raise RuntimeError(f"skimgpt-relevance container exited with code {exit_code}")
 
     # Collect result JSON files from both possible output locations:
