@@ -7,9 +7,9 @@ services:
     privileged: true
     ports:
       - "${API_PORT}:8000"                   # HOST_PORT:CONTAINER_PORT
-      - "8502:8501"
+      - "8501:8501"
     volumes:
-      - /scratch/_data:/app/_data
+      - ./_data:/app/_data
     environment:
       - REDIS=redis:6379
       - HIGH=${HIGH}                         # optional, ok if env var is blank or not set
