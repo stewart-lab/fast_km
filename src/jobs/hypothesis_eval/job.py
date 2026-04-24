@@ -50,7 +50,7 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     if not (is_km or is_skim):
         raise FastKmException('job must be KM or SKiM')
     
-    data = _populate_pmid_intersections(data, censor_year_lower=params.censor_year_lower, censor_year_upper=params.censor_year_upper)
+    data = _populate_pmid_intersections(data, params.censor_year_lower, params.censor_year_upper)
 
     if params.is_dch:
         config['JOB_TYPE'] = 'km_with_gpt'
@@ -136,32 +136,33 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     with open(secrets_json_path, "w") as f:
         json.dump(secrets, f, indent=4)
 
-    # Run skimgpt-relevance via local Docker container (Triton-first, CHTC fallback)
-    print(f"Running {SKIMGPT_IMAGE} locally (Triton-first)...")
+    # spawn a child container (using apptainer) to run the hypothesis evaluation pipeline
+    print(f"Running {SKIMGPT_IMAGE}...")
 
-    result = subprocess.run([
+    proc = subprocess.Popen([
         "apptainer", 
         "exec", 
         "--bind", f"{job_dir}:{job_dir}",
         "--cwd", job_dir,
         "--cleanenv",
-        "--env", f"HTCONDOR_TOKEN={secrets['HTCONDOR_TOKEN']}",
+        "--env", f"PYTHONUNBUFFERED=1,HTCONDOR_TOKEN={secrets['HTCONDOR_TOKEN']}",
         SKIMGPT_IMAGE,
         "skimgpt-relevance",
         "--km_output", files_txt_path,
         "--config", config_json_path
     ], 
-    capture_output=True, 
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,    # merge stderr into stdout so order is preserved
     text=True,
-    check=True)
+    bufsize=1,                   # line-buffered
+    )
 
-    logs = result.stdout
-    print(logs)
+    for line in proc.stdout:
+        print(line, end="")
 
-    exit_code = result.returncode
+    exit_code = proc.wait()
     if exit_code != 0:
         print(f"skimgpt-relevance container exited with code {exit_code}")
-        print(f"stderr: {result.stderr}")
         raise RuntimeError(f"skimgpt-relevance container exited with code {exit_code}")
 
     # Collect result JSON files from both possible output locations:
