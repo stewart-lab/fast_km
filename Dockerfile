@@ -1,7 +1,17 @@
-## base image with python 3.12
+## base image with Debian + Python 3.12
 FROM python:3.12
 
-## copy requirements file into Docker image
+## install apptainer and prerequisites
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl gnupg uidmap \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://github.com/apptainer/apptainer/releases/download/v1.5.0-rc.2/apptainer_1.5.0.rc.2-trixie+_amd64.deb -o /tmp/apptainer.deb \
+    && apt-get update \
+    && apt-get install -y /tmp/apptainer.deb \
+    && rm /tmp/apptainer.deb
+
+## copy Python library requirements file into Docker image
 COPY requirements.txt /app/requirements.txt
 
 ## set working directory
