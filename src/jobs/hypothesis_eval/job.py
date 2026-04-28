@@ -402,12 +402,14 @@ def _populate_pmid_intersections(data: list[dict], censor_year_lower: int, censo
             result["ab_pmid_intersection"] = kinderminer_search(idx, 
                                                                 a_term=a_term, 
                                                                 b_term=b_term, 
+                                                                c_term=None,
                                                                 censor_year_lower=censor_year_lower, 
                                                                 censor_year_upper=censor_year_upper,
                                                                 return_pmids=True, 
                                                                 top_n_articles_most_recent=1000)["ab_pmid_intersection"]
         if c_term and not result.get("bc_pmid_intersection"):
             result["bc_pmid_intersection"] = kinderminer_search(idx, 
+                                                                a_term=None,
                                                                 b_term=b_term, 
                                                                 c_term=c_term, 
                                                                 censor_year_lower=censor_year_lower, 
@@ -417,6 +419,7 @@ def _populate_pmid_intersections(data: list[dict], censor_year_lower: int, censo
         if c_term and not result.get("ac_pmid_intersection"):
             result["ac_pmid_intersection"] = kinderminer_search(idx, 
                                                                 a_term=a_term, 
+                                                                b_term=None,
                                                                 c_term=c_term, 
                                                                 censor_year_lower=censor_year_lower, 
                                                                 censor_year_upper=censor_year_upper,
