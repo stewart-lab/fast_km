@@ -186,8 +186,10 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     bufsize=1,                   # line-buffered
     )
 
+    stdout = ""
     for line in proc.stdout:
-        report_log("apptainer_stdout", line)
+        stdout += line
+        report_log("stdout", stdout)
         print(line, end="")
 
     exit_code = proc.wait()
