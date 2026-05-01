@@ -69,6 +69,11 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     config['GLOBAL_SETTINGS']['TOP_N_ARTICLES_MOST_CITED'] = params.top_n_articles_most_cited
     config['GLOBAL_SETTINGS']['TOP_N_ARTICLES_MOST_RECENT'] = params.top_n_articles_most_recent
     config['GLOBAL_SETTINGS']['POST_N'] = params.post_n
+    # iterations==1 is "no iteration loop, write to output/" (matches the
+    # legacy behaviour). >1 enables the worker's iteration loop, which writes
+    # to output/iteration_{i}/ — the result collector below recurses into
+    # those subdirs and tags each parsed result with its iteration index.
+    config['GLOBAL_SETTINGS']['iterations'] = params.iterations if params.iterations > 1 else False
     config['JOB_SPECIFIC_SETTINGS']['km_with_gpt']['censor_year_upper'] = params.censor_year_upper
     config['JOB_SPECIFIC_SETTINGS']['km_with_gpt']['censor_year_lower'] = params.censor_year_lower
     config['JOB_SPECIFIC_SETTINGS']['skim_with_gpt']['censor_year_upper'] = params.censor_year_upper
@@ -199,6 +204,8 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     # Collect result JSON files from both possible output locations:
     #   - Triton success: written to job_dir root by run_relevance_pipeline
     #   - CHTC fallback:  written to job_dir/output/ by HTCondor transfer
+    # When iterations > 1 the worker writes to output/iteration_{i}/ — recurse
+    # so per-iteration JSONs are picked up.
     print("Processing results...")
     skip = {"config.json", "secrets.json"}
     result_files = [
@@ -207,7 +214,7 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     ]
     output_dir = os.path.join(job_dir, "output")
     if os.path.exists(output_dir):
-        result_files.extend(glob(os.path.join(output_dir, "*.json")))
+        result_files.extend(glob(os.path.join(output_dir, "**", "*.json"), recursive=True))
 
     if not result_files:
         for dirpath, _, filenames in os.walk(job_dir):
@@ -218,10 +225,30 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     print(f"Found {len(result_files)} result file(s): {', '.join(result_files)}")
     results = []
     for result_file in result_files:
-        results.extend(_parse_json_result(result_file))
+        iter_idx = _iteration_from_path(result_file)
+        for parsed in _parse_json_result(result_file):
+            if iter_idx is not None:
+                parsed['iteration'] = iter_idx
+            results.append(parsed)
 
     print(f"Results processed successfully. Job files are in {job_dir}")
     return results
+
+
+def _iteration_from_path(path: str) -> int | None:
+    """Extract the iteration index from a per-iteration result path.
+
+    The worker writes to ``output/iteration_{i}/…json`` when the iteration
+    loop is enabled. Returns ``None`` for files outside an ``iteration_*``
+    directory (i.e. the legacy single-run layout).
+    """
+    parent = os.path.basename(os.path.dirname(path))
+    if parent.startswith("iteration_"):
+        try:
+            return int(parent.split("_", 1)[1])
+        except ValueError:
+            return None
+    return None
 
 def _parse_json_result(json_result_file: str) -> list[dict]:
     parsed_results = []
