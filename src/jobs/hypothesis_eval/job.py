@@ -2,13 +2,13 @@ import os
 import json
 from glob import glob
 import subprocess
-import sys
 from rq import get_current_job
 from src.fast_km_exception import FastKmException
 from src.jobs.hypothesis_eval.params import HypothesisEvalJobParams, validate_params
 import src.global_vars as gvars
 from src.kinderminer_algorithm import kinderminer_search
 from src.indexing.index import Index
+from src.jobs.job_util import report_log
 
 IMAGE_VERSION = os.environ.get("SKIMGPT_IMAGE", "2.0.1")
 SKIMGPT_IMAGE = f"docker://stewartlab/skimgpt:{IMAGE_VERSION}"
@@ -186,7 +186,10 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     bufsize=1,                   # line-buffered
     )
 
+    stdout = ""
     for line in proc.stdout:
+        stdout += line
+        report_log("stdout", stdout)
         print(line, end="")
 
     exit_code = proc.wait()

@@ -64,8 +64,13 @@ def queue_indexing_job(params: BaseModel) -> dict:
 
 def get_job(job_id: str) -> dict | None:
     """Gets information about a job"""
-    job = Job.fetch(job_id, connection=redis_conn)
-    if job is None:
+    try:
+        job = Job.fetch(job_id, connection=redis_conn)
+        if job is None:
+            return None
+    except Exception as e: 
+        # TODO: be more specific about the exception we're catching here
+        # return None, which will return HTTP 404 not found
         return None
 
     job_info = dict()
@@ -77,7 +82,7 @@ def get_job(job_id: str) -> dict | None:
     if job.exc_info:
         # if the job failed, include the error message.
         # this is intended for developers running the frontend, not end users.
-        job_info['error'] = job.exc_info
+        job_info['exception'] = job.exc_info
 
         # some exceptions may be safe to show to the user and some won't be.
         # we won't know which is which. so we check to see if the error
@@ -85,12 +90,13 @@ def get_job(job_id: str) -> dict | None:
         # if it does, we show that message. else we show a generic error message.
         spl = job.exc_info.split('-BEGIN USER-FACING ERROR-')
         if len(spl) == 2:
-            job_info['user_facing_error'] = spl[1].split('-END USER-FACING ERROR-')[0].strip()
+            job_info['error'] = spl[1].split('-END USER-FACING ERROR-')[0].strip()
         else:
-            job_info['user_facing_error'] = 'An error occurred during execution of this job.'
+            job_info['error'] = 'An error occurred during execution of this job.'
 
-    if 'progress' in job_meta:
-        job_info['progress'] = job_meta['progress']
+    # report progress, logs, etc.
+    for key in job_meta:
+        job_info[key] = job_meta[key]
 
     return job_info
 
