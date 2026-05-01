@@ -13,6 +13,7 @@ class HypothesisEvalJobParams(BaseModel):
     post_n: int =                     Field(5,                                       description=".")
     censor_year_lower: int =          Field(MIN_CENSOR_YEAR,                         description="Lower bound of publication year for article censoring (inclusive). Ignored if a PMID list is supplied.")
     censor_year_upper: int =          Field(MAX_CENSOR_YEAR,   alias="censor_year",  description="Upper bound of publication year for article censoring (inclusive). Ignored if a PMID list is supplied.")
+    iterations: int =                 Field(1,                 ge=1, le=10,         description="Run the LLM scoring N independent times. Each iteration produces its own score; useful for capturing nondeterminism on DCH jobs. Default 1 (single run).")
     id: str | None =                  Field(None,                                    description="Optional job ID. If not provided, an ID will be generated.")
 
 def validate_params(params: HypothesisEvalJobParams) -> None:
