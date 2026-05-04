@@ -2,6 +2,11 @@ from pydantic import BaseModel, Field
 from src.fast_km_exception import FastKmException
 from src.global_vars import MAX_CENSOR_YEAR, MIN_CENSOR_YEAR
 
+# Cap iterations to bound LLM API cost — each iteration is a full re-scoring
+# pass against the same context, so cost scales linearly with this value.
+MAX_ITERATIONS = 10
+
+
 class HypothesisEvalJobParams(BaseModel):
     data: list[dict] =                Field(...,                                     description="KM/SKiM results to use to evaluate the hypotheses.")
     KM_hypothesis: str | None =       Field(None,                                    description="Hypothesis to evaluate using KM results.")
@@ -13,7 +18,8 @@ class HypothesisEvalJobParams(BaseModel):
     post_n: int =                     Field(5,                                       description=".")
     censor_year_lower: int =          Field(MIN_CENSOR_YEAR,                         description="Lower bound of publication year for article censoring (inclusive). Ignored if a PMID list is supplied.")
     censor_year_upper: int =          Field(MAX_CENSOR_YEAR,   alias="censor_year",  description="Upper bound of publication year for article censoring (inclusive). Ignored if a PMID list is supplied.")
-    iterations: int =                 Field(1,                 ge=1, le=10,         description="Run the LLM scoring N independent times. Each iteration produces its own score; useful for capturing nondeterminism on DCH jobs. Default 1 (single run).")
+    censor_year_increment: int | None = Field(None,            ge=1,                 description="If set, split [censor_year_lower, censor_year_upper] into non-overlapping windows of this many years and run the hypothesis evaluation per window. Forces re-fetching of PMID intersections per window (any user-supplied *_pmid_intersection lists are discarded). Default None (single window covering the full range).")
+    iterations: int =                 Field(1,    ge=1, le=MAX_ITERATIONS,         description=f"Run the LLM scoring N independent times. Each iteration produces its own score; useful for capturing LLM nondeterminism. Capped at {MAX_ITERATIONS} to bound API cost. Default 1 (single run).")
     id: str | None =                  Field(None,                                    description="Optional job ID. If not provided, an ID will be generated.")
 
 def validate_params(params: HypothesisEvalJobParams) -> None:
