@@ -1,6 +1,5 @@
 import os
 import json
-from glob import glob
 import subprocess
 from rq import get_current_job
 from src.fast_km_exception import FastKmException
@@ -255,26 +254,36 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams,
 def _collect_results(job_dir: str, expected_iterations: int = 1) -> list[dict]:
     """Find, parse, and tag JSON result files from a SKiM-GPT run.
 
-    Triton writes flat to ``job_dir/*.json``; CHTC fallback writes under
-    ``job_dir/output/`` (recursed; iteration_N subdirs may be present).
-    Every result is tagged ``iteration: N`` (1 for single-pass) for a stable
-    consumer shape. When ``expected_iterations > 1``, warns if any expected
-    index is missing — catches silent worker failures.
+    Walks ``job_dir`` recursively and treats every ``.json`` as a result,
+    excluding two well-known noise sources:
+      * ``config.json`` / ``secrets.json`` at the job root (run metadata).
+      * Anything under a ``debug/`` directory (skimgpt's intermediate JSONs).
+
+    Layout-agnostic by design. skimgpt has historically placed results under
+    ``output/`` for single-pass runs and ``iteration_N/`` for multi-iteration
+    runs, and the iteration loop and CHTC fallback don't agree on which.
+    Tagging is path-based via ``_iteration_from_path``, which finds the
+    innermost ``iteration_N`` ancestor — so a file lands at the correct
+    iteration regardless of where in the tree skimgpt drops it. New layouts
+    Just Work as long as the convention "iteration_N is somewhere in the
+    path; debug subtrees are noise" holds.
+
+    When ``expected_iterations > 1``, warns if any expected index is missing
+    — catches silent worker failures.
     """
-    skip = {"config.json", "secrets.json"}
-    debug_segment = os.sep + "debug" + os.sep
-    result_files = [
-        f for f in glob(os.path.join(job_dir, "*.json"))
-        if os.path.basename(f) not in skip
-    ]
-    output_dir = os.path.join(job_dir, "output")
-    if os.path.exists(output_dir):
-        # skimgpt's organize_output puts intermediate files under output/debug/;
-        # exclude that subtree so we don't parse non-result JSONs as results.
-        result_files.extend(
-            f for f in glob(os.path.join(output_dir, "**", "*.json"), recursive=True)
-            if debug_segment not in f
-        )
+    skip_at_root = {"config.json", "secrets.json"}
+    job_root = os.path.normpath(job_dir)
+    result_files = []
+    for dirpath, dirnames, filenames in os.walk(job_dir):
+        # Prune debug subtrees from the traversal entirely.
+        dirnames[:] = [d for d in dirnames if d != "debug"]
+        is_root = os.path.normpath(dirpath) == job_root
+        for fn in filenames:
+            if not fn.endswith(".json"):
+                continue
+            if is_root and fn in skip_at_root:
+                continue
+            result_files.append(os.path.join(dirpath, fn))
 
     if not result_files:
         for dirpath, _, filenames in os.walk(job_dir):

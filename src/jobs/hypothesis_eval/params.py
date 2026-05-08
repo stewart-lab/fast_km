@@ -8,6 +8,7 @@ MAX_ITERATIONS = 10
 
 
 class HypothesisEvalJobParams(BaseModel):
+
     data: list[dict] =                Field(...,                                     description="KM/SKiM results to use to evaluate the hypotheses.")
     KM_hypothesis: str | None =       Field(None,                                    description="Hypothesis to evaluate using KM results.")
     SKIM_hypotheses: dict | None =    Field(None,                                    description="Hypotheses to evaluate using SKiM results.")
@@ -17,7 +18,7 @@ class HypothesisEvalJobParams(BaseModel):
     top_n_articles_most_recent: int = Field(5,                                       description="Number of most recent articles to include in the context provided to the LLM.")
     post_n: int =                     Field(5,                                       description=".")
     censor_year_lower: int =          Field(MIN_CENSOR_YEAR,                         description="Lower bound of publication year for article censoring (inclusive). Ignored if a PMID list is supplied.")
-    censor_year_upper: int =          Field(MAX_CENSOR_YEAR,   alias="censor_year",  description="Upper bound of publication year for article censoring (inclusive). Ignored if a PMID list is supplied.")
+    censor_year_upper: int =          Field(MAX_CENSOR_YEAR,                         description="Upper bound of publication year for article censoring (inclusive). Ignored if a PMID list is supplied.")
     censor_year_increment: int | None = Field(None,            ge=1,                 description="If set, split [censor_year_lower, censor_year_upper] into non-overlapping windows of this many years and run the hypothesis evaluation per window. Forces re-fetching of PMID intersections per window (any user-supplied *_pmid_intersection lists are discarded). Default None (single window covering the full range).")
     iterations: int =                 Field(1,    ge=1, le=MAX_ITERATIONS,         description=f"Run the LLM scoring N independent times. Each iteration produces its own score; useful for capturing LLM nondeterminism. Capped at {MAX_ITERATIONS} to bound API cost. Default 1 (single run).")
     id: str | None =                  Field(None,                                    description="Optional job ID. If not provided, an ID will be generated.")
