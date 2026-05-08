@@ -1,5 +1,6 @@
 import os
 import json
+import shutil
 import subprocess
 from rq import get_current_job
 from src.fast_km_exception import FastKmException
@@ -185,20 +186,24 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams,
     with open(secrets_json_path, "w") as f:
         json.dump(secrets, f, indent=4)
 
-    # pull SKiM-GPT image if it's not present
-    sif_image_dir = os.path.join("/app", "_data", "images")
-    os.makedirs(sif_image_dir, exist_ok=True)
+    # Build SKiM-GPT image as an extracted sandbox dir if not present.
+    # Sandbox (vs. .sif) avoids needing /dev/fuse at exec time — the dev pod
+    # doesn't expose FUSE, so squashfs-mounted SIFs fail with
+    # "squashfuse_ll exited: fuse: device not found".
+    image_dir = os.path.join("/app", "_data", "images")
+    os.makedirs(image_dir, exist_ok=True)
     safe_name = SKIMGPT_IMAGE.replace("docker://", "").replace("/", "_").replace(":", "_").replace(".", "_")
-    local_image_path = os.path.join(sif_image_dir, f"{safe_name}.sif")
+    local_image_path = os.path.join(image_dir, safe_name)
     if not os.path.exists(local_image_path):
-        print(f"Pulling {SKIMGPT_IMAGE} to {local_image_path}...")
-        tmp_path = os.path.join(job_dir, f"{safe_name}.sif") # avoids race conditions if two jobs try to pull the image at the same time
+        print(f"Building sandbox for {SKIMGPT_IMAGE} at {local_image_path}...")
+        tmp_path = os.path.join(job_dir, safe_name)  # build to per-job tmp, rename atomically to share across jobs
         proc = subprocess.Popen([
-            "apptainer", 
-            "pull", 
+            "apptainer",
+            "build",
+            "--sandbox",
             tmp_path,
             SKIMGPT_IMAGE
-        ], 
+        ],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,    # merge stderr into stdout so we can see all output
         text=True,
@@ -210,9 +215,13 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams,
 
         exit_code = proc.wait()
         if exit_code != 0:
-            raise RuntimeError(f"skimgpt-relevance container pull failed with code {exit_code}")
-        
-        os.rename(tmp_path, local_image_path)
+            raise RuntimeError(f"skimgpt-relevance sandbox build failed with code {exit_code}")
+
+        try:
+            os.rename(tmp_path, local_image_path)
+        except OSError:
+            # another worker won the race; discard our build
+            shutil.rmtree(tmp_path, ignore_errors=True)
 
     # spawn a child container (using apptainer) to run the hypothesis evaluation pipeline
     print(f"Running {SKIMGPT_IMAGE}...")
