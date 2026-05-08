@@ -122,7 +122,7 @@ def _get_files_to_download(already_downloaded: list[str], max_files = sys.maxsiz
 
     return [('pubmed/baseline', f) for f in baseline_to_download] + [('pubmed/updatefiles', f) for f in update_to_download]
 
-def _download_xml(ftp_dir: str, remote_filename: str, xml_dir: str) -> str:
+def _download_xml(ftp_dir: str, remote_filename: str, xml_dir: str, retries: int = 0) -> str:
     """Download the .xml.gz file from the FTP server and return its content."""
     local_filename = os.path.join(xml_dir, remote_filename)
 
@@ -134,7 +134,21 @@ def _download_xml(ftp_dir: str, remote_filename: str, xml_dir: str) -> str:
         ftp.quit()
 
     # read content
-    xml_content = read_xml_content(local_filename)
+    try:
+        xml_content = read_xml_content(local_filename)
+    except Exception as e:
+        print(f"Error reading XML content from {local_filename}: {e}")
+
+        if retries >= 3:
+            raise ValueError(f"Failed to download and read {remote_filename} after {retries} retries.")
+
+        # delete the potentially corrupted file
+        if os.path.exists(local_filename):
+            os.remove(local_filename)
+        
+        # call the function recursively to attempt redownloading and reading again
+        return _download_xml(ftp_dir, remote_filename, xml_dir, retries + 1)
+    
     return xml_content
 
 if __name__ == '__main__':
