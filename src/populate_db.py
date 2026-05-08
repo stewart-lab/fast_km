@@ -37,6 +37,11 @@ def populate_db():
         response = requests.post(doc_url, json=payload).json()
         print(f"Added {len(payload['documents']):,} documents from {remote_filename}")
 
+        # delete the local .xml.gz file to save space
+        local_filename = os.path.join(xml_folder, remote_filename)
+        if os.path.exists(local_filename):
+            os.remove(local_filename)
+
     # add icite citation count data if available
     # icite data can be downloaded from: https://nih.figshare.com/collections/iCite_Database_Snapshots_NIH_Open_Citation_Collection_/4586573
     # scroll down and then download the .tar.gz and extract the .json files.
