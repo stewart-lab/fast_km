@@ -1,6 +1,5 @@
 import os
 import json
-from glob import glob
 import subprocess
 from rq import get_current_job
 from src.fast_km_exception import FastKmException
@@ -13,44 +12,92 @@ from src.jobs.job_util import report_log
 IMAGE_VERSION = os.environ.get("SKIMGPT_IMAGE", "2.0.1")
 SKIMGPT_IMAGE = f"docker://stewartlab/skimgpt:{IMAGE_VERSION}"
 
-def run_hypothesis_eval_job(params: HypothesisEvalJobParams) -> dict:
+PMID_KEYS = ("ab_pmid_intersection", "bc_pmid_intersection", "ac_pmid_intersection")
+ITERATION_PREFIX = "iteration_"
+
+
+def _compute_windows(lower: int, upper: int, increment: int | None) -> list[tuple[int, int]]:
+    """Non-overlapping windows of size `increment` tiling [lower, upper].
+
+    `increment=None` collapses to a single window covering the full range
+    (existing single-call behavior).
+    """
+    if increment is None:
+        return [(lower, upper)]
+    return [(s, min(s + increment - 1, upper)) for s in range(lower, upper + 1, increment)]
+
+
+def run_hypothesis_eval_job(params: HypothesisEvalJobParams) -> list[dict]:
     validate_params(params)
 
-    # create the job dir to store required files
     job = get_current_job()
     if not job:
         raise RuntimeError("Could not get current RQ job")
-    
+
     # note that this needs to be an absolute path because we change the CWD below.
     # TODO: this assumes a certain structure of the file system that is generally only true in the docker build.
-    temp_dir = os.path.join("/app", "_data", "jobs", "job-" + job.id)
-    os.makedirs(temp_dir, exist_ok=True)
+    base_dir = os.path.join("/app", "_data", "jobs", "job-" + job.id)
+    os.makedirs(base_dir, exist_ok=True)
 
-    # run the condor job
-    results = _run_skim_gpt(temp_dir, params)
-    return results
+    windows = _compute_windows(
+        params.censor_year_lower, params.censor_year_upper, params.censor_year_increment
+    )
 
-def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
+    if len(windows) == 1:
+        lo, hi = windows[0]
+        return _run_skim_gpt(base_dir, params, lo, hi)
+
+    print(f"Running hypothesis_eval over {len(windows)} window(s) of "
+          f"{params.censor_year_increment} year(s) each: {windows}")
+    all_results: list[dict] = []
+    for lo, hi in windows:
+        window_dir = os.path.join(base_dir, f"window_cy{hi}")
+        os.makedirs(window_dir, exist_ok=True)
+        print(f"--- window {lo}-{hi} -> {window_dir} ---")
+        window_results = _run_skim_gpt(window_dir, params, lo, hi)
+        for r in window_results:
+            r["censor_year_lower"] = lo
+            r["censor_year_upper"] = hi
+        all_results.extend(window_results)
+    return all_results
+
+
+def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams,
+                  censor_year_lower: int, censor_year_upper: int) -> list[dict]:
     """Run skimgpt-relevance in a local Docker container (Triton-first, CHTC fallback).
 
     Creates the job files (config.json, data.tsv, files.txt, secrets.json) in
     job_dir, then runs the SKIMGPT_IMAGE as a sibling container.  The
     container tries Triton remote inference first; if Triton is unreachable it
     falls back to submitting an HTCondor GPU job internally.
+
+    Multi-window callers pass per-window bounds; user-supplied PMID lists are
+    cleared so kinderminer re-searches against the window's range.
     """
     
     # Get config template
     config = _get_config_template()
-    
+
     # Extract data and determine job type
-    data = params.data
     is_km = params.KM_hypothesis is not None
     is_skim = params.SKIM_hypotheses is not None
 
     if not (is_km or is_skim):
         raise FastKmException('job must be KM or SKiM')
-    
-    data = _populate_pmid_intersections(data, params.censor_year_lower, params.censor_year_upper)
+
+    # Per-window mode drops user-supplied PMID lists so kinderminer re-searches
+    # against each window's bounds. Shallow-copy each item; PMID lists are
+    # reassigned (not mutated) by _populate_pmid_intersections, so deepcopy is
+    # unnecessary.
+    if params.censor_year_increment is not None:
+        data = [{**item} for item in params.data]
+        for item in data:
+            for k in PMID_KEYS:
+                item.pop(k, None)
+    else:
+        data = params.data
+
+    data = _populate_pmid_intersections(data, censor_year_lower, censor_year_upper)
 
     if params.is_dch:
         config['JOB_TYPE'] = 'km_with_gpt'
@@ -69,10 +116,12 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     config['GLOBAL_SETTINGS']['TOP_N_ARTICLES_MOST_CITED'] = params.top_n_articles_most_cited
     config['GLOBAL_SETTINGS']['TOP_N_ARTICLES_MOST_RECENT'] = params.top_n_articles_most_recent
     config['GLOBAL_SETTINGS']['POST_N'] = params.post_n
-    config['JOB_SPECIFIC_SETTINGS']['km_with_gpt']['censor_year_upper'] = params.censor_year_upper
-    config['JOB_SPECIFIC_SETTINGS']['km_with_gpt']['censor_year_lower'] = params.censor_year_lower
-    config['JOB_SPECIFIC_SETTINGS']['skim_with_gpt']['censor_year_upper'] = params.censor_year_upper
-    config['JOB_SPECIFIC_SETTINGS']['skim_with_gpt']['censor_year_lower'] = params.censor_year_lower
+    # SKiM-GPT contract: int N>1 enables the iteration loop (writes to
+    # output/iteration_{i}/); False disables it (writes flat to output/).
+    config['GLOBAL_SETTINGS']['iterations'] = params.iterations if params.iterations > 1 else False
+    for jt in ('km_with_gpt', 'skim_with_gpt'):
+        config['JOB_SPECIFIC_SETTINGS'][jt]['censor_year_lower'] = censor_year_lower
+        config['JOB_SPECIFIC_SETTINGS'][jt]['censor_year_upper'] = censor_year_upper
 
     # Set up secrets
     secrets = {
@@ -196,18 +245,45 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     if exit_code != 0:
         raise RuntimeError(f"skimgpt-relevance container exited with code {exit_code}")
 
-    # Collect result JSON files from both possible output locations:
-    #   - Triton success: written to job_dir root by run_relevance_pipeline
-    #   - CHTC fallback:  written to job_dir/output/ by HTCondor transfer
     print("Processing results...")
-    skip = {"config.json", "secrets.json"}
-    result_files = [
-        f for f in glob(os.path.join(job_dir, "*.json"))
-        if os.path.basename(f) not in skip
-    ]
-    output_dir = os.path.join(job_dir, "output")
-    if os.path.exists(output_dir):
-        result_files.extend(glob(os.path.join(output_dir, "*.json")))
+    results = _collect_results(job_dir, expected_iterations=params.iterations)
+    print(f"Results processed successfully. Job files are in {job_dir}")
+    return results
+
+
+def _collect_results(job_dir: str, expected_iterations: int = 1) -> list[dict]:
+    """Find, parse, and tag JSON result files from a SKiM-GPT run.
+
+    Walks ``job_dir`` recursively and treats every ``.json`` as a result,
+    excluding two well-known noise sources:
+      * ``config.json`` / ``secrets.json`` at the job root (run metadata).
+      * Anything under a ``debug/`` directory (skimgpt's intermediate JSONs).
+
+    Layout-agnostic by design. skimgpt has historically placed results under
+    ``output/`` for single-pass runs and ``iteration_N/`` for multi-iteration
+    runs, and the iteration loop and CHTC fallback don't agree on which.
+    Tagging is path-based via ``_iteration_from_path``, which finds the
+    innermost ``iteration_N`` ancestor — so a file lands at the correct
+    iteration regardless of where in the tree skimgpt drops it. New layouts
+    Just Work as long as the convention "iteration_N is somewhere in the
+    path; debug subtrees are noise" holds.
+
+    When ``expected_iterations > 1``, warns if any expected index is missing
+    — catches silent worker failures.
+    """
+    skip_at_root = {"config.json", "secrets.json"}
+    job_root = os.path.normpath(job_dir)
+    result_files = []
+    for dirpath, dirnames, filenames in os.walk(job_dir):
+        # Prune debug subtrees from the traversal entirely.
+        dirnames[:] = [d for d in dirnames if d != "debug"]
+        is_root = os.path.normpath(dirpath) == job_root
+        for fn in filenames:
+            if not fn.endswith(".json"):
+                continue
+            if is_root and fn in skip_at_root:
+                continue
+            result_files.append(os.path.join(dirpath, fn))
 
     if not result_files:
         for dirpath, _, filenames in os.walk(job_dir):
@@ -218,10 +294,34 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams) -> dict:
     print(f"Found {len(result_files)} result file(s): {', '.join(result_files)}")
     results = []
     for result_file in result_files:
-        results.extend(_parse_json_result(result_file))
+        iter_idx = _iteration_from_path(result_file)
+        for parsed in _parse_json_result(result_file):
+            parsed['iteration'] = iter_idx if iter_idx is not None else 1
+            results.append(parsed)
 
-    print(f"Results processed successfully. Job files are in {job_dir}")
+    if expected_iterations > 1:
+        seen = {r['iteration'] for r in results}
+        missing = set(range(1, expected_iterations + 1)) - seen
+        if missing:
+            print(f"WARNING: missing results for iteration(s) {sorted(missing)}; "
+                  f"expected {expected_iterations} iterations but only saw {sorted(seen)}.")
+
     return results
+
+
+def _iteration_from_path(path: str) -> int | None:
+    """Extract iteration index from any ``iteration_N`` ancestor (innermost wins).
+
+    Walks all ancestors because skimgpt's ``organize_output`` may nest
+    ``iteration_*/`` under ``results/``. Raises ``ValueError`` on an
+    unparseable suffix so worker path-format drift fails loudly instead of
+    silently dropping the tag.
+    """
+    parts = os.path.dirname(path).split(os.sep)
+    for part in reversed(parts):
+        if part.startswith(ITERATION_PREFIX):
+            return int(part[len(ITERATION_PREFIX):])
+    return None
 
 def _parse_json_result(json_result_file: str) -> list[dict]:
     parsed_results = []
