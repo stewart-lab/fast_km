@@ -1,3 +1,6 @@
+[![](https://img.shields.io/appveyor/build/robertmillikin/fast-km/master)](https://ci.appveyor.com/project/robertmillikin/fast-km/history)
+[![](https://img.shields.io/docker/v/rmillikin/fast_km/latest)](https://hub.docker.com/r/rmillikin/fast_km/tags?page=1&ordering=last_updated)
+
 # KinderMiner Web API Server
 
 A web API server for running KinderMiner, Serial KinderMiner (SKiM), and hypothesis evaluation text mining queries against a biomedical literature database.
@@ -62,7 +65,7 @@ networks:
 
 And then run:
 ```bash
-docker compose up --build -d
+docker compose up -d
 ```
 
 The server will start with:
