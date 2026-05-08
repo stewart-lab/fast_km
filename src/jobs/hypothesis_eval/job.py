@@ -31,6 +31,11 @@ def _compute_windows(lower: int, upper: int, increment: int | None) -> list[tupl
 def run_hypothesis_eval_job(params: HypothesisEvalJobParams) -> list[dict]:
     validate_params(params)
 
+    # image version cannot be 'latest' because we rely on the version name
+    # to manage the local image cache (via file names including the image version).
+    if IMAGE_VERSION == "latest":
+        raise ValueError("SKIMGPT_IMAGE version 'latest' is disallowed; must use a specific version tag.")
+
     job = get_current_job()
     if not job:
         raise RuntimeError("Could not get current RQ job")
@@ -186,17 +191,19 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams,
     with open(secrets_json_path, "w") as f:
         json.dump(secrets, f, indent=4)
 
-    # Build SKiM-GPT image as an extracted sandbox dir if not present.
-    # Sandbox (vs. .sif) avoids needing /dev/fuse at exec time — the dev pod
-    # doesn't expose FUSE, so squashfs-mounted SIFs fail with
-    # "squashfuse_ll exited: fuse: device not found".
+    # pull SKiM-GPT image if it's not present.
+    # sandbox mode is used here to avoid needing 'privileged' Docker mode to run the container.
+    # note that 'privileged' mode is still required for user namespace creation, 
+    # so whether or not 'privileged' is required depends on the system.
+    # the downsides of the sandbox versus using a .sif file are: 
+    # 1) the image is mutable, and 2) more disk space is used (roughly double)
     image_dir = os.path.join("/app", "_data", "images")
     os.makedirs(image_dir, exist_ok=True)
     safe_name = SKIMGPT_IMAGE.replace("docker://", "").replace("/", "_").replace(":", "_").replace(".", "_")
     local_image_path = os.path.join(image_dir, safe_name)
     if not os.path.exists(local_image_path):
-        print(f"Building sandbox for {SKIMGPT_IMAGE} at {local_image_path}...")
-        tmp_path = os.path.join(job_dir, safe_name)  # build to per-job tmp, rename atomically to share across jobs
+        print(f"Pulling {SKIMGPT_IMAGE} to {local_image_path}...")
+        tmp_path = os.path.join(job_dir, safe_name)  # avoids race conditions if two jobs try to pull the image at the same time
         proc = subprocess.Popen([
             "apptainer",
             "build",
@@ -215,13 +222,27 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams,
 
         exit_code = proc.wait()
         if exit_code != 0:
-            raise RuntimeError(f"skimgpt-relevance sandbox build failed with code {exit_code}")
+            raise RuntimeError(f"skimgpt-relevance container pull failed with code {exit_code}")
 
         try:
             os.rename(tmp_path, local_image_path)
         except OSError:
-            # another worker won the race; discard our build
+            # another worker won the race; discard this build
             shutil.rmtree(tmp_path, ignore_errors=True)
+
+    # delete old images to save space
+    images = [f for f in os.listdir(image_dir) if f.startswith("stewartlab_skimgpt_")]
+    for image in images:
+        image_path = os.path.join(image_dir, image)
+
+        # don't delete the image we just pulled
+        if image_path == local_image_path:
+            continue
+
+        if os.path.isdir(image_path):
+            shutil.rmtree(image_path, ignore_errors=True)
+        else:
+            os.remove(image_path)
 
     # spawn a child container (using apptainer) to run the hypothesis evaluation pipeline
     print(f"Running {SKIMGPT_IMAGE}...")
