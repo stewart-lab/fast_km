@@ -192,8 +192,10 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams,
         json.dump(secrets, f, indent=4)
 
     # pull SKiM-GPT image if it's not present.
-    # sandbox mode is used here to avoid needing privileged mode to run the container.
-    # the tradeoffs of this versus using a .sif file are: 
+    # sandbox mode is used here to avoid needing 'privileged' Docker mode to run the container.
+    # note that 'privileged' mode is still required for user namespace creation, 
+    # so whether or not 'privileged' is required depends on the system.
+    # the downsides of the sandbox versus using a .sif file are: 
     # 1) the image is mutable, and 2) more disk space is used (roughly double)
     image_dir = os.path.join("/app", "_data", "images")
     os.makedirs(image_dir, exist_ok=True)
