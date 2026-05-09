@@ -171,11 +171,14 @@ for job in jobs:
                     job.cleanup(ttl=0)
                     st.rerun()
 
+        # progress percentage text
+        progress_pct_text = f"({round(progress * 100, 2)}%)" if progress is not None else ""
+
         # Status badge
         if status == JobStatus.QUEUED:
             status_txt = ("🔵 Queued")
         elif status == JobStatus.STARTED:
-            status_txt = ("🔵 Started")
+            status_txt = (f"🔵 Started {progress_pct_text}")
         elif status == JobStatus.DEFERRED:
             status_txt = ("🔵 Deferred")
         elif status == JobStatus.SCHEDULED:
