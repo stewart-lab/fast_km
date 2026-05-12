@@ -10,7 +10,7 @@ from src.kinderminer_algorithm import kinderminer_search
 from src.indexing.index import Index
 from src.jobs.job_util import report_log
 
-IMAGE_VERSION = os.environ.get("SKIMGPT_IMAGE", "2.0.1")
+IMAGE_VERSION = os.environ.get("SKIMGPT_IMAGE", "2.0.2")
 SKIMGPT_IMAGE = f"docker://stewartlab/skimgpt:{IMAGE_VERSION}"
 
 PMID_KEYS = ("ab_pmid_intersection", "bc_pmid_intersection", "ac_pmid_intersection")
