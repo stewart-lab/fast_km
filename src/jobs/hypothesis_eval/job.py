@@ -10,7 +10,11 @@ from src.kinderminer_algorithm import kinderminer_search
 from src.indexing.index import Index
 from src.jobs.job_util import report_log
 
-IMAGE_VERSION = os.environ.get("SKIMGPT_IMAGE", "2.0.7")
+# No code default — the skimgpt version is set per deployment via the
+# SKIMGPT_IMAGE env var (k8s manifest / docker-compose). A hardcoded fallback
+# here is misleading: the deployment env var always wins, so a stale default
+# silently does nothing. Unset is validated (and rejected) at job run time.
+IMAGE_VERSION = os.environ.get("SKIMGPT_IMAGE", "")
 SKIMGPT_IMAGE = f"docker://stewartlab/skimgpt:{IMAGE_VERSION}"
 
 PMID_KEYS = ("ab_pmid_intersection", "bc_pmid_intersection", "ac_pmid_intersection")
@@ -31,6 +35,10 @@ def _compute_windows(lower: int, upper: int, increment: int | None) -> list[tupl
 def run_hypothesis_eval_job(params: HypothesisEvalJobParams) -> list[dict]:
     validate_params(params)
 
+    # SKIMGPT_IMAGE must be set explicitly by the deployment — there is no
+    # code default (see note at IMAGE_VERSION).
+    if not IMAGE_VERSION:
+        raise ValueError("SKIMGPT_IMAGE env var must be set to a specific skimgpt version (e.g. '2.0.8').")
     # image version cannot be 'latest' because we rely on the version name
     # to manage the local image cache (via file names including the image version).
     if IMAGE_VERSION == "latest":
