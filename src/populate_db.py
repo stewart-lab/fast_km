@@ -4,6 +4,7 @@ import ftplib
 import json
 import time
 import requests
+from postmarker.core import PostmarkClient
 from src.documents.xml_parsing import read_xml_content, parse_xml_content
 from src.global_vars import data_dir, fastapi_port
 
@@ -16,6 +17,8 @@ icite_folder = os.path.join(data_dir, '_icite')
 xml_folder = os.path.join(data_dir, '_xml')
 
 def populate_db():
+    start_time = time.perf_counter()
+
     # figure out what to download
     max_files = sys.maxsize
     response = requests.get(doc_url + "/origins").json()
@@ -88,6 +91,20 @@ def populate_db():
             break
         time.sleep(60)
 
+    elapsed_time = time.perf_counter() - start_time
+
+    # send email to notify admins of index update status
+    email_sender = os.getenv('EMAIL_SENDER_ADDRESS', "")
+    email_sendto = os.getenv('EMAIL_SENDTO_ADDRESS', "")
+    email_token = os.getenv('EMAIL_TOKEN', "")
+    email_subj_prepend = os.getenv('EMAIL_SUBJECT_PREPEND', "")
+    email_subject = f"{email_subj_prepend}indexing {response.get('status', '(unknown status)')}"
+    email_body = f"Elapsed time: {(elapsed_time / 3600):.2f} hours<br>" + \
+        f"XML files: {len(files_to_download)}"
+
+    for email in [e for e in email_sendto.split(",") if e]:
+        _send_email(email_sender, email, email_subject, email_body, email_token)
+
 def _connect_to_ftp_server(ftp_dir: str, ftp_address: str = 'ftp.ncbi.nlm.nih.gov') -> ftplib.FTP:
     """Connect to the FTP server and return the FTP object."""
     ftp = ftplib.FTP(ftp_address)
@@ -155,6 +172,31 @@ def _download_xml(ftp_dir: str, remote_filename: str, xml_dir: str, retries: int
         return _download_xml(ftp_dir, remote_filename, xml_dir, retries + 1)
     
     return xml_content
+
+def _send_email(from_addr: str, user_email: str, subject: str, body: str, api_token: str) -> None:
+    # If no token (or empty), just skip sending
+    if not api_token:
+        print("WARNING: No email API token provided, skipping email notification.")
+        return
+    if not from_addr or not user_email:
+        print("WARNING: No from/to email address provided, skipping email notification.")
+        return
+
+    try:
+        client = PostmarkClient(server_token=api_token)
+        client.emails.send(
+            From=from_addr,
+            To=user_email,
+            Subject=subject,
+            HtmlBody=body # TODO: HTML?
+        )
+        print("Email sent successfully.")
+    except Exception as ex:
+        # swallow all email errors (invalid token, network, etc.)
+        print("WARNING: Error sending email notification: " + str(ex))
+
+    # sleep 1 sec to avoid rate limiting if we're sending multiple emails
+    time.sleep(1)
 
 if __name__ == '__main__':
     populate_db()
