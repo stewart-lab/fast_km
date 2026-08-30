@@ -183,12 +183,12 @@ def _send_email(from_addr: str, user_email: str, subject: str, body: str, api_to
         return
 
     try:
-        client = PostmarkClient(server_token=api_token)
+        client = PostmarkClient(server_token=api_token.strip())
         client.emails.send(
-            From=from_addr,
-            To=user_email,
+            From=from_addr.strip(),
+            To=user_email.strip(),
             Subject=subject,
-            HtmlBody=body # TODO: HTML?
+            HtmlBody=body
         )
         print("Email sent successfully.")
     except Exception as ex:
