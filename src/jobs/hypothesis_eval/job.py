@@ -21,15 +21,41 @@ PMID_KEYS = ("ab_pmid_intersection", "bc_pmid_intersection", "ac_pmid_intersecti
 ITERATION_PREFIX = "iteration_"
 
 
-def _compute_windows(lower: int, upper: int, increment: int | None) -> list[tuple[int, int]]:
-    """Non-overlapping windows of size `increment` tiling [lower, upper].
+def _compute_windows(lower: int, upper: int, increment: int | None,
+                     window: int | None = None) -> list[tuple[int, int]]:
+    """Windows covering [lower, upper], `increment` years apart.
+
+    `increment` is the STRIDE (gap between consecutive start years).
+    `window` is the WIDTH; when None the width follows the stride, which is
+    the non-overlapping tiling this function has always produced.
 
     `increment=None` collapses to a single window covering the full range
     (existing single-call behavior).
+
+    Decoupled width gives overlapping windows — width 5 / stride 1 over
+    1975-2025 yields (1975, 1979), (1976, 1980), ... (2021, 2025). Windows
+    are always exactly `window` wide: a stride that would run the last window
+    past `upper` ends the series instead of emitting a short tail. When the
+    stride doesn't divide the remaining span evenly the final window is
+    pulled back to end on `upper`, so the requested range is always covered
+    even though that last step is shorter than the stride.
+
+    A width wider than the range itself has no room to slide, so it degrades
+    to a single full-range window rather than returning nothing.
     """
     if increment is None:
         return [(lower, upper)]
-    return [(s, min(s + increment - 1, upper)) for s in range(lower, upper + 1, increment)]
+    if window is None:
+        return [(s, min(s + increment - 1, upper)) for s in range(lower, upper + 1, increment)]
+
+    span = upper - lower + 1
+    if window >= span:
+        return [(lower, upper)]
+
+    windows = [(s, s + window - 1) for s in range(lower, upper - window + 2, increment)]
+    if windows[-1][1] != upper:
+        windows.append((upper - window + 1, upper))
+    return windows
 
 
 def run_hypothesis_eval_job(params: HypothesisEvalJobParams) -> list[dict]:
@@ -54,18 +80,26 @@ def run_hypothesis_eval_job(params: HypothesisEvalJobParams) -> list[dict]:
     os.makedirs(base_dir, exist_ok=True)
 
     windows = _compute_windows(
-        params.censor_year_lower, params.censor_year_upper, params.censor_year_increment
+        params.censor_year_lower, params.censor_year_upper,
+        params.censor_year_increment, params.censor_year_window,
     )
 
-    if len(windows) == 1:
+    # Unwindowed jobs run flat in base_dir and stay untagged — the caller
+    # already knows the single range it asked for. A windowed job always
+    # tags, even when the width swallowed the whole range and left one
+    # window, so downstream per-window grouping never sees a NULL bound.
+    if params.censor_year_increment is None:
         lo, hi = windows[0]
         return _run_skim_gpt(base_dir, params, lo, hi)
 
+    width = params.censor_year_window or params.censor_year_increment
     print(f"Running hypothesis_eval over {len(windows)} window(s) of "
-          f"{params.censor_year_increment} year(s) each: {windows}")
+          f"{width} year(s) each, stride {params.censor_year_increment}: {windows}")
     all_results: list[dict] = []
     for lo, hi in windows:
-        window_dir = os.path.join(base_dir, f"window_cy{hi}")
+        # Both bounds in the name: overlapping windows share upper bounds
+        # (the pulled-back tail window especially), so `hi` alone collides.
+        window_dir = os.path.join(base_dir, f"window_cy{lo}_{hi}")
         os.makedirs(window_dir, exist_ok=True)
         print(f"--- window {lo}-{hi} -> {window_dir} ---")
         window_results = _run_skim_gpt(window_dir, params, lo, hi)

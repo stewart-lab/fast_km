@@ -19,7 +19,8 @@ class HypothesisEvalJobParams(BaseModel):
     post_n: int =                     Field(5,                                       description=".")
     censor_year_lower: int =          Field(MIN_CENSOR_YEAR,                         description="Lower bound of publication year for article censoring (inclusive). Ignored if a PMID list is supplied.")
     censor_year_upper: int =          Field(MAX_CENSOR_YEAR,                         description="Upper bound of publication year for article censoring (inclusive). Ignored if a PMID list is supplied.")
-    censor_year_increment: int | None = Field(None,            ge=1,                 description="If set, split [censor_year_lower, censor_year_upper] into non-overlapping windows of this many years and run the hypothesis evaluation per window. Forces re-fetching of PMID intersections per window (any user-supplied *_pmid_intersection lists are discarded). Default None (single window covering the full range).")
+    censor_year_increment: int | None = Field(None,            ge=1,                 description="If set, split [censor_year_lower, censor_year_upper] into windows and run the hypothesis evaluation per window. This is the window STRIDE: the gap between consecutive window start years. Window WIDTH is censor_year_window when supplied, otherwise equal to the stride (non-overlapping tiling). Forces re-fetching of PMID intersections per window (any user-supplied *_pmid_intersection lists are discarded). Default None (single window covering the full range).")
+    censor_year_window: int | None =  Field(None,            ge=1,                 description="Window WIDTH in years, decoupled from the stride, e.g. window=5 with increment=1 gives overlapping 5-year windows advancing one year at a time. Requires censor_year_increment. Windows are always exactly this wide (no clamped tail) unless the width exceeds the full range, in which case a single full-range window is used. Default None (width follows the stride).")
     iterations: int =                 Field(1,    ge=1, le=MAX_ITERATIONS,         description=f"Run the LLM scoring N independent times. Each iteration produces its own score; useful for capturing LLM nondeterminism. Capped at {MAX_ITERATIONS} to bound API cost. Default 1 (single run).")
     id: str | None =                  Field(None,                                    description="Optional job ID. If not provided, an ID will be generated.")
 
@@ -28,6 +29,13 @@ def validate_params(params: HypothesisEvalJobParams) -> None:
 
     if not data or len(data) == 0:
         raise FastKmException('data is required and must be a non-empty list')
+
+    # Width without a stride is meaningless: windowing is only switched on by
+    # censor_year_increment, so a lone censor_year_window would be silently
+    # ignored. Reject it instead of running an unwindowed job the caller
+    # didn't ask for.
+    if params.censor_year_window is not None and params.censor_year_increment is None:
+        raise FastKmException('censor_year_window requires censor_year_increment')
     
     # DCH-specific validation
     if params.is_dch:
