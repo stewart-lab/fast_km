@@ -87,16 +87,24 @@ def test_windows_inc_one_is_per_year():
 
 
 def test_windows_inc_two_tiles_evenly():
-    assert _compute_windows(2020, 2025, 2) == [(2020, 2021), (2022, 2023), (2024, 2025)]
+    assert _compute_windows(2021, 2025, 2) == [(2020, 2021), (2022, 2023), (2024, 2025)]
 
 
-def test_windows_inc_two_clamps_uneven_tail():
-    assert _compute_windows(2020, 2024, 2) == [(2020, 2021), (2022, 2023), (2024, 2024)]
+def test_windows_anchor_on_upper_not_lower():
+    # The most recent year is always an as-of year; an uneven remainder is
+    # dropped at the old end instead of leaving a short window at the new end.
+    assert _compute_windows(2020, 2024, 3) == [(2019, 2021), (2022, 2024)]
+    assert _compute_windows(1975, 2025, 5)[-1] == (2021, 2025)
+
+
+def test_windows_include_their_as_of_year():
+    # "As of 2010" with a 5-year width covers 2006-2010, 2010 included.
+    assert (2006, 2010) in _compute_windows(2000, 2010, 1, 5)
 
 
 def test_windows_single_year_range():
     assert _compute_windows(2020, 2020, 1) == [(2020, 2020)]
-    assert _compute_windows(2020, 2020, 5) == [(2020, 2020)]
+    assert _compute_windows(2020, 2020, 5) == [(2016, 2020)]
 
 
 # --- censor_year_window param (width decoupled from stride) ------------------
@@ -139,30 +147,27 @@ def test_windows_width_equal_to_stride_matches_tiling():
 
 
 def test_windows_five_year_width_stepped_by_one():
-    assert _compute_windows(2020, 2026, 1, 5) == [
+    assert _compute_windows(2024, 2026, 1, 5) == [
         (2020, 2024), (2021, 2025), (2022, 2026),
     ]
 
 
 def test_windows_five_year_width_spans_full_range():
     windows = _compute_windows(1975, 2025, 1, 5)
-    assert windows[0] == (1975, 1979)
+    assert windows[0] == (1971, 1975)
     assert windows[-1] == (2021, 2025)
-    assert len(windows) == 47
+    assert [hi for _, hi in windows] == list(range(1975, 2026))
     assert all(hi - lo + 1 == 5 for lo, hi in windows)
 
 
-def test_windows_width_never_emits_short_tail():
-    # Stride 2 over a 6-year span would leave 2025 uncovered at width 3;
-    # the final window is pulled back to end on the upper bound instead.
-    assert _compute_windows(2020, 2025, 2, 3) == [
-        (2020, 2022), (2022, 2024), (2023, 2025),
-    ]
+def test_windows_tiled_five_year_steps_have_no_stub():
+    windows = _compute_windows(1975, 2025, 5)
+    assert [hi for _, hi in windows] == list(range(1975, 2026, 5))
+    assert all(hi - lo + 1 == 5 for lo, hi in windows)
 
 
-def test_windows_width_wider_than_range_is_single_window():
-    assert _compute_windows(2020, 2023, 1, 10) == [(2020, 2023)]
-    assert _compute_windows(2020, 2024, 1, 5) == [(2020, 2024)]
+def test_windows_width_wider_than_range_still_steps():
+    assert _compute_windows(2022, 2023, 1, 10) == [(2013, 2022), (2014, 2023)]
 
 
 def test_windows_width_ignored_when_increment_is_none():
