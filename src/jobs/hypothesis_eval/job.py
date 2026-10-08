@@ -23,39 +23,29 @@ ITERATION_PREFIX = "iteration_"
 
 def _compute_windows(lower: int, upper: int, increment: int | None,
                      window: int | None = None) -> list[tuple[int, int]]:
-    """Windows covering [lower, upper], `increment` years apart.
+    """Look-back windows, one per "as of" year in [lower, upper].
 
-    `increment` is the STRIDE (gap between consecutive start years).
-    `window` is the WIDTH; when None the width follows the stride, which is
-    the non-overlapping tiling this function has always produced.
+    A window answers "what did the literature say as of year Y": it ends on
+    and includes Y and covers the `window` years up to it, so a 5-year
+    window as of 2010 is (2006, 2010). As-of years are anchored on `upper`
+    and step back by `increment` while they stay >= `lower`, so the most
+    recent year is always evaluated and any uneven remainder falls at the
+    old end of the range.
 
-    `increment=None` collapses to a single window covering the full range
+    `increment` is the STRIDE between as-of years. `window` is the WIDTH;
+    when None it follows the stride, so windows tile without overlapping.
+    Windows are always exactly `window` wide, so the earliest ones may reach
+    back before `lower`: `lower` bounds the as-of years, not the literature.
+
+    `increment=None` collapses to a single window covering [lower, upper]
     (existing single-call behavior).
-
-    Decoupled width gives overlapping windows — width 5 / stride 1 over
-    1975-2025 yields (1975, 1979), (1976, 1980), ... (2021, 2025). Windows
-    are always exactly `window` wide: a stride that would run the last window
-    past `upper` ends the series instead of emitting a short tail. When the
-    stride doesn't divide the remaining span evenly the final window is
-    pulled back to end on `upper`, so the requested range is always covered
-    even though that last step is shorter than the stride.
-
-    A width wider than the range itself has no room to slide, so it degrades
-    to a single full-range window rather than returning nothing.
     """
     if increment is None:
         return [(lower, upper)]
-    if window is None:
-        return [(s, min(s + increment - 1, upper)) for s in range(lower, upper + 1, increment)]
-
-    span = upper - lower + 1
-    if window >= span:
-        return [(lower, upper)]
-
-    windows = [(s, s + window - 1) for s in range(lower, upper - window + 2, increment)]
-    if windows[-1][1] != upper:
-        windows.append((upper - window + 1, upper))
-    return windows
+    width = window or increment
+    return [(year - width + 1, year)
+            for year in range(upper - (upper - lower) // increment * increment,
+                              upper + 1, increment)]
 
 
 def run_hypothesis_eval_job(params: HypothesisEvalJobParams) -> list[dict]:
@@ -97,8 +87,8 @@ def run_hypothesis_eval_job(params: HypothesisEvalJobParams) -> list[dict]:
           f"{width} year(s) each, stride {params.censor_year_increment}: {windows}")
     all_results: list[dict] = []
     for lo, hi in windows:
-        # Both bounds in the name: overlapping windows share upper bounds
-        # (the pulled-back tail window especially), so `hi` alone collides.
+        # Both bounds in the name so a directory always names the exact
+        # slice of literature it scored.
         window_dir = os.path.join(base_dir, f"window_cy{lo}_{hi}")
         os.makedirs(window_dir, exist_ok=True)
         print(f"--- window {lo}-{hi} -> {window_dir} ---")
