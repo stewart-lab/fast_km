@@ -154,6 +154,10 @@ def submit_index_job(params: IndexingJobParams, authorized: bool = Depends(verif
     result = queue_indexing_job(params)
     return JSONResponse(content=result, status_code=202)
 
+@app.post("/api/clear_disk_cache", tags=index_tags)
+def clear_disk_cache(authorized: bool = Depends(verify_password)) -> dict:
+    return corpus.clear_disk_cache()
+
 @app.post("/api/cancel_job", tags=cancel_tags)
 @app.post('/cancel_job/api/jobs/', tags=deprecated_tags)  # old endpoint for cancel job
 def cancel_job_by_id(id: str, authorized: bool = Depends(verify_password)) -> dict:

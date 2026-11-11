@@ -488,7 +488,11 @@ class Index():
 
         self._idx_cursor.execute("SELECT term FROM query_cache")
         rows = self._idx_cursor.fetchall()
-        cached_terms = [row[0] for row in rows]
+
+        # only trigrams+ are cached on disk. older caches may contain bigrams,
+        # which get dropped here instead of being re-searched.
+        cached_terms = [row[0] for row in rows if util.get_ngram_n(row[0]) > 2]
+        cached_term_count = len(cached_terms)
 
         self._idx_cursor.execute('''DELETE FROM query_cache''')
         self._index.commit()
@@ -509,6 +513,32 @@ class Index():
         print("Indexing complete.")
         progress = 1.0
         yield progress
+
+    def clear_disk_cache(self) -> int:
+        """Delete all terms from the disk cache (the 'query_cache' table), 
+        100 terms at a time, committing after each batch. Returns the number of 
+        terms deleted."""
+        batch_size = 100
+        n_deleted = 0
+
+        while True:
+            self._idx_cursor.execute(
+                "DELETE FROM query_cache WHERE term IN (SELECT term FROM query_cache LIMIT ?)",
+                (batch_size,)
+            )
+            n_deleted_this_batch = self._idx_cursor.rowcount
+            self._index.commit()
+
+            if n_deleted_this_batch <= 0:
+                break
+            n_deleted += n_deleted_this_batch
+
+        # the in-memory caches may hold results that came from the disk cache
+        self._term_cache.clear()
+        self._ngram_cache.clear()
+
+        print(f"Cleared {n_deleted} terms from the disk cache.")
+        return n_deleted
 
     def get_document(self, pmid: int) -> Document | None:
         """Get a document from the corpus by PMID"""
@@ -560,8 +590,8 @@ class Index():
                 subterm_pmids[subterm] = set()
                 continue
 
-            # check disk cache for bigrams+
-            if gram_n > 1:
+            # check disk cache for trigrams+
+            if gram_n > 2:
                 self._idx_cursor.execute(f'''SELECT data FROM query_cache WHERE term = ?''', (subterm,))
                 row = self._idx_cursor.fetchone()
                 if row:
@@ -574,8 +604,8 @@ class Index():
             this_subterm_pmids = self._search_index(subterm)
             subterm_pmids[subterm] = this_subterm_pmids
 
-            # cache bigrams+ on disk
-            if gram_n > 1:
+            # cache trigrams+ on disk
+            if gram_n > 2:
                 data = _msgpack_dump(this_subterm_pmids)
                 cache_retries = 10
                 for _ in range(cache_retries):
