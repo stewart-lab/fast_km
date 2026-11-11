@@ -488,11 +488,7 @@ class Index():
 
         self._idx_cursor.execute("SELECT term FROM query_cache")
         rows = self._idx_cursor.fetchall()
-
-        # only trigrams+ are cached on disk. older caches may contain bigrams,
-        # which get dropped here instead of being re-searched.
-        cached_terms = [row[0] for row in rows if util.get_ngram_n(row[0]) > 2]
-        cached_term_count = len(cached_terms)
+        cached_terms = [row[0] for row in rows]
 
         self._idx_cursor.execute('''DELETE FROM query_cache''')
         self._index.commit()
@@ -532,10 +528,6 @@ class Index():
             if n_deleted_this_batch <= 0:
                 break
             n_deleted += n_deleted_this_batch
-
-        # the in-memory caches may hold results that came from the disk cache
-        self._term_cache.clear()
-        self._ngram_cache.clear()
 
         print(f"Cleared {n_deleted} terms from the disk cache.")
         return n_deleted
