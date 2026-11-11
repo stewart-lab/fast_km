@@ -160,6 +160,42 @@ def test_indexing(temp_dir: str):
     _delete_temp_dir(temp_dir)
 
 
+def test_disk_cache(temp_dir: str):
+    _delete_temp_dir(temp_dir)
+
+    temp_data_dir = os.path.join(temp_dir, "disk_cache")
+    idx = Index(temp_data_dir)
+    doc = Document(pmid=1, pub_year=2020, title="test abstract", abstract="the quick brown fox jumps", origin="test1.xml.gz")
+    idx.add_or_update_documents([doc])
+    for _progress in idx.index_documents():
+        pass
+
+    def cached_terms():
+        idx._idx_cursor.execute("SELECT term FROM query_cache")
+        return {row[0] for row in idx._idx_cursor.fetchall()}
+
+    # only trigrams and up are cached on disk
+    assert idx.search_documents("quick") == {1}
+    assert idx.search_documents("quick brown") == {1}
+    assert idx.search_documents("quick brown fox") == {1}
+    assert cached_terms() == {"quick brown fox"}
+
+    # add enough cached terms to need more than one batch of deletes
+    for i in range(250):
+        idx._idx_cursor.execute("INSERT INTO query_cache (term, data) VALUES (?, ?)", (f"fake term {i}", b""))
+    idx._index.commit()
+
+    assert idx.clear_disk_cache() == 251
+    assert cached_terms() == set()
+    assert idx.clear_disk_cache() == 0
+
+    # searching still works after clearing the cache
+    assert idx.search_documents("quick brown fox") == {1}
+
+    idx.close()
+    _delete_temp_dir(temp_dir)
+
+
 def _delete_temp_dir(temp_dir: str):
     if os.path.exists(temp_dir):
         for root, dirs, files in os.walk(temp_dir, topdown=False):

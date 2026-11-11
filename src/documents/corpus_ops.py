@@ -71,3 +71,9 @@ def delete_corpus_docs(params: DeleteDocumentsParams):
 
     idx.close()
     return {"status": "finished", "result": f"Deleted {n_deleted} documents."}
+
+def clear_disk_cache():
+    idx = Index(gvars.data_dir)
+    n_deleted = idx.clear_disk_cache()
+    idx.close()
+    return {"status": "finished", "result": f"Cleared {n_deleted} terms from the disk cache."}
