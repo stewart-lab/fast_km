@@ -84,7 +84,6 @@ from src.auth.functions import authenticate
 from src.jobs.workers import run_workers
 from src.jobs.job_queue import queue_job, queue_indexing_job, get_job, cancel_job
 from src.populate_db import populate_db
-from src.populate_kg import populate_kg
 
 
 @asynccontextmanager
