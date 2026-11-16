@@ -135,7 +135,7 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams,
     else:
         data = params.data
 
-    data = _populate_pmid_intersections(data, censor_year_lower, censor_year_upper)
+    data = _populate_pmid_intersections(data, censor_year_lower, censor_year_upper, params.expand_synonyms)
 
     if params.is_dch:
         config['JOB_TYPE'] = 'km_with_gpt'
@@ -525,7 +525,7 @@ def _get_config_template():
         }
     }
 
-def _populate_pmid_intersections(data: list[dict], censor_year_lower: int, censor_year_upper: int) -> list[dict]:
+def _populate_pmid_intersections(data: list[dict], censor_year_lower: int, censor_year_upper: int, expand_synonyms: bool = False) -> list[dict]:
     """Run KinderMiner searches to populate ab_pmid_intersection for each data entry.
 
     Used by DCH jobs where the caller provides empty PMID lists and expects
@@ -555,7 +555,7 @@ def _populate_pmid_intersections(data: list[dict], censor_year_lower: int, censo
     #     },
     # ]
 
-    idx = Index(gvars.data_dir)
+    idx = Index(gvars.data_dir, expand_synonyms=expand_synonyms)
 
     for result in data:
         a_term = result["a_term"]

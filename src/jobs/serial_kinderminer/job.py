@@ -13,7 +13,7 @@ def run_serial_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
         return _run_paired_skim(params)
 
     top_n_ab_padding = 20 if params.valid_bc_hit_pval < 1.0 else 0
-    idx = Index(gvars.data_dir)
+    idx = Index(gvars.data_dir, expand_synonyms=params.expand_synonyms)
 
     kg = None
     if params.query_knowledge_graph:
@@ -140,7 +140,7 @@ def run_serial_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
     return abc_results
 
 def _run_paired_skim(params: KinderMinerJobParams) -> list[dict]:
-    idx = Index(gvars.data_dir)
+    idx = Index(gvars.data_dir, expand_synonyms=params.expand_synonyms)
 
     kg = None
     if params.query_knowledge_graph:

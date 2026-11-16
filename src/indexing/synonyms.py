@@ -1,0 +1,381 @@
+"""
+Query-time synonym expansion.
+
+The index stores exact (lowercased) tokens, so 'breast cancer' does not match
+'breast cancers' or 'breast neoplasms'. When expansion is enabled, each subterm
+of a query is rewritten as an OR-group of its variants before searching:
+
+    'breast cancer & CDK4'  ->  '(breast cancer|breast cancers|breast neoplasms|...)&(cdk4)'
+
+Variants come from these sources:
+  1. MeSH entry terms: if the subterm is a term of a MeSH concept, all terms of
+     that concept are added. For descriptors, concepts are used rather than whole
+     descriptors, since a descriptor also holds narrower concepts that would broaden
+     the query (e.g. 'breast cancer' is its own concept under 'Breast Neoplasms').
+     For supplementary records (mostly drugs and chemicals), the whole record is used,
+     since its other concepts are brand names and codes for the same substance
+     (e.g. 'abemaciclib', 'Verzenio', 'LY2835219').
+  2. HGNC human gene names: a gene's official symbol, full name, previous symbols and
+     aliases (e.g. 'CDK4', 'cyclin dependent kinase 4', 'PSK-J3'). Previous symbols and
+     aliases are only used when they look like gene identifiers: they must name a single
+     gene and contain both letters and digits, and no function words. This drops aliases
+     that are ordinary words once lowercased ('Ray', 'Men', 'AND-1' -> 'and 1').
+  3. Plural/singular inflection of the last word of each variant, unless the phrase has a
+     function word in it ('cancer of the cervix'), since then the last word isn't the head noun.
+Names like 'IL6' also get their hyphenated spelling ('il 6', as 'IL-6' is indexed), and vice versa.
+
+The synonym table is built from NLM's MeSH descriptor and supplementary concept XML
+(the latter covers newer drugs and chemicals) and HGNC's gene table, and stored in the
+data dir. It is rebuilt when a newer MeSH year is released.
+"""
+
+import csv
+import dataclasses
+import functools
+import gzip
+import json
+import os
+import re
+import tempfile
+import time
+import urllib.request
+import xml.etree.ElementTree as ET
+import inflect
+import src.indexing.indexing_util as util
+from src.fast_km_exception import FastKmException
+
+MESH_URLS = [
+    "https://nlmpubs.nlm.nih.gov/projects/mesh/MESH_FILES/xmlmesh/desc{year}.gz",  # descriptors
+    "https://nlmpubs.nlm.nih.gov/projects/mesh/MESH_FILES/xmlmesh/supp{year}.gz",  # supplementary concepts
+]
+HGNC_URL = "https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt"
+SYNONYMS_FILENAME = "synonyms.json"
+RELOAD_AFTER_SECONDS = 24 * 60 * 60
+TABLE_FORMAT = 3  # bump when the stored layout changes, so old tables are rebuilt
+MIN_GENE_ALIAS_LENGTH = 3
+
+# search_documents() rejects terms with more than this many subterms
+MAX_SUBTERMS = 100
+MAX_NGRAM_N = 20
+MAX_VARIANTS_PER_SUBTERM = 30
+
+# words that mark a phrase's last word as not its head noun, and that rule out gene aliases
+FUNCTION_WORDS = {
+    "a", "an", "the", "and", "or", "of", "in", "on", "at", "to", "for", "with", "without", "by",
+    "from", "as", "via", "into", "per", "between", "among", "against", "during", "after", "before", "within",
+}
+
+_inflect_engine = inflect.engine()
+_operator_split = re.compile(r"([&|()])")
+
+def expand_term(term: str, data_dir: str) -> str:
+    """Rewrite each subterm of a (possibly composite) query term as an OR-group of its variants."""
+    if not _parentheses_balanced(term):
+        # a stray parenthesis from a pasted list ('PROTEASE)') isn't grouping anything, and
+        # would make the expanded query invalid
+        term = term.replace("(", " ").replace(")", " ")
+    parts = [p for p in _operator_split.split(term) if p.strip()]
+    n_subterms = sum(1 for p in parts if p not in util.logical_operators)
+    if n_subterms == 0:
+        return term
+
+    # stay under the subterm limit in search_documents(), or the whole query returns nothing
+    per_subterm_cap = max(1, min(MAX_VARIANTS_PER_SUBTERM, MAX_SUBTERMS // n_subterms))
+
+    _drop_stale_cache(data_dir)
+    out = []
+    for part in parts:
+        if part in util.logical_operators:
+            out.append(part)
+            continue
+        variants = get_variants(part, data_dir)[:per_subterm_cap]
+        out.append("(" + "|".join(variants) + ")")
+    return "".join(out)
+
+def _parentheses_balanced(term: str) -> bool:
+    depth = 0
+    for c in term:
+        depth += {"(": 1, ")": -1}.get(c, 0)
+        if depth < 0:
+            return False
+    return depth == 0
+
+@functools.lru_cache(maxsize=100_000)
+def get_variants(subterm: str, data_dir: str) -> list[str]:
+    """Return the subterm's variants, with the subterm itself first."""
+    normalized = util.sanitize_term_for_search(subterm, keep_logical_operators=False)
+    if not normalized:
+        return []
+
+    # the index is lowercase, so acronyms collide with ordinary words ('MS' -> 'ms', 'ADD' -> 'add').
+    # acronyms are therefore never inflected, and only searched for when the user wrote them.
+    # an acronym the user wrote is only looked up where it is an acronym too, so the gene
+    # 'IDS' doesn't pick up the synonyms of the word 'ids' (plural of the psychoanalytic 'id').
+    # a word typed in capitals that is only known as a word is treated as one ('ABACAVIR', from
+    # all-caps lists), but not one that's also an acronym ('IDS', 'AVEN', 'MS').
+    table = load_synonyms(data_dir)
+    acronyms = table.acronyms
+    typed_acronym = _is_acronym(subterm.split()[-1])
+    if typed_acronym and normalized not in acronyms and any(
+            key in table.word_synonyms for key in [normalized] + _inflections(normalized)):
+        typed_acronym = False
+    if typed_acronym:
+        acronyms = acronyms | {normalized}
+        lookup = [(table.acronym_synonyms, normalized)]
+    else:
+        lookup = [(table.word_synonyms, key) for key in [normalized] + _inflections(normalized)]
+        if not any(key in synonyms for synonyms, key in lookup):
+            lookup.append((table.acronym_synonyms, normalized))  # e.g. 'aids' written in lowercase
+
+    # MeSH synonyms (look up the singular form too, e.g. 'breast tumors' -> 'breast tumor')
+    variants = [normalized]
+    for synonyms, key in lookup:
+        for synonym in synonyms.get(key, []):
+            if synonym not in variants and synonym not in acronyms:
+                variants.append(synonym)
+
+    # plural/singular and hyphenation of each variant
+    expanded = []
+    for variant in variants:
+        expanded.append(variant)
+        others = _hyphenations(variant)
+        if variant not in acronyms:
+            others += _inflections(variant)
+        expanded.extend(other for other in others if other not in variants and other not in expanded)
+
+    return [v for v in expanded if util.get_ngram_n(v) <= MAX_NGRAM_N]
+
+_letters_then_digits = re.compile(r"^([a-z]{2,})(\d+)$")
+_letters_space_digits = re.compile(r"^([a-z]{2,}) (\d+)$")
+
+def _hyphenations(phrase: str) -> list[str]:
+    """Hyphens become spaces in the index, so 'IL-6' is stored as 'il 6' and doesn't match 'il6'.
+    Give the other spelling of names like 'il6' / 'il 6', 'covid19' / 'covid 19'."""
+    if match := _letters_then_digits.match(phrase):
+        return [f"{match[1]} {match[2]}"]
+    if match := _letters_space_digits.match(phrase):
+        return [f"{match[1]}{match[2]}"]
+    return []
+
+def _inflections(phrase: str) -> list[str]:
+    """Plural/singular forms of a phrase, varying only its last word."""
+    words = phrase.split(" ")
+    last = words[-1]
+    if len(last) < 4 or not last.isalpha() or FUNCTION_WORDS.intersection(words):
+        return []
+
+    singular = _inflect_engine.singular_noun(last)
+    if last.endswith(("is", "us", "ss")):
+        singular = False  # these are already singular; inflect would give e.g. 'sclerosis' -> 'sclerosi'
+    if last.endswith("ics"):
+        return []  # mostly fields of study, whose 'singular' is an adjective ('genetics' -> 'genetic')
+    other = singular if singular else _inflect_engine.plural_noun(last)
+    if not other or other == last:
+        return []
+    other = util.sanitize_term_for_search(other, keep_logical_operators=False)
+    return [" ".join(words[:-1] + [other])]
+
+def _is_acronym(word: str) -> bool:
+    # only all-letter acronyms can collide with ordinary words; codes like 'LY2835219' can't
+    return word.isalpha() and sum(c.isupper() for c in word) >= 2
+
+@dataclasses.dataclass
+class SynonymTable:
+    word_synonyms: dict[str, list[str]]     # a term's synonyms in the groups where it's written as a word
+    acronym_synonyms: dict[str, list[str]]  # ... and in the groups where it's written as an acronym
+    acronyms: set[str]                      # terms written as an acronym in any group
+
+_synonym_cache = dict[str, SynonymTable]()
+_cache_state = dict[str, tuple[tuple, float]]()  # data dir -> (table files' mtimes, time loaded)
+
+def _table_mtimes(data_dir: str) -> tuple:
+    paths = [os.path.join(data_dir, name) for name in (SYNONYMS_FILENAME,)]
+    return tuple(os.path.getmtime(p) if os.path.exists(p) else None for p in paths)
+
+def _drop_stale_cache(data_dir: str) -> None:
+    """Workers live a long time, so reload when the table file changes,
+    and check daily whether a new MeSH year is out."""
+    if data_dir not in _synonym_cache:
+        return
+    mtimes, loaded_at = _cache_state.get(data_dir, (None, 0.0))
+    if mtimes != _table_mtimes(data_dir) or time.time() - loaded_at > RELOAD_AFTER_SECONDS:
+        del _synonym_cache[data_dir]
+        get_variants.cache_clear()
+
+def load_synonyms(data_dir: str) -> SynonymTable:
+    """Map each term to all of its synonyms, and find the terms that end in an acronym.
+    Downloads and builds the table if it is missing, from an older MeSH year, or in an old format."""
+    if data_dir in _synonym_cache:
+        return _synonym_cache[data_dir]
+
+    path = os.path.join(data_dir, SYNONYMS_FILENAME)
+    stored = None
+    if os.path.exists(path):
+        with open(path) as f:
+            stored = json.load(f)
+
+    # MeSH for year Y is released late in year Y-1, so a table older than this year is out of date.
+    # a failed refresh is retried at most once a day, so jobs don't each wait on an unreachable NLM.
+    if stored is not None and stored.get("format") != TABLE_FORMAT:
+        stored = None
+    outdated = stored is not None and stored.get("year", 0) < time.localtime().tm_year
+    if stored is None or (outdated and time.time() - os.path.getmtime(path) > 24 * 60 * 60):
+        try:
+            build_synonym_table(data_dir)
+            with open(path) as f:
+                stored = json.load(f)
+        except FastKmException as e:
+            if stored is None:
+                raise
+            os.utime(path)
+            print(f"Could not refresh synonyms, using the {stored.get('year')} table: {e}")
+
+    table = SynonymTable(dict(), dict(), set())
+    _add_groups(table, stored["groups"], stored["acronyms"])
+
+    _synonym_cache[data_dir] = table
+    _cache_state[data_dir] = (_table_mtimes(data_dir), time.time())
+    return table
+
+def _add_groups(table: SynonymTable, groups: list[list[str]], acronyms: list[list[str]]) -> None:
+    for group, group_acronyms in zip(groups, acronyms):
+        for term in group:
+            synonyms = table.acronym_synonyms if term in group_acronyms else table.word_synonyms
+            existing = synonyms.setdefault(term, [])
+            existing.extend(t for t in group if t != term and t not in existing)
+        table.acronyms.update(group_acronyms)
+
+def build_synonym_table(data_dir: str, year: int | None = None) -> None:
+    """Download the MeSH descriptor and supplementary concept files and the HGNC gene table,
+    and save their synonym groups to the data dir."""
+    this_year = time.localtime().tm_year
+    years = [year] if year else [this_year + 1, this_year, this_year - 1]
+    os.makedirs(data_dir, exist_ok=True)
+
+    try:
+        print(f"Downloading {HGNC_URL}")
+        with urllib.request.urlopen(HGNC_URL, timeout=300) as response:
+            hgnc_tsv = response.read().decode("utf-8")
+        gene_groups = _parse_hgnc_tsv(hgnc_tsv)
+    except Exception as e:
+        raise FastKmException(f"Could not download HGNC gene names for synonym expansion: {e}")
+
+    last_error = None
+    for y in years:
+        try:
+            groups = []
+            for url in MESH_URLS:
+                groups.extend(_download_and_parse(url.format(year=y), data_dir))
+            break
+        except Exception as e:
+            last_error = e
+            print(f"Could not use MeSH {y}: {e}")
+    else:
+        raise FastKmException(f"Could not download MeSH synonyms for synonym expansion: {last_error}")
+
+    save_synonym_table(data_dir, y, groups + gene_groups)
+    print(f"Saved {len(groups)} MeSH {y} and {len(gene_groups)} HGNC synonym groups")
+
+def save_synonym_table(data_dir: str, year: int, groups: list[list[str]]) -> None:
+    """Normalize synonym groups (terms in their original case) the way queries are, and save them."""
+    normalized_groups, group_acronyms = [], []
+    for group in groups:
+        normalized_group, acronyms = [], []
+        for term in group:
+            normalized = util.sanitize_term_for_search(term, keep_logical_operators=False)
+            if normalized and normalized not in normalized_group and util.get_ngram_n(normalized) <= MAX_NGRAM_N:
+                normalized_group.append(normalized)
+                if _is_acronym(term.split()[-1]):
+                    acronyms.append(normalized)
+        if len(normalized_group) > 1:
+            normalized_groups.append(normalized_group)
+            group_acronyms.append(acronyms)
+
+    fd, tmp_path = tempfile.mkstemp(dir=data_dir, suffix=".tmp")
+    with os.fdopen(fd, "w") as f:
+        json.dump({"format": TABLE_FORMAT, "year": year, "groups": normalized_groups, "acronyms": group_acronyms}, f)
+    os.replace(tmp_path, os.path.join(data_dir, SYNONYMS_FILENAME))  # atomic, in case several workers build at once
+
+def _download_and_parse(url: str, data_dir: str) -> list[list[str]]:
+    # the supplementary file is ~800 MB uncompressed, so stream it from disk rather than memory
+    print(f"Downloading {url}")
+    fd, tmp_path = tempfile.mkstemp(dir=data_dir, suffix=".gz.tmp")
+    try:
+        with os.fdopen(fd, "wb") as f, urllib.request.urlopen(url, timeout=300) as response:
+            while chunk := response.read(1 << 20):
+                f.write(chunk)
+        with gzip.open(tmp_path, "rb") as xml_file:
+            return _parse_mesh_xml(xml_file)
+    finally:
+        os.remove(tmp_path)
+
+def _parse_mesh_xml(xml_file) -> list[list[str]]:
+    """Extract synonym groups, in their original case: one per descriptor concept,
+    and one per supplementary record."""
+    groups = []
+    record_group = None # collects a supplementary record's concepts; None within descriptors
+    for event, elem in ET.iterparse(xml_file, events=("start", "end")):
+        if event == "start":
+            if elem.tag == "SupplementalRecord":
+                record_group = []
+            continue
+
+        if elem.tag == "Concept":
+            concept_group = []
+            for string in elem.iterfind("TermList/Term/String"):
+                # skip inverted forms like 'Neoplasms, Breast' and qualified ones like
+                # 'MS (Multiple Sclerosis)'; they never occur in running text
+                if "," in string.text or "(" in string.text:
+                    continue
+                if string.text not in concept_group:
+                    concept_group.append(string.text)
+
+            if record_group is None:
+                groups.append(concept_group)
+            else:
+                record_group.extend(t for t in concept_group if t not in record_group)
+            elem.clear()
+        elif elem.tag == "SupplementalRecord":
+            groups.append(record_group)
+            record_group = None
+            elem.clear()
+        elif elem.tag == "DescriptorRecord":
+            elem.clear()  # free each record once parsed
+
+    return [g for g in groups if len(g) > 1]
+
+def _parse_hgnc_tsv(tsv: str) -> list[list[str]]:
+    """Extract one synonym group per approved human gene, in original case."""
+    genes = [row for row in csv.DictReader(tsv.splitlines(), delimiter="\t") if row["status"] == "Approved"]
+
+    # previous symbols and aliases are only used when they name a single gene.
+    # spacing is ignored, so 'COX-2' and 'COX2' count as the same name.
+    n_genes_named = dict[str, int]()
+    for gene in genes:
+        names = {gene["symbol"]} | _split_hgnc_list(gene["prev_symbol"]) | _split_hgnc_list(gene["alias_symbol"])
+        for name in {_gene_name_key(n) for n in names}:
+            n_genes_named[name] = n_genes_named.get(name, 0) + 1
+
+    groups = []
+    for gene in genes:
+        group = [gene["symbol"], gene["name"]]
+        for name in sorted(_split_hgnc_list(gene["prev_symbol"])) + sorted(_split_hgnc_list(gene["alias_symbol"])):
+            normalized = util.sanitize_term_for_search(name, keep_logical_operators=False)
+            if n_genes_named[_gene_name_key(name)] == 1 and _looks_like_gene_id(normalized) and name not in group:
+                group.append(name)
+        groups.append(group)
+    return groups
+
+def _gene_name_key(name: str) -> str:
+    return util.sanitize_term_for_search(name, keep_logical_operators=False).replace(" ", "")
+
+def _looks_like_gene_id(alias: str) -> bool:
+    """True for aliases like 'p53', 'cpp32', 'il 8'; false for ones that read as ordinary
+    text once lowercased, like 'ray', 'men', 'and 1' or '6 3'."""
+    return (len(alias) >= MIN_GENE_ALIAS_LENGTH
+            and any(c.isdigit() for c in alias)
+            and any(c.isalpha() for c in alias)
+            and not FUNCTION_WORDS.intersection(alias.split(" ")))
+
+def _split_hgnc_list(field: str) -> set[str]:
+    return {name for name in field.strip('"').split("|") if name}

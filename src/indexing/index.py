@@ -10,6 +10,7 @@ import numpy as np
 from src.fast_km_exception import FastKmException
 from src.documents.document import Document
 import src.indexing.indexing_util as util
+import src.indexing.synonyms as synonyms
 import src.global_vars as gvars
 
 MIN_CENSOR_YEAR = gvars.MIN_CENSOR_YEAR
@@ -100,8 +101,9 @@ IMPLEMENTATION NOTES
 
 
 class Index():
-    def __init__(self, data_dir: str):
+    def __init__(self, data_dir: str, expand_synonyms: bool = False):
         self.data_dir = data_dir
+        self.expand_synonyms = expand_synonyms
         self.n_documents = 0
         self.doc_origins = set[str]()
         self.pmid_to_pub_year = np.zeros(0, dtype=np.uint16) # saves memory vs python dict
@@ -552,7 +554,7 @@ class Index():
     def search_documents(self, term: str, start_year: int = MIN_CENSOR_YEAR, end_year: int = MAX_CENSOR_YEAR) -> set[int]:
         """Search the documents for a term, return all matching PMIDs"""
         # lowercase and remove punctuation but keep these chars: & | ( )
-        term = util.sanitize_term_for_search(term)
+        term = self._prepare_term(term)
         if not term:
             return set()
 
@@ -671,7 +673,7 @@ class Index():
 
         unique_subterms = set[str]()
         for term in terms:
-            sanitized = util.sanitize_term_for_search(term)
+            sanitized = self._prepare_term(term)
             subterms = util.get_subterms(sanitized)
             for subterm in subterms:
                 gram_n = util.get_ngram_n(subterm)
@@ -691,7 +693,7 @@ class Index():
                 del self._bi_grams_maybe_should_cache[bi_gram]
 
     def delete_term_from_memory(self, term: str) -> None:
-        sanitized = util.sanitize_term_for_search(term)
+        sanitized = self._prepare_term(term)
         if sanitized in self._term_cache:
             del self._term_cache[sanitized]
 
@@ -911,78 +913,88 @@ class Index():
         tables.sort()
         return tables
 
+    def _prepare_term(self, term: str) -> str:
+        if self.expand_synonyms:
+            term = synonyms.expand_term(term, self.data_dir)
+        return util.sanitize_term_for_search(term)
+
     def _search_index(self, subterm: str) -> set[int]:
         gram_n = util.get_ngram_n(subterm)
 
-        # split into ngrams
-        ngrams_to_data = dict()
-        
         if gram_n <= 2:
-            ngrams_to_data[subterm] = None # could be either set or dict later
-        else:
-            tokens = subterm.split(" ")
-            bi_grams = []
-            for i in range(len(tokens) - 1):
-                bi_gram = f"{tokens[i]} {tokens[i+1]}"
-                ngrams_to_data[bi_gram] = dict()
-                bi_grams.append(bi_gram)
+            data = self._get_ngram_data(subterm)
+            return data if isinstance(data, set) else set(data)
 
-        # retrieve ngram data from database
-        for ngram in ngrams_to_data:
-            if ngram in self._ngram_cache:
-                ngrams_to_data[ngram] = self._ngram_cache[ngram]
-                continue
-            shard_name = _ngram_to_shard_name(ngram)
-            self._idx_cursor.execute(f'''SELECT data FROM {shard_name} WHERE ngram = ?''', (ngram,))
-            rows = self._idx_cursor.fetchall()
+        # a phrase of n tokens matches where a set of its bi-grams occurs at the right
+        # offsets, as long as that set covers every token. we use the cheapest such set,
+        # which skips huge bi-grams like 'of the' when it can.
+        tokens = subterm.split(" ")
+        bi_grams = [f"{tokens[i]} {tokens[i+1]}" for i in range(len(tokens) - 1)]
+        sizes = self._get_ngram_sizes(bi_grams)
+        if any(size == 0 for size in sizes):
+            return set() # a bi-gram of the phrase occurs nowhere, so the phrase can't either
+        offsets = _cheapest_bi_gram_cover(sizes)
 
-            if not rows:
-                # ngram does not occur in any document
-                ngrams_to_data[ngram] = set() if gram_n <= 2 else dict()
-                continue
-
-            for row in rows:
-                data = row[0]
-                pmids_maybe_with_positions = _msgpack_load(data)
-                if ngram not in ngrams_to_data or ngrams_to_data[ngram] is None:
-                    ngrams_to_data[ngram] = pmids_maybe_with_positions
-                else:
-                    ngrams_to_data[ngram].update(pmids_maybe_with_positions)
-
-            # cache expensive ngram data in memory if it's going to be used a lot
-            if len(ngrams_to_data[ngram]) > 1_000_000 and ngram in self._bi_grams_maybe_should_cache:
-                self._ngram_cache[ngram] = ngrams_to_data[ngram]
-
-        # put ngrams together if needed
-        if gram_n <= 2:
-            if isinstance(ngrams_to_data[subterm], set):
-                pmids = ngrams_to_data[subterm]
+        # load the smallest bi-grams first, narrowing down candidate PMIDs as we go
+        offset_to_data = dict[int, dict[int, list[int]]]()
+        maybe_pmids = None
+        for offset in sorted(offsets, key=lambda o: sizes[o]):
+            offset_to_data[offset] = self._get_ngram_data(bi_grams[offset])
+            if maybe_pmids is None:
+                maybe_pmids = set(offset_to_data[offset])
             else:
-                pmids = set(ngrams_to_data[subterm])
-        else:
-            pmids = set()
-            first_bi_gram = bi_grams[0]
-            first_bi_gram_pmid_to_positions: dict = ngrams_to_data[first_bi_gram]
-            maybe_pmids = set(first_bi_gram_pmid_to_positions)
-            
-            for bi_gram in bi_grams[1:]:
-                maybe_pmids.intersection_update(ngrams_to_data[bi_gram])
+                maybe_pmids.intersection_update(offset_to_data[offset])
+            if not maybe_pmids:
+                return set()
 
-            for pmid in maybe_pmids:
-                for pos0 in first_bi_gram_pmid_to_positions[pmid]:
-                    match = True
-                    current_pos = pos0
-                    for bi_gram in bi_grams[1:]:
-                        current_pos += 1
-                        bi_gram_pmid_to_positions = ngrams_to_data[bi_gram]
-                        if current_pos not in bi_gram_pmid_to_positions[pmid]:
-                            match = False
-                            break
-                    if match:
-                        pmids.add(pmid)
-                        break
+        pmids = set()
+        first_bi_gram_pmid_to_positions = offset_to_data[0]
+        for pmid in maybe_pmids:
+            for pos0 in first_bi_gram_pmid_to_positions[pmid]:
+                if all(pos0 + offset in offset_to_data[offset][pmid] for offset in offsets[1:]):
+                    pmids.add(pmid)
+                    break
 
         return pmids
+
+    def _get_ngram_sizes(self, ngrams: list[str]) -> list[int]:
+        """Stored size of each ngram's data in bytes (0 if it occurs nowhere), without loading the data."""
+        sizes = []
+        for ngram in ngrams:
+            if ngram in self._ngram_cache:
+                sizes.append(1) # already in memory, so nearly free
+                continue
+            shard_name = _ngram_to_shard_name(ngram)
+            self._idx_cursor.execute(f'''SELECT SUM(size) FROM {shard_name} WHERE ngram = ?''', (ngram,))
+            sizes.append(self._idx_cursor.fetchone()[0] or 0)
+        return sizes
+
+    def _get_ngram_data(self, ngram: str) -> set[int] | dict[int, list[int]]:
+        """PMIDs of a unigram, or PMIDs and positions of a bi-gram."""
+        if ngram in self._ngram_cache:
+            return self._ngram_cache[ngram]
+
+        shard_name = _ngram_to_shard_name(ngram)
+        self._idx_cursor.execute(f'''SELECT data FROM {shard_name} WHERE ngram = ?''', (ngram,))
+        rows = self._idx_cursor.fetchall()
+
+        if not rows:
+            # ngram does not occur in any document
+            return set() if ' ' not in ngram else dict()
+
+        data = None
+        for row in rows:
+            pmids_maybe_with_positions = _msgpack_load(row[0])
+            if data is None:
+                data = pmids_maybe_with_positions
+            else:
+                data.update(pmids_maybe_with_positions)
+
+        # cache expensive ngram data in memory if it's going to be used a lot
+        if len(data) > 1_000_000 and ngram in self._bi_grams_maybe_should_cache:
+            self._ngram_cache[ngram] = data
+
+        return data
 
     def _defragment_shard(self, fragmented_shard: str) -> None:
         shard = fragmented_shard.replace('fragmented_', '')
@@ -1146,6 +1158,19 @@ def _ngram_to_shard_name(ngram: str, get_fragmented_name: bool = False) -> str:
         return f'fragmented_{shard_name}'
     
     return shard_name
+
+def _cheapest_bi_gram_cover(sizes: list[int]) -> list[int]:
+    """Given the sizes of a phrase's consecutive bi-grams, pick the offsets of the
+    cheapest set of bi-grams that still covers every token of the phrase.
+    The first and last bi-grams are always needed, and no two picked bi-grams may be
+    more than 2 apart, or the token between them would go unchecked."""
+    # best[i] = (cost, offsets) of the cheapest cover of tokens 0..i+1 that picks bi-gram i
+    best = [(sizes[0], [0])]
+    for i in range(1, len(sizes)):
+        candidates = [best[i - 1]] if i < 2 else [best[i - 1], best[i - 2]]
+        cost, offsets = min(candidates, key=lambda c: c[0])
+        best.append((cost + sizes[i], offsets + [i]))
+    return best[-1][1]
 
 def _pmid_to_table_name(pmid: int) -> str:
     return f'documents_{(pmid // 1_000_000):02d}m'

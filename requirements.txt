@@ -1,5 +1,6 @@
 scipy                    # fisher's exact test implementation
 nltk                     # text processing
+inflect                  # plural/singular forms for synonym expansion
 regex                    # text processing
 pytest                   # unit testing
 redis                    # backing store for job queue
