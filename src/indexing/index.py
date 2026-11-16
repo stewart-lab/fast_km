@@ -11,6 +11,7 @@ from src.fast_km_exception import FastKmException
 from src.documents.document import Document
 import src.indexing.indexing_util as util
 import src.indexing.synonyms as synonyms
+import src.indexing.abbreviations as abbreviations
 import src.global_vars as gvars
 
 MIN_CENSOR_YEAR = gvars.MIN_CENSOR_YEAR
@@ -474,15 +475,20 @@ class Index():
         progress = 0.75
         yield progress
 
-        ## --- refresh the synonym table, if synonym expansion is used here ---
-        # so searches don't have to wait for a new MeSH year to download. optional: on failure,
-        # searches keep using the current table.
+        ## --- refresh synonym tables, if synonym expansion is used here ---
+        # (its table has been built). optional: on failure, searches keep using the current tables.
         if os.path.exists(os.path.join(self.data_dir, synonyms.SYNONYMS_FILENAME)):
-            print("Refreshing synonym table...")
+            print("Refreshing synonym tables...")
             try:
                 synonyms.refresh_synonym_table(self.data_dir)
             except Exception as e:
                 print(f"Could not refresh synonyms: {e}")
+
+            # abbreviations defined in the documents; only changed document tables are re-read
+            try:
+                abbreviations.update_abbreviation_table(self.data_dir, doc_tables_need_indexing)
+            except Exception as e:
+                print(f"Could not update abbreviations: {e}")
 
         # the synonym refresh is the first 5% of step 4
         progress = 0.8
