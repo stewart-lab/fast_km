@@ -6,8 +6,11 @@ word_tokenizer = nltk.RegexpTokenizer(r"\w+") # remove all non-word characters
 word_tokenizer_lop = nltk.RegexpTokenizer(r"\w+|[&|()]") # keep logical operators as separate tokens
 logical_operators = ['&', '|', '(', ')']
 
-def sanitize_term_for_search(term: str, keep_logical_operators=True) -> str:
-    if keep_logical_operators:
+def sanitize_term_for_search(term: str, keep_logical_operators=True, text_parentheses=True) -> str:
+    """Lowercase a term and drop punctuation, keeping & | ( ) if keep_logical_operators.
+    text_parentheses: also drop parentheses that are text, not grouping (see
+    remove_text_parentheses). Off only for strings that must stay as they were stored."""
+    if keep_logical_operators and text_parentheses:
         term = remove_text_parentheses(term)
     tokens = _tokenize_text(term, keep_logical_operators)
 
@@ -29,7 +32,9 @@ def remove_text_parentheses(term: str) -> str:
     e.g. 'acute (transverse) myelitis', '(+)-aldosterone', 'ATP-BINDING CASSETTE, SUB-FAMILY A
     (ABC1), MEMBER 1', which as a query is not valid and matches nothing. A pair of parentheses is
     grouping if it encloses a word and is bounded on both sides by an operator or by the term's
-    start or end, as in '(a|b)&c'. Unmatched parentheses are never grouping."""
+    start or end, as in '(a|b)&c'. Unmatched parentheses are never grouping.
+    A pair that encloses an operator ('cancer (breast|lung)') is left as it is: unwrapping it
+    would let the operator apply to the whole term ('cancer breast' OR 'lung')."""
     tokens = [(m.group(), m.start()) for m in _paren_token.finditer(term)]
     pairs, stack, text = [], [], []
     for i, (token, _start) in enumerate(tokens):
@@ -45,8 +50,10 @@ def remove_text_parentheses(term: str) -> str:
     for open_i, close_i in pairs:
         opens_group = open_i == 0 or tokens[open_i - 1][0] in ("(", "|", "&")
         closes_group = close_i == len(tokens) - 1 or tokens[close_i + 1][0] in (")", "|", "&")
-        has_word = any(tokens[k][0] not in logical_operators for k in range(open_i + 1, close_i))
-        if not (opens_group and closes_group and has_word):
+        inside = [tokens[k][0] for k in range(open_i + 1, close_i)]
+        has_word = any(t not in logical_operators for t in inside)
+        has_operator = "|" in inside or "&" in inside
+        if not has_operator and not (opens_group and closes_group and has_word):
             text.extend((open_i, close_i))
 
     chars = list(term)

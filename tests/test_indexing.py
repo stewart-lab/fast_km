@@ -39,6 +39,11 @@ def test_text_parentheses():
     # unmatched parentheses
     assert util.sanitize_term_for_search("PROTEASE)") == "protease"
     assert util.sanitize_term_for_search("(a") == "a"
+    # a pair around an operator is left alone, or the operator would apply to the whole term
+    assert util.sanitize_term_for_search("cancer (breast|lung)") == "cancer(breast|lung)"
+    assert util.sanitize_term_for_search("x ((a|b)) y") == "x((a|b))y"
+    # strings stored with the old cleanup (knowledge graph heads and tails) can keep it
+    assert util.sanitize_term_for_search("Interleukin-6 (IL-6)", text_parentheses=False) == "interleukin 6(il 6)"
 
 def test_search_terms_with_text_parentheses(temp_dir: str):
     _delete_temp_dir(temp_dir)
