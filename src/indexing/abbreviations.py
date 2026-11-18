@@ -214,14 +214,17 @@ def _series_markers(long: str) -> list[str]:
 def _meaning_key(long: str) -> str:
     """Spellings of the same long form share a key: 'human papilloma virus', 'human papillomaviruses'.
     A rough plural rule is enough here, and is much faster than inflect over millions of long forms."""
-    key = long.replace(" ", "")
-    if key.endswith("ies"):
-        return key[:-3] + "y"
-    if key.endswith(("ses", "xes", "ches", "shes")):
-        return key[:-2]
-    if key.endswith("s") and not key.endswith(("ss", "us", "is")):
-        return key[:-1]
-    return key
+    # only the last word is made singular, and only a real word: 'hemoglobin s' isn't 'hemoglobins'
+    words = long.split(" ")
+    last = words[-1]
+    if len(last) > 3:
+        if last.endswith("ies"):
+            last = last[:-3] + "y"
+        elif last.endswith(("ses", "xes", "ches", "shes")):
+            last = last[:-2]
+        elif last.endswith("s") and not last.endswith(("ss", "us", "is")):
+            last = last[:-1]
+    return "".join(words[:-1] + [last])
 
 def update_abbreviation_table(data_dir: str, changed_tables: list[str], n_workers: int = 8) -> None:
     """Re-mine the document tables that changed, and save the kept abbreviations to the data dir.

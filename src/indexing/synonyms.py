@@ -282,6 +282,12 @@ def get_variants(subterm: str, data_dir: str) -> list[str]:
             if synonym not in variants and synonym not in acronyms:
                 variants.append(synonym)
 
+    # leave out a word that papers mostly use as an abbreviation for something else: 'Prisma'
+    # (a brand of mesoglycan) is nearly always PRISMA, the systematic review guideline. names with
+    # digits ('IL8', 'CD31') are specific, and are often defined in other words ('interleukin 8')
+    variants = variants[:1] + [v for v in variants[1:] if not v.isalpha() or v not in table.abbreviations_used_for
+                               or set(table.abbreviations_used_for[v]) & set(variants)]
+
     # abbreviations defined in papers, only when written as papers write them (see the module docstring)
     abbreviation = table.abbreviation_synonyms.get(normalized)
     if abbreviation and _case_key(subterm) == abbreviation[0]:
@@ -353,6 +359,8 @@ class SynonymTable:
     acronyms: set[str]                      # terms written as an acronym in any group
     # mined short form -> (how papers write it, see _case_key; its long forms)
     abbreviation_synonyms: dict[str, tuple[str, list[str]]] = dataclasses.field(default_factory=dict)
+    # every mined short form -> its long forms, including ones MeSH/HGNC also define
+    abbreviations_used_for: dict[str, list[str]] = dataclasses.field(default_factory=dict)
 
 _synonym_cache = dict[str, SynonymTable]()
 _cache_state = dict[str, tuple[tuple, float]]()  # data dir -> (table files' mtimes, time loaded)
@@ -396,6 +404,7 @@ def load_synonyms(data_dir: str) -> SynonymTable:
     # and never give a gene symbol another meaning: 'AES' (now TLE5) isn't 'adverse events' (from 'AEs')
     for short, *longs in read_abbreviation_table(data_dir) or []:
         key = _normalize(short)
+        table.abbreviations_used_for[key] = longs
         if key in table.word_synonyms or key in table.acronym_synonyms or key in gene_symbols:
             continue
         table.abbreviation_synonyms[key] = (_case_key(short), longs)
