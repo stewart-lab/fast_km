@@ -83,9 +83,10 @@ def expand_term(term: str, data_dir: str, ngram_sizes: Callable[[list[str]], lis
     ngram_sizes gives how common bi-grams are in the corpus; if given, plurals that are mostly
     used as verbs are left out (see is_mostly_verb), and possessive forms that papers mostly use
     are added (see is_usually_possessive)."""
-    parts = expansion(term, data_dir, ngram_sizes)
-    if not any(isinstance(part, tuple) for part in parts):
-        return "".join(parts)
+    return join_expansion(expansion(term, data_dir, ngram_sizes))
+
+def join_expansion(parts: list[str | tuple[str, list[str]]]) -> str:
+    """The query for an expansion(): each subterm as an OR-group of its variants."""
     return "".join(part if isinstance(part, str) else "(" + "|".join(part[1]) + ")" for part in parts)
 
 def expansion(term: str, data_dir: str, ngram_sizes: Callable[[list[str]], list[int]] | None = None) -> list[str | tuple[str, list[str]]]:
@@ -112,7 +113,12 @@ def expansion(term: str, data_dir: str, ngram_sizes: Callable[[list[str]], list[
     # in a list of alternatives ('CTLA4|CD152|...'), a variant that an earlier alternative already
     # searches adds nothing: drop it, so it neither takes a slot nor is searched twice
     if all(p == "|" for p in parts if p in util.logical_operators):
-        return "|".join("(" + "|".join(v) + ")" for v in _without_repeats(part_variants) if v)
+        subterms = [p.strip() for p in parts if p not in util.logical_operators]
+        out = []
+        for subterm, variants in zip(subterms, _without_repeats(part_variants)):
+            if variants:
+                out += (["|"] if out else []) + [(subterm, variants)]
+        return out
 
     # stay under the subterm limit in search_documents(), or the whole query returns nothing
     caps = iter(_share_variant_budget([len(v) for v in part_variants]))

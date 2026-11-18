@@ -79,11 +79,20 @@ def test_kinderminer_job_records_expansions(data_dir: str, monkeypatch):
     job = FakeJob()
     monkeypatch.setattr(job_util, "get_current_job", lambda: job)
 
-    run_kinderminer_job(KinderMinerJobParams(a_terms=["heart attack"], b_terms=["aspirin"], expand_synonyms=True))
+    run_kinderminer_job(KinderMinerJobParams(a_terms=["heart attack"], b_terms=["aspirin", "TNF"], expand_synonyms=True))
     expansions = job.meta["expansions"]
+    # 'TNF' matched no other names (an acronym with no synonyms here), so it isn't listed
     assert set(expansions) == {"heart attack", "aspirin"}
     assert ["heart attack", ["heart attack", "heart attacks", "myocardial infarction", "myocardial infarctions"]] in expansions["heart attack"]
 
     job.meta = {}
     run_kinderminer_job(KinderMinerJobParams(a_terms=["heart attack"], b_terms=["aspirin"]))
     assert "expansions" not in job.meta
+
+def test_expand_job_with_alternatives(data_dir: str):
+    # alternatives that share variants: each variant is listed (and searched) once
+    [result] = run_expand_job(ExpandJobParams(terms=["heart attack|myocardial infarction"]))
+    variants = [v["variant"] for s in result["subterms"] for v in s["variants"]]
+    assert len(variants) == len(set(variants))
+    assert result["subterms"][0]["subterm"] == "heart attack"
+    assert result["n_with_expansion"] == 3

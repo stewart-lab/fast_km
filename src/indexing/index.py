@@ -105,6 +105,9 @@ class Index():
     def __init__(self, data_dir: str, expand_synonyms: bool = False):
         self.data_dir = data_dir
         self.expand_synonyms = expand_synonyms
+        # term -> [[subterm, variants], ...] for terms whose search matched other names; jobs
+        # record this so users can see what was searched
+        self.searched_expansions = dict[str, list]()
         self.n_documents = 0
         self.doc_origins = set[str]()
         self.pmid_to_pub_year = np.zeros(0, dtype=np.uint16) # saves memory vs python dict
@@ -935,7 +938,7 @@ class Index():
     def expansion(self, term: str) -> list[tuple[str, list[str]]]:
         """The variants each subterm of a term is searched as when synonym expansion is on, as
         (subterm as typed, variants). For showing users what a search matched."""
-        return [part for part in synonyms.expansion(term, self.data_dir, self._get_ngram_sizes) if isinstance(part, tuple)]
+        return [part for part in synonyms.expansion(term, self.data_dir, self._get_stored_ngram_sizes) if isinstance(part, tuple)]
 
     def count_phrase(self, phrase: str, start_year: int = MIN_CENSOR_YEAR, end_year: int = MAX_CENSOR_YEAR) -> int:
         """Papers containing one phrase, searched as is (no expansion), without adding it to the
@@ -947,7 +950,11 @@ class Index():
 
     def _prepare_term(self, term: str) -> str:
         if self.expand_synonyms:
-            term = synonyms.expand_term(term, self.data_dir, self._get_stored_ngram_sizes)
+            parts = synonyms.expansion(term, self.data_dir, self._get_stored_ngram_sizes)
+            subterms = [[subterm, variants] for subterm, variants in (p for p in parts if isinstance(p, tuple))]
+            if any(len(variants) > 1 for _, variants in subterms) or len(subterms) > 1:
+                self.searched_expansions[term] = subterms
+            term = synonyms.join_expansion(parts)
         return util.sanitize_term_for_search(term)
 
     def _search_index(self, subterm: str) -> set[int]:

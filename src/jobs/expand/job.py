@@ -5,7 +5,8 @@ from src.jobs.expand.params import ExpandJobParams, validate_params
 
 def run_expand_job(params: ExpandJobParams) -> list[dict]:
     """Preview synonym expansion: for each term, the variants each of its subterms is searched as,
-    and (optionally) how many papers the term and each variant match. Nothing is cached on disk."""
+    and (optionally) how many papers the term and each variant match. Variant counts aren't cached
+    on disk; the term itself is searched as a job would search it, so its own 3+ word subterms are."""
     validate_params(params)
     years = (params.censor_year_lower, params.censor_year_upper)
     idx = Index(gvars.data_dir, expand_synonyms=True)
