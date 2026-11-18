@@ -362,3 +362,14 @@ def test_possessive_forms(data_dir: str):
     synonyms._synonym_cache.clear(); synonyms.get_variants.cache_clear()
     counts["primary s"] = 100
     assert "primary s senile degenerative dementia" not in synonyms.expand_term("Alzheimer disease", data_dir, ngram_sizes)
+
+def test_unused_variant_slots_go_to_other_subterms():
+    # an equal share of 100 over 9 subterms would be 11 each
+    caps = synonyms._share_variant_budget([3, 2, 2, 4, 25, 3, 2, 30, 40])
+    assert caps[:4] == [3, 2, 2, 4] and caps[4] == 25
+    assert caps[7] == caps[8] == 29  # (100 - 41) // 2, under the per-subterm maximum of 30
+    assert sum(caps) <= synonyms.MAX_SUBTERMS
+    # everything fits: each keeps all its variants, up to the per-subterm maximum
+    assert synonyms._share_variant_budget([5, 50]) == [5, 30]
+    # too many subterms for the budget: equal shares, at least one each
+    assert synonyms._share_variant_budget([30] * 5) == [20] * 5

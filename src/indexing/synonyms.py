@@ -85,21 +85,48 @@ def expand_term(term: str, data_dir: str, ngram_sizes: Callable[[list[str]], lis
     if n_subterms == 0:
         return term
 
-    # stay under the subterm limit in search_documents(), or the whole query returns nothing
-    per_subterm_cap = max(1, min(MAX_VARIANTS_PER_SUBTERM, MAX_SUBTERMS // n_subterms))
-
     _drop_stale_cache(data_dir)
-    out = []
+    part_variants = []
     for part in parts:
         if part in util.logical_operators:
-            out.append(part)
             continue
         variants = get_variants(part, data_dir)
         if ngram_sizes is not None:
             variants = _drop_verb_forms(variants, data_dir, ngram_sizes)
             variants = _add_possessives(variants, data_dir, ngram_sizes)
-        out.append("(" + "|".join(variants[:per_subterm_cap]) + ")")
+        part_variants.append(variants)
+
+    # stay under the subterm limit in search_documents(), or the whole query returns nothing
+    caps = iter(_share_variant_budget([len(v) for v in part_variants]))
+    variants = iter(part_variants)
+    out = []
+    for part in parts:
+        if part in util.logical_operators:
+            out.append(part)
+        else:
+            out.append("(" + "|".join(next(variants)[:next(caps)]) + ")")
     return "".join(out)
+
+def _share_variant_budget(counts: list[int]) -> list[int]:
+    """How many variants each subterm may keep: at most MAX_VARIANTS_PER_SUBTERM each, and
+    MAX_SUBTERMS in all. Subterms with few variants take only what they have, and the slots they
+    don't use go to the others: in 'CTLA4|CD152|...|cytotoxic T-lymphocyte associated protein 4',
+    the long name can keep more than an equal share of 100."""
+    wanted = [min(n, MAX_VARIANTS_PER_SUBTERM) for n in counts]
+    caps = [0] * len(counts)
+    budget, open_ = MAX_SUBTERMS, list(range(len(counts)))
+    while open_:
+        share = max(1, budget // len(open_))
+        satisfied = [i for i in open_ if wanted[i] <= share]
+        if not satisfied:
+            for i in open_:
+                caps[i] = share
+            break
+        for i in satisfied:
+            caps[i] = wanted[i]
+            budget -= wanted[i]
+        open_ = [i for i in open_ if i not in satisfied]
+    return caps
 
 # words that come before a verb ('it leads', 'which binds') and before a plural noun ('of vaccines', 'these tumors')
 _VERB_CONTEXT = ("it", "which", "also")
