@@ -16,3 +16,13 @@ def report_log(file: str, message: str) -> None:
         job.meta['logs'] = dict()
     job.meta['logs'][file] = message
     job.save_meta()
+def report_expansions(idx, terms: list[str]) -> None:
+    """Record what each distinct term was searched as, once per term (not per result row), in
+    the job's info as 'expansions': {term: [[subterm, [variants]], ...]}. Only when the index
+    expands synonyms."""
+    job = get_current_job()
+    if not job or not idx.expand_synonyms:
+        return
+    job.meta['expansions'] = {term: [[subterm, variants] for subterm, variants in idx.expansion(term)]
+                              for term in dict.fromkeys(terms)}
+    job.save_meta()

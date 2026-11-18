@@ -1,6 +1,6 @@
 import src.global_vars as gvars
 import src.kinderminer_algorithm as km
-from src.jobs.job_util import report_progress
+from src.jobs.job_util import report_progress, report_expansions
 from src.jobs.serial_kinderminer.params import validate_params
 from src.indexing.index import Index
 from src.jobs.kinderminer.params import KinderMinerJobParams
@@ -135,6 +135,7 @@ def run_serial_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
     if kg:
         kg.close()
 
+    report_expansions(idx, params.a_terms + params.b_terms + (params.c_terms or []))
     idx.close()
     report_progress(1.0)
     return abc_results
@@ -201,6 +202,7 @@ def _run_paired_skim(params: KinderMinerJobParams) -> list[dict]:
     if kg:
         kg.close()
 
+    report_expansions(idx, params.a_terms + params.b_terms + (params.c_terms or []))
     idx.close()
     report_progress(1.0)
     return abc_results

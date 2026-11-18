@@ -1,6 +1,6 @@
 import src.global_vars as gvars
 import src.kinderminer_algorithm as km
-from src.jobs.job_util import report_progress
+from src.jobs.job_util import report_progress, report_expansions
 from src.indexing.index import Index
 from src.knowledge_graph.knowledge_graph import KnowledgeGraph
 from src.jobs.kinderminer.params import KinderMinerJobParams, validate_params
@@ -47,6 +47,7 @@ def run_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
     if kg:
         kg.close()
 
+    report_expansions(idx, params.a_terms + params.b_terms)
     idx.close()
 
     report_progress(1.0)
@@ -101,6 +102,7 @@ def _run_paired_km(params: KinderMinerJobParams) -> list[dict]:
     if kg:
         kg.close()
 
+    report_expansions(idx, params.a_terms + params.b_terms)
     idx.close()
     report_progress(1.0)
     return results

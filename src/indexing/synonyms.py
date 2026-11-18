@@ -83,12 +83,20 @@ def expand_term(term: str, data_dir: str, ngram_sizes: Callable[[list[str]], lis
     ngram_sizes gives how common bi-grams are in the corpus; if given, plurals that are mostly
     used as verbs are left out (see is_mostly_verb), and possessive forms that papers mostly use
     are added (see is_usually_possessive)."""
+    parts = expansion(term, data_dir, ngram_sizes)
+    if not any(isinstance(part, tuple) for part in parts):
+        return "".join(parts)
+    return "".join(part if isinstance(part, str) else "(" + "|".join(part[1]) + ")" for part in parts)
+
+def expansion(term: str, data_dir: str, ngram_sizes: Callable[[list[str]], list[int]] | None = None) -> list[str | tuple[str, list[str]]]:
+    """The parts of a (possibly composite) term: operators as strings, and each subterm as
+    (subterm as typed, the variants it is searched as). This is what expand_term() searches, so
+    it can be shown to users."""
     # parentheses used as text in term lists ('(+)-aldosterone', 'PROTEASE)') aren't split on
     term = util.remove_text_parentheses(term)
     parts = [p for p in _operator_split.split(term) if p.strip()]
-    n_subterms = sum(1 for p in parts if p not in util.logical_operators)
-    if n_subterms == 0:
-        return term
+    if not any(p not in util.logical_operators for p in parts):
+        return [term]
 
     _drop_stale_cache(data_dir)
     part_variants = []
@@ -114,8 +122,8 @@ def expand_term(term: str, data_dir: str, ngram_sizes: Callable[[list[str]], lis
         if part in util.logical_operators:
             out.append(part)
         else:
-            out.append("(" + "|".join(next(variants)[:next(caps)]) + ")")
-    return "".join(out)
+            out.append((part.strip(), next(variants)[:next(caps)]))
+    return out
 
 def _without_repeats(part_variants: list[list[str]]) -> list[list[str]]:
     """The variants each alternative searches, with no variant searched twice and at most

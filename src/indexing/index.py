@@ -932,6 +932,19 @@ class Index():
         tables.sort()
         return tables
 
+    def expansion(self, term: str) -> list[tuple[str, list[str]]]:
+        """The variants each subterm of a term is searched as when synonym expansion is on, as
+        (subterm as typed, variants). For showing users what a search matched."""
+        return [part for part in synonyms.expansion(term, self.data_dir, self._get_ngram_sizes) if isinstance(part, tuple)]
+
+    def count_phrase(self, phrase: str, start_year: int = MIN_CENSOR_YEAR, end_year: int = MAX_CENSOR_YEAR) -> int:
+        """Papers containing one phrase, searched as is (no expansion), without adding it to the
+        disk cache: for previews of many variants that won't be searched again."""
+        phrase = util.sanitize_term_for_search(phrase, keep_logical_operators=False)
+        if not phrase or util.get_ngram_n(phrase) > 20:
+            return 0
+        return len(self.date_censor_pmids(self._search_index(phrase), start_year, end_year))
+
     def _prepare_term(self, term: str) -> str:
         if self.expand_synonyms:
             term = synonyms.expand_term(term, self.data_dir, self._get_stored_ngram_sizes)
