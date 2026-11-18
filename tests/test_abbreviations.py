@@ -204,3 +204,26 @@ def test_nested_spellings_do_not_hide_other_spellings():
     groups = abbreviations.select_groups(counts)
     assert ["NTM-LD", "ntm lung disease", "nontuberculous mycobacterial lung disease",
             "non tuberculous mycobacterial lung disease"] in groups
+
+def test_meaning_keys_only_make_real_words_singular():
+    assert abbreviations._meaning_key("human papilloma viruses") == abbreviations._meaning_key("human papillomavirus")
+    # 'hemoglobin S' is a variant of hemoglobin, not its plural
+    assert abbreviations._meaning_key("hemoglobin s") != abbreviations._meaning_key("hemoglobins")
+
+def test_synonyms_that_are_mostly_another_abbreviation_are_left_out(data_dir: str):
+    synonyms.save_synonym_table(data_dir, 9999, [["mesoglycan", "Prisma", "Mediolanum"], ["gamma-aminobutyric acid", "Gaba"]])
+    synonyms.save_abbreviation_table(data_dir, [
+        ["PRISMA", "preferred reporting items for systematic reviews and meta analyses"],
+        ["GABA", "gamma aminobutyric acid"]])
+    synonyms._synonym_cache.clear()
+
+    assert synonyms.get_variants("mesoglycan", data_dir) == ["mesoglycan", "mesoglycans", "mediolanum", "mediolanums"]
+    # an abbreviation that means the same thing is kept
+    assert "gaba" in synonyms.get_variants("gamma-aminobutyric acid", data_dir)
+
+def test_names_with_digits_are_not_taken_for_other_abbreviations(data_dir: str):
+    # 'IL8' is defined as 'interleukin 8' in papers, which isn't one of CXCL8's HGNC names
+    synonyms.save_synonym_table(data_dir, 9999, [["CXCL8", "C-X-C motif chemokine ligand 8", "IL8"]])
+    synonyms.save_abbreviation_table(data_dir, [["IL8", "interleukin 8"]])
+    synonyms._synonym_cache.clear()
+    assert "il8" in synonyms.get_variants("CXCL8", data_dir)
