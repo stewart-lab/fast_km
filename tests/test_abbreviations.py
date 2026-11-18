@@ -179,3 +179,28 @@ def _index(data_dir: str, documents: list[Document]):
     for _progress in idx.index_documents():
         pass
     idx.close()
+
+def test_select_groups_writes_out_nested_abbreviations():
+    counts = collections.Counter({
+        # 'DR' itself is too ambiguous to expand
+        ("DR", "diabetic retinopathy"): 55, ("DR", "dietary restriction"): 45,
+        # but in definitions of 'NPDR' it means diabetic retinopathy
+        ("NPDR", "non proliferative diabetic retinopathy"): 50,
+        ("NPDR", "non proliferative dr"): 40,
+        ("NPDR", "nonproliferative dr"): 5,
+        ("NPDR", "national pollutant discharge registry"): 5,
+    })
+    assert abbreviations.select_groups(counts) == [
+        ["NPDR", "non proliferative diabetic retinopathy", "non proliferative dr", "nonproliferative dr"]]
+
+def test_nested_spellings_do_not_hide_other_spellings():
+    counts = collections.Counter({
+        ("NTM", "nontuberculous mycobacteria"): 100,
+        # the nested spelling is the most common one, but the others are compared with a written-out one
+        ("NTM-LD", "ntm lung disease"): 40,
+        ("NTM-LD", "nontuberculous mycobacterial lung disease"): 35,
+        ("NTM-LD", "non tuberculous mycobacterial lung disease"): 25,
+    })
+    groups = abbreviations.select_groups(counts)
+    assert ["NTM-LD", "ntm lung disease", "nontuberculous mycobacterial lung disease",
+            "non tuberculous mycobacterial lung disease"] in groups

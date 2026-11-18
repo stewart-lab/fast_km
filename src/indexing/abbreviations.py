@@ -36,6 +36,7 @@ MIN_SHARE = 0.8              # share of its definitions its most common meaning 
 MIN_SPELLING_SHARE = 0.02    # share of those definitions a spelling of that meaning needs to be kept
 MAX_SPELLINGS = 10
 SAME_MEANING_SIMILARITY = 0.8  # how alike two long forms' letters must be to count as one meaning
+MIN_NESTED_SHARE = 0.01       # share of a short form's definitions a spelling needs to be checked for nested abbreviations
 SAME_WORD_SIMILARITY = 0.85    # ... and how alike each pair of words that differ ('immune deficiency' vs 'immunodeficiency')
 
 # 'long form (SF)': the short form is 2-10 characters, at most two words, and starts with a letter or digit
@@ -121,23 +122,59 @@ def select_groups(counts: collections.Counter) -> list[list[str]]:
             meanings[term][_meaning_key(long)][long] += n
 
     groups = []
+    top_spellings = dict[str, list[str]]()  # filled as needed by _same_meaning_written_out
     for short, by_key in meanings.items():
         # the most common meaning, with every spelling close enough to it to be the same
         # ('acquired immune deficiency syndrome', 'herpes simplex virus 2' vs '... type 2')
         key_counts = {key: sum(spellings.values()) for key, spellings in by_key.items()}
-        top_key = max(key_counts, key=key_counts.get)
-        top_long = by_key[top_key].most_common(1)[0][0]
-        top = collections.Counter()
-        for key, spellings in by_key.items():
-            if key == top_key or _same_meaning(top_long, spellings.most_common(1)[0][0]):
-                top.update(spellings)
+        keys = sorted(key_counts, key=key_counts.get, reverse=True)
+        top_key, top_long = keys[0], by_key[keys[0]].most_common(1)[0][0]
+        top = collections.Counter(by_key[top_key])
+        n_top, n_left = key_counts[top_key], totals[short] - key_counts[top_key]
+        for key in keys[1:]:
+            # comparing spellings is slow, so stop once the rest can't change the outcome: either
+            # they can't bring the share up to MIN_SHARE, or it's reached and they're too rare to list
+            if n_top + n_left < MIN_SHARE * totals[short]:
+                break
+            if n_top >= MIN_SHARE * totals[short] and key_counts[key] < MIN_SPELLING_SHARE * n_top:
+                break
+            n_left -= key_counts[key]
+            long = by_key[key].most_common(1)[0][0]
+            if _same_meaning(top_long, long) or (
+                    key_counts[key] >= MIN_NESTED_SHARE * totals[short]
+                    and _same_meaning_written_out(short, top_long, long, meanings, top_spellings)):
+                top.update(by_key[key])
+                n_top += key_counts[key]
 
-        n_top = sum(top.values())
         if n_top / totals[short] < MIN_SHARE:
             continue
         spellings = [long for long, n in top.most_common(MAX_SPELLINGS) if n / n_top >= MIN_SPELLING_SHARE]
         groups.append([casings[short].most_common(1)[0][0]] + spellings)
     return groups
+
+def _same_meaning_written_out(short: str, long: str, other: str, meanings: dict, top_spellings: dict[str, list[str]]) -> bool:
+    """Papers sometimes use another abbreviation inside a long form: 'non-proliferative DR (NPDR)',
+    'NTM lung disease'. Such a long form is the same meaning as another if writing the nested
+    abbreviation out with one of its common meanings makes it so: 'non proliferative diabetic
+    retinopathy', 'nontuberculous mycobacteria lung disease'. Only meanings confirmed by this short
+    form's own spellings are used, so an abbreviation too ambiguous to expand by itself ('DR') can
+    still be resolved here."""
+    for nested_in, compared_with in ((long, other), (other, long)):
+        words = nested_in.split()
+        for i, word in enumerate(words):
+            if word == short or word not in meanings:
+                continue
+            if word not in top_spellings:
+                top_spellings[word] = _top_spellings(meanings[word])
+            for written_out in top_spellings[word]:
+                if _same_meaning(" ".join(words[:i] + [written_out] + words[i + 1:]), compared_with):
+                    return True
+    return False
+
+def _top_spellings(by_key: dict, n: int = 5) -> list[str]:
+    """The most common spelling of each of a short form's n most common meanings."""
+    top_keys = sorted(by_key, key=lambda key: sum(by_key[key].values()), reverse=True)[:n]
+    return [by_key[key].most_common(1)[0][0] for key in top_keys]
 
 def _search_term(short: str) -> str:
     return util.sanitize_term_for_search(short, keep_logical_operators=False)
