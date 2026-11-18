@@ -24,6 +24,7 @@ def data_dir():
     synonyms._synonym_cache.clear()
     synonyms._last_checked.clear()
     synonyms._verb_cache.clear()
+    synonyms._possessive_cache.clear()
     synonyms.get_variants.cache_clear()
     yield path
     shutil.rmtree(path, ignore_errors=True)
@@ -341,3 +342,23 @@ def test_plurals_used_mostly_as_verbs_are_left_out(data_dir: str):
     assert synonyms.expand_term("tumor", data_dir, ngram_sizes) == "(tumor|tumors)"
     # what the user typed is always searched
     assert synonyms.expand_term("leads", data_dir, ngram_sizes) == "(leads|lead)"
+
+def test_possessive_forms(data_dir: str):
+    # 'Alzheimer's disease' is indexed as 'alzheimer s disease'
+    counts = {"alzheimer s": 100, "alzheimer disease": 10, "breast s": 1, "breast cancer": 1000}
+    def ngram_sizes(ngrams):
+        return [counts.get(ngram, 0) for ngram in ngrams]
+
+    assert synonyms.expand_term("Alzheimer disease", data_dir, ngram_sizes) == "(alzheimer disease|alzheimer s disease|alzheimer diseases|alzheimer s diseases)"
+    # an 's' typed without an apostrophe is part of a name
+    assert "hemoglobin" not in synonyms.get_variants("Hemoglobin S", data_dir)
+    assert "protein deficiency" not in synonyms.get_variants("protein S deficiency", data_dir)
+    assert "breast s cancer" not in synonyms.expand_term("breast cancer", data_dir, ngram_sizes)
+    # typed as a possessive, the plain form is searched too
+    assert "alzheimer disease" in synonyms.get_variants("Alzheimer's disease", data_dir)
+    assert synonyms.get_variants("Graves' disease", data_dir) == ["graves disease", "graves diseases"]
+    # only words of the typed term get a possessive form, not words of its synonyms
+    synonyms.save_synonym_table(data_dir, 9999, [["Alzheimer Disease", "Senile Dementia of the Alzheimer Type", "Primary Senile Degenerative Dementia"]])
+    synonyms._synonym_cache.clear(); synonyms.get_variants.cache_clear()
+    counts["primary s"] = 100
+    assert "primary s senile degenerative dementia" not in synonyms.expand_term("Alzheimer disease", data_dir, ngram_sizes)

@@ -62,6 +62,7 @@ MIN_GENE_ALIAS_LENGTH = 3
 MAX_SUBTERMS = 100
 MAX_NGRAM_N = 20
 MAX_VARIANTS_PER_SUBTERM = 30
+POSSESSIVE_SHARE = 0.2  # see is_usually_possessive
 
 # words that mark a phrase's last word as not its head noun, and that rule out gene aliases
 FUNCTION_WORDS = {
@@ -75,7 +76,8 @@ _operator_split = re.compile(r"([&|()])")
 def expand_term(term: str, data_dir: str, ngram_sizes: Callable[[list[str]], list[int]] | None = None) -> str:
     """Rewrite each subterm of a (possibly composite) query term as an OR-group of its variants.
     ngram_sizes gives how common bi-grams are in the corpus; if given, plurals that are mostly
-    used as verbs are left out (see is_mostly_verb)."""
+    used as verbs are left out (see is_mostly_verb), and possessive forms that papers mostly use
+    are added (see is_usually_possessive)."""
     # parentheses used as text in term lists ('(+)-aldosterone', 'PROTEASE)') aren't split on
     term = util.remove_text_parentheses(term)
     parts = [p for p in _operator_split.split(term) if p.strip()]
@@ -95,6 +97,7 @@ def expand_term(term: str, data_dir: str, ngram_sizes: Callable[[list[str]], lis
         variants = get_variants(part, data_dir)
         if ngram_sizes is not None:
             variants = _drop_verb_forms(variants, data_dir, ngram_sizes)
+            variants = _add_possessives(variants, data_dir, ngram_sizes)
         out.append("(" + "|".join(variants[:per_subterm_cap]) + ")")
     return "".join(out)
 
@@ -128,6 +131,59 @@ def _is_mostly_verb_cached(word: str, data_dir: str, ngram_sizes: Callable[[list
 
 _verb_cache = dict[tuple[str, str], bool]()  # cleared with the synonym table, so it follows the corpus
 
+def is_usually_possessive(word: str, next_word: str, ngram_sizes: Callable[[list[str]], list[int]]) -> bool:
+    """Whether papers often write a word as a possessive: 'Alzheimer's disease' is indexed as
+    'alzheimer s disease', so a search for 'Alzheimer disease' misses most papers. Eponyms are
+    written 'X's' at least POSSESSIVE_SHARE as often as 'X <next word>' ('alzheimer s' 10x as often
+    as 'alzheimer disease'); other words almost never are ('breast s' vs 'breast cancer', 0.0003x)."""
+    possessive, plain = ngram_sizes([f"{word} s", f"{word} {next_word}"])
+    return possessive > 0 and possessive >= POSSESSIVE_SHARE * plain
+
+def _add_possessives(variants: list[str], data_dir: str, ngram_sizes: Callable[[list[str]], list[int]]) -> list[str]:
+    # only words of the typed subterm, judged with the word after them there, so a rare variant
+    # ('breast cancers') can't tip it, and synonyms don't get odd forms ('lewy body s ...')
+    possessive_words = dict[str, bool]()
+    for variant in variants[:1]:
+        words = variant.split(" ")
+        for word, next_word in zip(words, words[1:]):
+            if word not in possessive_words and next_word != "s" and word.isalpha() and len(word) >= 3 and word not in FUNCTION_WORDS:
+                key = (data_dir, word, next_word)
+                if key not in _possessive_cache:
+                    _possessive_cache[key] = is_usually_possessive(word, next_word, ngram_sizes)
+                possessive_words[word] = _possessive_cache[key]
+
+    # the typed subterm's possessive comes right after it; the other variants' come last, so
+    # they never push a synonym past the variant cap
+    typed_possessive, possessives = None, []
+    for n, variant in enumerate(variants):
+        words = variant.split(" ")
+        if "s" in words:
+            continue  # already possessive
+        for i, word in enumerate(words[:-1]):
+            if possessive_words.get(word):
+                possessive = " ".join(words[:i + 1] + ["s"] + words[i + 1:])
+                if possessive not in variants and possessive not in possessives and possessive != typed_possessive:
+                    if n == 0:
+                        typed_possessive = possessive
+                    else:
+                        possessives.append(possessive)
+                break
+    return variants[:1] + ([typed_possessive] if typed_possessive else []) + variants[1:] + possessives
+
+_possessive_cache = dict[tuple[str, str, str], bool]()
+
+_typed_possessive = re.compile(r"[A-Za-z]{3,}['\u2019]s\b")
+
+def _typed_without_possessive(subterm: str, normalized: str) -> str | None:
+    """'Crohn's disease' (normalized 'crohn s disease') -> 'crohn disease'. Only when typed with an
+    apostrophe: an 's' on its own is often part of a name ('hemoglobin S', 'protein S deficiency')."""
+    return _without_possessive(normalized) if _typed_possessive.search(subterm) else None
+
+def _without_possessive(phrase: str) -> str | None:
+    words = phrase.split(" ")
+    kept = [w for i, w in enumerate(words) if not (w == "s" and i > 0 and words[i - 1].isalpha() and len(words[i - 1]) >= 3)]
+    return " ".join(kept) if len(kept) < len(words) else None
+
 @functools.lru_cache(maxsize=100_000)
 def get_variants(subterm: str, data_dir: str) -> list[str]:
     """Return the subterm's variants, with the subterm itself first."""
@@ -151,12 +207,17 @@ def get_variants(subterm: str, data_dir: str) -> list[str]:
         acronyms = acronyms | {normalized}
         lookup = [(table.acronym_synonyms, normalized)]
     else:
-        lookup = [(table.word_synonyms, key) for key in [normalized] + _inflections(normalized)]
+        keys = [normalized] + _inflections(normalized)
+        if without_possessive := _typed_without_possessive(subterm, normalized):
+            keys.append(without_possessive)  # 'Crohn's disease' -> MeSH 'crohn disease'
+        lookup = [(table.word_synonyms, key) for key in keys]
         if not any(key in synonyms for synonyms, key in lookup):
             lookup.append((table.acronym_synonyms, normalized))  # e.g. 'aids' written in lowercase
 
     # MeSH synonyms (look up the singular form too, e.g. 'breast tumors' -> 'breast tumor')
     variants = [normalized]
+    if not typed_acronym and (without_possessive := _typed_without_possessive(subterm, normalized)):
+        variants.append(without_possessive)
     for synonyms, key in lookup:
         for synonym in synonyms.get(key, []):
             if synonym not in variants and synonym not in acronyms:
@@ -242,6 +303,7 @@ def _drop_stale_cache(data_dir: str) -> None:
         del _synonym_cache[data_dir]
         get_variants.cache_clear()
         _verb_cache.clear()
+        _possessive_cache.clear()
 
 def load_synonyms(data_dir: str) -> SynonymTable:
     """Map each term to all of its synonyms, and find the terms that end in an acronym.
