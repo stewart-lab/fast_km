@@ -475,6 +475,15 @@ class Index():
         progress = 0.75
         yield progress
 
+        ## --- refresh the synonym table, if synonym expansion is used here ---
+        # so searches don't have to wait for a new MeSH year to download. optional: on failure,
+        # searches keep using the current table.
+        if os.path.exists(os.path.join(self.data_dir, synonyms.SYNONYMS_FILENAME)):
+            try:
+                synonyms.refresh_synonym_table(self.data_dir)
+            except Exception as e:
+                print(f"Could not refresh synonyms: {e}")
+
 
         ## --- update disk cache ---
 
@@ -553,6 +562,10 @@ class Index():
 
     def search_documents(self, term: str, start_year: int = MIN_CENSOR_YEAR, end_year: int = MAX_CENSOR_YEAR) -> set[int]:
         """Search the documents for a term, return all matching PMIDs"""
+        # only subterms the user wrote are cached on disk, not every synonym of them, since
+        # the disk cache is re-searched on every indexing run
+        typed_subterms = set(util.get_subterms(util.sanitize_term_for_search(term)))
+
         # lowercase and remove punctuation but keep these chars: & | ( )
         term = self._prepare_term(term)
         if not term:
@@ -599,7 +612,7 @@ class Index():
             subterm_pmids[subterm] = this_subterm_pmids
 
             # cache trigrams+ on disk
-            if gram_n > 2:
+            if gram_n > 2 and subterm in typed_subterms:
                 data = _msgpack_dump(this_subterm_pmids)
                 cache_retries = 10
                 for _ in range(cache_retries):
@@ -915,7 +928,7 @@ class Index():
 
     def _prepare_term(self, term: str) -> str:
         if self.expand_synonyms:
-            term = synonyms.expand_term(term, self.data_dir)
+            term = synonyms.expand_term(term, self.data_dir, self._get_ngram_sizes)
         return util.sanitize_term_for_search(term)
 
     def _search_index(self, subterm: str) -> set[int]:
@@ -1177,6 +1190,7 @@ def _pmid_to_table_name(pmid: int) -> str:
 
 def _evaluate_composite_term(composite_term: str, pmids: dict[str, set[int]]) -> set[int]:
     namespace = dict()
+    names = dict[str, str]()
 
     subterms = util.get_subterms(composite_term, keep_logical_operators=True)
     for i in range(len(subterms)):
@@ -1186,14 +1200,12 @@ def _evaluate_composite_term(composite_term: str, pmids: dict[str, set[int]]) ->
         if subterm in util.logical_operators:
             continue
 
-        # we need to make the subterm a valid Python variable name
-        # 1. replace spaces with underscores
-        # 2. put an underscore in front, in case the subterm starts with a number
-        sanitized_subterm = "_" + subterm.replace(" ", "_")
-        
-        # add the subterm to eval namespace
-        namespace[sanitized_subterm] = pmids.get(subterm, set())
-        subterms[i] = sanitized_subterm
+        # give each subterm a generated variable name; names derived from the subterm aren't
+        # always valid, e.g. Python normalizes 'µ' (micro sign) to 'μ' in names, so it isn't found
+        if subterm not in names:
+            names[subterm] = f"_{len(names)}"
+            namespace[names[subterm]] = pmids.get(subterm, set())
+        subterms[i] = names[subterm]
     
     space_replaced_composite_term = " ".join(subterms)
     try:

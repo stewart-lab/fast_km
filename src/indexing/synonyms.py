@@ -31,6 +31,7 @@ data dir. It is rebuilt when a newer MeSH year is released.
 
 import csv
 import dataclasses
+import fcntl
 import functools
 import gzip
 import json
@@ -40,6 +41,7 @@ import tempfile
 import time
 import urllib.request
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 import inflect
 import src.indexing.indexing_util as util
 from src.fast_km_exception import FastKmException
@@ -50,7 +52,9 @@ MESH_URLS = [
 ]
 HGNC_URL = "https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt"
 SYNONYMS_FILENAME = "synonyms.json"
-RELOAD_AFTER_SECONDS = 24 * 60 * 60
+RELOAD_AFTER_SECONDS = 24 * 60 * 60            # workers reload the table at least this often
+RETRY_REFRESH_AFTER_SECONDS = 7 * 24 * 60 * 60  # how long to wait before retrying an out of date table's refresh
+CHECK_FILES_EVERY_SECONDS = 60                  # how often workers check whether the table files changed
 TABLE_FORMAT = 3  # bump when the stored layout changes, so old tables are rebuilt
 MIN_GENE_ALIAS_LENGTH = 3
 
@@ -68,8 +72,10 @@ FUNCTION_WORDS = {
 _inflect_engine = inflect.engine()
 _operator_split = re.compile(r"([&|()])")
 
-def expand_term(term: str, data_dir: str) -> str:
-    """Rewrite each subterm of a (possibly composite) query term as an OR-group of its variants."""
+def expand_term(term: str, data_dir: str, ngram_sizes: Callable[[list[str]], list[int]] | None = None) -> str:
+    """Rewrite each subterm of a (possibly composite) query term as an OR-group of its variants.
+    ngram_sizes gives how common bi-grams are in the corpus; if given, plurals that are mostly
+    used as verbs are left out (see is_mostly_verb)."""
     if not _parentheses_balanced(term):
         # a stray parenthesis from a pasted list ('PROTEASE)') isn't grouping anything, and
         # would make the expanded query invalid
@@ -88,9 +94,41 @@ def expand_term(term: str, data_dir: str) -> str:
         if part in util.logical_operators:
             out.append(part)
             continue
-        variants = get_variants(part, data_dir)[:per_subterm_cap]
-        out.append("(" + "|".join(variants) + ")")
+        variants = get_variants(part, data_dir)
+        if ngram_sizes is not None:
+            variants = _drop_verb_forms(variants, data_dir, ngram_sizes)
+        out.append("(" + "|".join(variants[:per_subterm_cap]) + ")")
     return "".join(out)
+
+# words that come before a verb ('it leads', 'which binds') and before a plural noun ('of vaccines', 'these tumors')
+_VERB_CONTEXT = ("it", "which", "also")
+_NOUN_CONTEXT = ("of", "these", "the", "with", "for")
+
+def is_mostly_verb(word: str, ngram_sizes: Callable[[list[str]], list[int]]) -> bool:
+    """Whether a word ending in -s is used more as a verb than as a plural noun in the corpus.
+    'lead' (the metal) would otherwise also match 'leads', which is nearly always 'leads to'."""
+    verb = sum(ngram_sizes([f"{w} {word}" for w in _VERB_CONTEXT]))
+    noun = sum(ngram_sizes([f"{w} {word}" for w in _NOUN_CONTEXT]))
+    return verb > noun
+
+def _drop_verb_forms(variants: list[str], data_dir: str, ngram_sizes: Callable[[list[str]], list[int]]) -> list[str]:
+    # only plurals we added; the subterm itself is always kept
+    kept = variants[:1]
+    for variant in variants[1:]:
+        last = variant.split(" ")[-1]
+        added_plural = last.endswith("s") and any(other in variants for other in _inflections(variant))
+        if added_plural and _is_mostly_verb_cached(last, data_dir, ngram_sizes):
+            continue
+        kept.append(variant)
+    return kept
+
+def _is_mostly_verb_cached(word: str, data_dir: str, ngram_sizes: Callable[[list[str]], list[int]]) -> bool:
+    key = (data_dir, word)
+    if key not in _verb_cache:
+        _verb_cache[key] = is_mostly_verb(word, ngram_sizes)
+    return _verb_cache[key]
+
+_verb_cache = dict[tuple[str, str], bool]()  # cleared with the synonym table, so it follows the corpus
 
 def _parentheses_balanced(term: str) -> bool:
     depth = 0
@@ -187,20 +225,27 @@ class SynonymTable:
 
 _synonym_cache = dict[str, SynonymTable]()
 _cache_state = dict[str, tuple[tuple, float]]()  # data dir -> (table files' mtimes, time loaded)
+_last_checked = dict[str, float]()                # data dir -> time the table files were last checked
 
 def _table_mtimes(data_dir: str) -> tuple:
     paths = [os.path.join(data_dir, name) for name in (SYNONYMS_FILENAME,)]
     return tuple(os.path.getmtime(p) if os.path.exists(p) else None for p in paths)
 
 def _drop_stale_cache(data_dir: str) -> None:
-    """Workers live a long time, so reload when the table file changes,
-    and check daily whether a new MeSH year is out."""
+    """Workers live a long time, so reload when the table file changes, and check daily whether
+    a new MeSH year is out. Files are checked at most every CHECK_FILES_EVERY_SECONDS, since this
+    runs on every search and the data dir may be on a network filesystem."""
     if data_dir not in _synonym_cache:
         return
+    now = time.time()
+    if now - _last_checked.get(data_dir, 0.0) < CHECK_FILES_EVERY_SECONDS:
+        return
+    _last_checked[data_dir] = now
     mtimes, loaded_at = _cache_state.get(data_dir, (None, 0.0))
-    if mtimes != _table_mtimes(data_dir) or time.time() - loaded_at > RELOAD_AFTER_SECONDS:
+    if mtimes != _table_mtimes(data_dir) or now - loaded_at > RELOAD_AFTER_SECONDS:
         del _synonym_cache[data_dir]
         get_variants.cache_clear()
+        _verb_cache.clear()
 
 def load_synonyms(data_dir: str) -> SynonymTable:
     """Map each term to all of its synonyms, and find the terms that end in an acronym.
@@ -208,34 +253,55 @@ def load_synonyms(data_dir: str) -> SynonymTable:
     if data_dir in _synonym_cache:
         return _synonym_cache[data_dir]
 
-    path = os.path.join(data_dir, SYNONYMS_FILENAME)
-    stored = None
-    if os.path.exists(path):
-        with open(path) as f:
-            stored = json.load(f)
-
-    # MeSH for year Y is released late in year Y-1, so a table older than this year is out of date.
-    # a failed refresh is retried at most once a day, so jobs don't each wait on an unreachable NLM.
-    if stored is not None and stored.get("format") != TABLE_FORMAT:
-        stored = None
-    outdated = stored is not None and stored.get("year", 0) < time.localtime().tm_year
-    if stored is None or (outdated and time.time() - os.path.getmtime(path) > 24 * 60 * 60):
-        try:
-            build_synonym_table(data_dir)
-            with open(path) as f:
-                stored = json.load(f)
-        except FastKmException as e:
-            if stored is None:
-                raise
-            os.utime(path)
-            print(f"Could not refresh synonyms, using the {stored.get('year')} table: {e}")
-
+    stored = refresh_synonym_table(data_dir)
     table = SynonymTable(dict(), dict(), set())
     _add_groups(table, stored["groups"], stored["acronyms"])
 
     _synonym_cache[data_dir] = table
     _cache_state[data_dir] = (_table_mtimes(data_dir), time.time())
     return table
+
+def refresh_synonym_table(data_dir: str) -> dict:
+    """Build the table if it is missing or in an old format, or try to rebuild it if it is from
+    an older MeSH year, and return its contents. Called by the indexing job, so searches rarely
+    have to wait for the download, and by the first search that needs the table."""
+    path = os.path.join(data_dir, SYNONYMS_FILENAME)
+    stored = _read_table(path)
+    if not _needs_refresh(stored, path):
+        return stored
+
+    # one worker downloads and builds; the others wait for it, then use its table
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(data_dir, SYNONYMS_FILENAME + ".lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        stored = _read_table(path)
+        if not _needs_refresh(stored, path):
+            return stored
+        try:
+            build_synonym_table(data_dir)
+            stored = _read_table(path)
+        except FastKmException as e:
+            if stored is None:
+                raise
+            os.utime(path)  # don't retry until RETRY_REFRESH_AFTER_SECONDS have passed
+            print(f"Could not refresh synonyms, using the {stored.get('year')} table: {e}")
+    return stored
+
+def _read_table(path: str) -> dict | None:
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        stored = json.load(f)
+    return stored if stored.get("format") == TABLE_FORMAT else None
+
+def _needs_refresh(stored: dict | None, path: str) -> bool:
+    # MeSH for year Y is released late in year Y-1, so a table older than this year is out of date.
+    # a table that couldn't be refreshed, or could only be built from an older MeSH year because
+    # this year's isn't out yet, is tried again after a while rather than on every search.
+    if stored is None:
+        return True
+    outdated = stored.get("year", 0) < time.localtime().tm_year
+    return outdated and time.time() - os.path.getmtime(path) > RETRY_REFRESH_AFTER_SECONDS
 
 def _add_groups(table: SynonymTable, groups: list[list[str]], acronyms: list[list[str]]) -> None:
     for group, group_acronyms in zip(groups, acronyms):

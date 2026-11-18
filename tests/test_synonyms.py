@@ -22,6 +22,8 @@ def data_dir():
     os.makedirs(path)
     synonyms.save_synonym_table(path, 9999, MESH_GROUPS)
     synonyms._synonym_cache.clear()
+    synonyms._last_checked.clear()
+    synonyms._verb_cache.clear()
     synonyms.get_variants.cache_clear()
     yield path
     shutil.rmtree(path, ignore_errors=True)
@@ -86,8 +88,8 @@ def test_search_with_expansion(data_dir: str):
 
 def _make_outdated(data_dir: str):
     synonyms.save_synonym_table(data_dir, 2000, MESH_GROUPS)
-    two_days_ago = time.time() - 2 * 24 * 60 * 60
-    os.utime(os.path.join(data_dir, synonyms.SYNONYMS_FILENAME), (two_days_ago, two_days_ago))
+    long_ago = time.time() - synonyms.RETRY_REFRESH_AFTER_SECONDS - 60
+    os.utime(os.path.join(data_dir, synonyms.SYNONYMS_FILENAME), (long_ago, long_ago))
 
 def test_outdated_table_is_rebuilt(data_dir: str, monkeypatch):
     _make_outdated(data_dir)
@@ -109,7 +111,7 @@ def test_outdated_table_is_kept_if_refresh_fails(data_dir: str, monkeypatch):
     monkeypatch.setattr(synonyms, "build_synonym_table", failing_build)
     assert "myocardial infarction" in synonyms.get_variants("heart attack", data_dir)
 
-    # the next job doesn't retry the same day
+    # the next job doesn't retry right away
     synonyms._synonym_cache.clear()
     synonyms.load_synonyms(data_dir)
     assert len(attempts) == 1
@@ -269,3 +271,65 @@ def test_stray_parentheses_are_ignored(data_dir: str):
     # e.g. 'PROTEASE)' in a pasted drug list; the expanded query must still be valid
     assert synonyms.expand_term("tumor)", data_dir) == synonyms.expand_term("tumor", data_dir)
     assert synonyms.expand_term("(tumor", data_dir) == synonyms.expand_term("tumor", data_dir)
+
+def test_table_from_an_older_mesh_year_is_not_rebuilt_on_every_search(data_dir: str, monkeypatch):
+    # e.g. in January, before this year's MeSH is out, the build falls back to last year's
+    _make_outdated(data_dir)
+    attempts = []
+    def fallback_build(data_dir: str, year: int | None = None):
+        attempts.append(1)
+        synonyms.save_synonym_table(data_dir, 2000, MESH_GROUPS)
+
+    monkeypatch.setattr(synonyms, "build_synonym_table", fallback_build)
+    synonyms.load_synonyms(data_dir)
+    synonyms._synonym_cache.clear()
+    synonyms.load_synonyms(data_dir)
+    assert len(attempts) == 1
+
+def test_indexing_refreshes_the_synonym_table(data_dir: str, monkeypatch):
+    _make_outdated(data_dir)
+    def fake_build(data_dir: str, year: int | None = None):
+        synonyms.save_synonym_table(data_dir, 9999, [["Heart Attack", "Cardiac Infarction"]])
+    monkeypatch.setattr(synonyms, "build_synonym_table", fake_build)
+
+    idx = Index(data_dir)
+    idx.add_or_update_documents([Document(pmid=1, pub_year=2020, title="a study", abstract="heart attack", origin="test.xml.gz")])
+    for _progress in idx.index_documents():
+        pass
+    idx.close()
+    with open(os.path.join(data_dir, synonyms.SYNONYMS_FILENAME)) as f:
+        assert json.load(f)["year"] == 9999
+
+def test_expanded_variants_are_not_cached_on_disk(data_dir: str):
+    idx = Index(data_dir, expand_synonyms=True)
+    idx.add_or_update_documents([Document(pmid=1, pub_year=2020, title="a study", abstract="cancer of the breast", origin="test.xml.gz")])
+    for _progress in idx.index_documents():
+        pass
+    assert idx.search_documents("cancer of the breast") == {1}
+    assert idx.search_documents("breast cancer") == {1}
+    cached = {row[0] for row in idx._idx_cursor.execute("SELECT term FROM query_cache")}
+    idx.close()
+    # the user's phrase is cached, its synonyms aren't
+    assert cached == {"cancer of the breast"}
+
+def test_composite_terms_with_non_ascii_letters(data_dir: str):
+    # with expansion a single term becomes a composite one; 'µ' (micro sign) isn't a valid
+    # Python name as is, so it must not end up in the evaluated expression
+    idx = Index(data_dir, expand_synonyms=True)
+    idx.add_or_update_documents([Document(pmid=1, pub_year=2020, title="a study", abstract="the µ-opioid receptor", origin="test.xml.gz")])
+    for _progress in idx.index_documents():
+        pass
+    assert idx.search_documents("µ-opioid receptor") == {1}
+    assert idx.search_documents("µ-opioid receptor|kappa receptor") == {1}
+    idx.close()
+
+def test_plurals_used_mostly_as_verbs_are_left_out(data_dir: str):
+    # 'leads' is nearly always the verb ('which leads to'), 'tumors' the plural noun ('of tumors')
+    counts = {"it leads": 50, "which leads": 40, "the leads": 5, "of tumors": 80, "these tumors": 20, "which tumors": 1}
+    def ngram_sizes(ngrams):
+        return [counts.get(ngram, 0) for ngram in ngrams]
+
+    assert synonyms.expand_term("lead", data_dir, ngram_sizes) == "(lead)"
+    assert synonyms.expand_term("tumor", data_dir, ngram_sizes) == "(tumor|tumors)"
+    # what the user typed is always searched
+    assert synonyms.expand_term("leads", data_dir, ngram_sizes) == "(leads|lead)"
