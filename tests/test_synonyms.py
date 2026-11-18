@@ -233,6 +233,9 @@ def test_hyphenated_names(data_dir: str):
     assert synonyms.get_variants("IL-6", data_dir) == ["il 6", "il6"]
     # a single letter would match ordinary text, like 'p 53' in 'p = 0.53'
     assert synonyms.get_variants("p53", data_dir) == ["p53"]
+    # not when the letters are a word often followed by a number: 'the ratio is 2', 'stage 4'
+    assert synonyms.get_variants("IS2", data_dir) == ["is2"]
+    assert synonyms.get_variants("stage4", data_dir) == ["stage4"]
 
 def test_typed_acronyms_only_match_acronyms(data_dir: str):
     synonyms.save_synonym_table(data_dir, 9999, [["Id", "Ids"], ["IDS", "iduronate 2-sulfatase", "ID2S"],
@@ -271,6 +274,11 @@ def test_stray_parentheses_are_ignored(data_dir: str):
     # e.g. 'PROTEASE)' in a pasted drug list; the expanded query must still be valid
     assert synonyms.expand_term("tumor)", data_dir) == synonyms.expand_term("tumor", data_dir)
     assert synonyms.expand_term("(tumor", data_dir) == synonyms.expand_term("tumor", data_dir)
+    # parentheses used as text, e.g. '(+)-aldosterone'
+    assert synonyms.expand_term("(+)-tumor", data_dir) == synonyms.expand_term("tumor", data_dir)
+    assert synonyms.expand_term("heart attack (acute)", data_dir) == synonyms.expand_term("heart attack acute", data_dir)
+    # but grouping parentheses are kept
+    assert synonyms.expand_term("(tumor|rat)&heart attack", data_dir).startswith("((tumor|tumors)|(rat))&")
 
 def test_table_from_an_older_mesh_year_is_not_rebuilt_on_every_search(data_dir: str, monkeypatch):
     # e.g. in January, before this year's MeSH is out, the build falls back to last year's

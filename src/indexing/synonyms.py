@@ -76,10 +76,8 @@ def expand_term(term: str, data_dir: str, ngram_sizes: Callable[[list[str]], lis
     """Rewrite each subterm of a (possibly composite) query term as an OR-group of its variants.
     ngram_sizes gives how common bi-grams are in the corpus; if given, plurals that are mostly
     used as verbs are left out (see is_mostly_verb)."""
-    if not _parentheses_balanced(term):
-        # a stray parenthesis from a pasted list ('PROTEASE)') isn't grouping anything, and
-        # would make the expanded query invalid
-        term = term.replace("(", " ").replace(")", " ")
+    # parentheses used as text in term lists ('(+)-aldosterone', 'PROTEASE)') aren't split on
+    term = util.remove_text_parentheses(term)
     parts = [p for p in _operator_split.split(term) if p.strip()]
     n_subterms = sum(1 for p in parts if p not in util.logical_operators)
     if n_subterms == 0:
@@ -130,14 +128,6 @@ def _is_mostly_verb_cached(word: str, data_dir: str, ngram_sizes: Callable[[list
 
 _verb_cache = dict[tuple[str, str], bool]()  # cleared with the synonym table, so it follows the corpus
 
-def _parentheses_balanced(term: str) -> bool:
-    depth = 0
-    for c in term:
-        depth += {"(": 1, ")": -1}.get(c, 0)
-        if depth < 0:
-            return False
-    return depth == 0
-
 @functools.lru_cache(maxsize=100_000)
 def get_variants(subterm: str, data_dir: str) -> list[str]:
     """Return the subterm's variants, with the subterm itself first."""
@@ -185,15 +175,21 @@ def get_variants(subterm: str, data_dir: str) -> list[str]:
 
 _letters_then_digits = re.compile(r"^([a-z]{2,})(\d+)$")
 _letters_space_digits = re.compile(r"^([a-z]{2,}) (\d+)$")
+# words often followed by a number in running text ('the ratio is 2', 'at 3 months', 'stage 4');
+# 'is2' or 'stage4' as a name doesn't mean 'is 2' or 'stage 4' there
+_WORDS_BEFORE_NUMBERS = FUNCTION_WORDS | {
+    "is", "are", "was", "were", "be", "been", "no", "not", "than", "vs", "about", "over", "under",
+    "day", "days", "week", "weeks", "month", "months", "year", "years", "age", "aged", "hour", "hours",
+    "grade", "stage", "phase", "step", "group", "groups", "level", "dose", "doses", "visit", "cycle", "arm",
+}
 
 def _hyphenations(phrase: str) -> list[str]:
     """Hyphens become spaces in the index, so 'IL-6' is stored as 'il 6' and doesn't match 'il6'.
     Give the other spelling of names like 'il6' / 'il 6', 'covid19' / 'covid 19'."""
-    if match := _letters_then_digits.match(phrase):
-        return [f"{match[1]} {match[2]}"]
-    if match := _letters_space_digits.match(phrase):
-        return [f"{match[1]}{match[2]}"]
-    return []
+    match = _letters_then_digits.match(phrase) or _letters_space_digits.match(phrase)
+    if not match or match[1] in _WORDS_BEFORE_NUMBERS:
+        return []
+    return [f"{match[1]}{match[2]}" if " " in phrase else f"{match[1]} {match[2]}"]
 
 def _inflections(phrase: str) -> list[str]:
     """Plural/singular forms of a phrase, varying only its last word."""
