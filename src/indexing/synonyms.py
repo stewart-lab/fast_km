@@ -96,6 +96,11 @@ def expand_term(term: str, data_dir: str, ngram_sizes: Callable[[list[str]], lis
             variants = _add_possessives(variants, data_dir, ngram_sizes)
         part_variants.append(variants)
 
+    # in a list of alternatives ('CTLA4|CD152|...'), a variant that an earlier alternative already
+    # searches adds nothing: drop it, so it neither takes a slot nor is searched twice
+    if all(p == "|" for p in parts if p in util.logical_operators):
+        return "|".join("(" + "|".join(v) + ")" for v in _without_repeats(part_variants) if v)
+
     # stay under the subterm limit in search_documents(), or the whole query returns nothing
     caps = iter(_share_variant_budget([len(v) for v in part_variants]))
     variants = iter(part_variants)
@@ -106,6 +111,30 @@ def expand_term(term: str, data_dir: str, ngram_sizes: Callable[[list[str]], lis
         else:
             out.append("(" + "|".join(next(variants)[:next(caps)]) + ")")
     return "".join(out)
+
+def _without_repeats(part_variants: list[list[str]]) -> list[list[str]]:
+    """The variants each alternative searches, with no variant searched twice and at most
+    MAX_SUBTERMS in all. Alternatives take turns picking their next variant not yet taken (at most
+    MAX_VARIANTS_PER_SUBTERM each), so every alternative's own name comes first, even when an
+    earlier alternative's synonym list also contains it ('EPCAM' lists 'CD326' among ~60 names)."""
+    taken = set[str]()
+    kept = [[] for _ in part_variants]
+    next_i = [0] * len(part_variants)
+    total, picked = 0, True
+    while picked and total < MAX_SUBTERMS:
+        picked = False
+        for i, variants in enumerate(part_variants):
+            if total >= MAX_SUBTERMS or len(kept[i]) >= MAX_VARIANTS_PER_SUBTERM:
+                continue
+            while next_i[i] < len(variants) and variants[next_i[i]] in taken:
+                next_i[i] += 1
+            if next_i[i] < len(variants):
+                kept[i].append(variants[next_i[i]])
+                taken.add(variants[next_i[i]])
+                next_i[i] += 1
+                total += 1
+                picked = True
+    return kept
 
 def _share_variant_budget(counts: list[int]) -> list[int]:
     """How many variants each subterm may keep: at most MAX_VARIANTS_PER_SUBTERM each, and

@@ -373,3 +373,35 @@ def test_unused_variant_slots_go_to_other_subterms():
     assert synonyms._share_variant_budget([5, 50]) == [5, 30]
     # too many subterms for the budget: equal shares, at least one each
     assert synonyms._share_variant_budget([30] * 5) == [20] * 5
+
+def test_alternatives_do_not_repeat_variants(data_dir: str):
+    synonyms.save_synonym_table(data_dir, 9999, [["CTLA4", "CD152", "cytotoxic T-lymphocyte associated protein 4"]])
+    synonyms._synonym_cache.clear(); synonyms.get_variants.cache_clear()
+    expanded = synonyms.expand_term("CTLA4|CD152", data_dir)
+    variants = [v for v in expanded.replace("(", "").replace(")", "").split("|")]
+    assert len(variants) == len(set(variants))
+    assert set(variants) == {"ctla4", "ctla 4", "cd152", "cd 152", "cytotoxic t lymphocyte associated protein 4"}
+    # with '&' the parts are separate conditions, so each keeps its variants
+    assert synonyms.expand_term("CTLA4&CD152", data_dir).count("cd152") == 2
+
+def test_synonym_rules_use_stored_sizes_of_ngrams_in_memory(tmp_path):
+    idx = Index(str(tmp_path))
+    idx._ngram_cache["it leads"] = {1}
+    sizes = idx._get_stored_ngram_sizes(["it leads"])
+    idx.close()
+    # _get_ngram_sizes reports 1 for ngrams in memory, which would read as rare
+    assert sizes == [0]
+
+def test_repeats_are_only_dropped_if_searched_earlier():
+    # 'cd326' is past the first alternative's share, so the second alternative still searches it
+    first = [f"epcam name {i}" for i in range(40)] + ["cd326"]
+    second = ["cd326", "cd 326"]
+    kept = synonyms._without_repeats([first, second])
+    assert "cd326" not in kept[0] and "cd326" in kept[1]
+    assert sum(len(k) for k in kept) <= synonyms.MAX_SUBTERMS
+    # each alternative's own name comes first, and nothing is searched twice
+    kept = synonyms._without_repeats([["epcam", "cd326", "egp2"], ["cd326", "cd 326"], ["egp2"]])
+    assert kept == [["epcam"], ["cd326", "cd 326"], ["egp2"]]
+    # a long synonym list doesn't crowd out later alternatives
+    kept = synonyms._without_repeats([[f"name {i}" for i in range(60)] + ["trop1"]] + [["trop1", "trop 1"]] * 1)
+    assert kept[1] == ["trop1", "trop 1"] and len(kept[0]) == synonyms.MAX_VARIANTS_PER_SUBTERM

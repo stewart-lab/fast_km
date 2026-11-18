@@ -579,7 +579,7 @@ class Index():
         subterms = util.get_subterms(term)
 
         # handle errors
-        if len(subterms) > 100:
+        if len(set(subterms)) > 100:
             print(f"Too many subterms in composite term, maximum of 100 allowed: {term}")
             return set()
         if not subterms:
@@ -588,7 +588,7 @@ class Index():
 
         # construct PMID sets for each subterm
         subterm_pmids = dict[str, set[int]]()
-        for subterm in subterms:
+        for subterm in dict.fromkeys(subterms):  # each distinct subterm is searched once
             gram_n = util.get_ngram_n(subterm)
 
             # handle errors
@@ -928,7 +928,7 @@ class Index():
 
     def _prepare_term(self, term: str) -> str:
         if self.expand_synonyms:
-            term = synonyms.expand_term(term, self.data_dir, self._get_ngram_sizes)
+            term = synonyms.expand_term(term, self.data_dir, self._get_stored_ngram_sizes)
         return util.sanitize_term_for_search(term)
 
     def _search_index(self, subterm: str) -> set[int]:
@@ -979,6 +979,16 @@ class Index():
                 continue
             shard_name = _ngram_to_shard_name(ngram)
             self._idx_cursor.execute(f'''SELECT SUM(size) FROM {shard_name} WHERE ngram = ?''', (ngram,))
+            sizes.append(self._idx_cursor.fetchone()[0] or 0)
+        return sizes
+
+    def _get_stored_ngram_sizes(self, ngrams: list[str]) -> list[int]:
+        """Stored size of each ngram's data, also for ngrams held in memory: for comparing how
+        common ngrams are (synonym rules), where _get_ngram_sizes' in-memory marker of 1 would
+        read as rare."""
+        sizes = []
+        for ngram in ngrams:
+            self._idx_cursor.execute(f'''SELECT SUM(size) FROM {_ngram_to_shard_name(ngram)} WHERE ngram = ?''', (ngram,))
             sizes.append(self._idx_cursor.fetchone()[0] or 0)
         return sizes
 
