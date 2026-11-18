@@ -425,3 +425,23 @@ def test_repeats_are_only_dropped_if_searched_earlier():
 def test_subterm_of_only_punctuation_has_no_variants(data_dir: str):
     assert synonyms._add_possessives([], data_dir, lambda ngrams: [0] * len(ngrams)) == []
     assert "cancer" in synonyms.expand_term("-- & cancer", data_dir, lambda ngrams: [0] * len(ngrams))
+
+def test_table_in_the_previous_format_is_used_if_it_cannot_be_rebuilt(data_dir: str, monkeypatch):
+    path = os.path.join(data_dir, synonyms.SYNONYMS_FILENAME)
+    with open(path) as f:
+        stored = json.load(f)
+    stored["format"] = 3
+    stored.pop("gene_symbols", None)
+    with open(path, "w") as f:
+        json.dump(stored, f)
+
+    attempts = []
+    def failing_build(data_dir: str, year: int | None = None):
+        attempts.append(1)
+        raise synonyms.FastKmException("NLM unreachable")
+    monkeypatch.setattr(synonyms, "build_synonym_table", failing_build)
+
+    assert "myocardial infarction" in synonyms.get_variants("heart attack", data_dir)
+    synonyms._synonym_cache.clear()
+    synonyms.load_synonyms(data_dir)
+    assert len(attempts) == 1  # not retried on every search

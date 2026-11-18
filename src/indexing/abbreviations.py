@@ -180,7 +180,13 @@ def _search_term(short: str) -> str:
     return util.sanitize_term_for_search(short, keep_logical_operators=False)
 
 _roman_numeral = re.compile(r"^(ii|iii|iv|vi|vii|viii|ix|xi|xii)$")
-_filler_words = {"a", "an", "the", "of", "in", "for", "with", "to", "and", "type"}
+# 's' is the possessive, indexed as its own word: 'Hodgkin's lymphoma' -> 'hodgkin s lymphoma'
+_filler_words = {"a", "an", "the", "of", "in", "for", "with", "to", "and", "type", "s"}
+# prefixes that reverse a word's meaning: 'hypotension' vs 'hypertension' are nearly the same letters.
+# not intra/inter: papers often write 'intracellular adhesion molecule' for ICAM, so they are mostly
+# misspellings of one meaning
+_opposite_prefixes = [{"hypo", "hyper"}, {"intra", "extra"}, {"pre", "post"},
+                      {"anti", "pro"}, {"under", "over"}, {"up", "down"}, {"in", "out"}]
 
 def _same_meaning(long: str, other: str) -> bool:
     """Two long forms are spellings of one meaning if they differ only in spacing, plurals, small
@@ -206,10 +212,25 @@ def _same_meaning(long: str, other: str) -> bool:
         a, b = _meaning_key(" ".join(words[i1:i2])), _meaning_key(" ".join(other_words[j1:j2]))
         if a != b and difflib.SequenceMatcher(None, a, b, autojunk=False).ratio() < SAME_WORD_SIMILARITY:
             return False
+        if _opposite(a, b):
+            return False
     return True
 
+def _opposite(a: str, b: str) -> bool:
+    """Whether two words differ only by prefixes of opposite meaning ('hypothyroidism', 'hyperthyroidism')."""
+    k = 0
+    while k < min(len(a), len(b)) and a[-1 - k] == b[-1 - k]:
+        k += 1
+    return {a[:len(a) - k], b[:len(b) - k]} in _opposite_prefixes
+
 def _series_markers(long: str) -> list[str]:
-    return sorted(w for w in long.split() if w.isdigit() or len(w) == 1 or _roman_numeral.match(w))
+    # numbers, roman numerals and letters naming a member of a series ('type 2', 'II', 'kinase A');
+    # not the article 'a', or the possessive 's' before another word ('hodgkin s lymphoma'). A final
+    # 's' is part of a name: 'hemoglobin s', 'protein s'
+    words = long.split()
+    return sorted(w for i, w in enumerate(words)
+                  if w.isdigit() or _roman_numeral.match(w)
+                  or (len(w) == 1 and (w not in ("a", "s") or (w == "s" and i == len(words) - 1))))
 
 def _meaning_key(long: str) -> str:
     """Spellings of the same long form share a key: 'human papilloma virus', 'human papillomaviruses'.
@@ -239,6 +260,12 @@ def update_abbreviation_table(data_dir: str, changed_tables: list[str], n_worker
     to_mine = [t for t in tables if t in changed_tables or not os.path.exists(_counts_path(counts_dir, t))]
     if not to_mine and synonyms.read_abbreviation_table(data_dir) is not None:
         return  # up to date
+
+    # drop a changed table's old counts before mining it, so if this run fails, the next one
+    # (which won't be told the table changed) still finds it has no counts and mines it
+    for table in to_mine:
+        if os.path.exists(_counts_path(counts_dir, table)):
+            os.remove(_counts_path(counts_dir, table))
 
     if len(to_mine) == 1:
         _mine_table(corpus_path, to_mine[0], counts_dir)

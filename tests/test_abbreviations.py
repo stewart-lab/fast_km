@@ -227,3 +227,43 @@ def test_names_with_digits_are_not_taken_for_other_abbreviations(data_dir: str):
     synonyms.save_abbreviation_table(data_dir, [["IL8", "interleukin 8"]])
     synonyms._synonym_cache.clear()
     assert "il8" in synonyms.get_variants("CXCL8", data_dir)
+
+def test_select_groups_keeps_opposites_apart():
+    counts = collections.Counter({
+        ("HFRT", "hypofractionated radiotherapy"): 60,
+        ("HFRT", "hyperfractionated radiotherapy"): 40,
+    })
+    # nearly the same letters, opposite meanings: 'HFRT' is ambiguous
+    assert abbreviations.select_groups(counts) == []
+    # but intra/inter is mostly a misspelling of one name
+    counts = collections.Counter({
+        ("ICAM", "intercellular adhesion molecule"): 85,
+        ("ICAM", "intracellular adhesion molecule"): 15,
+    })
+    assert abbreviations.select_groups(counts) == [["ICAM", "intercellular adhesion molecule", "intracellular adhesion molecule"]]
+
+def test_select_groups_counts_possessive_spellings_together():
+    counts = collections.Counter({
+        ("NHL", "non hodgkin s lymphoma"): 54,
+        ("NHL", "non hodgkin lymphoma"): 41,
+        ("NHL", "natural history of lymphoma"): 5,
+    })
+    assert abbreviations.select_groups(counts) == [["NHL", "non hodgkin s lymphoma", "non hodgkin lymphoma"]]
+    # but a final 's' is part of a name: hemoglobin S isn't hemoglobins
+    counts = collections.Counter({("HbS", "hemoglobin s"): 60, ("HbS", "hemoglobins"): 40})
+    assert abbreviations.select_groups(counts) == []
+
+def test_failed_mining_is_redone(data_dir: str, monkeypatch):
+    monkeypatch.setattr(abbreviations, "MIN_DEFINITIONS", 1)
+    _index(data_dir, [Document(pmid=1, pub_year=2020, title="a study", abstract="human papillomavirus (HPV)", origin="test.xml.gz")])
+    table = "documents_00m"
+    counts_file = abbreviations._counts_path(os.path.join(data_dir, abbreviations.COUNTS_DIRNAME), table)
+    assert os.path.exists(counts_file)
+
+    def failing_mine(corpus_path, table, counts_dir):
+        raise MemoryError("worker died")
+    monkeypatch.setattr(abbreviations, "_mine_table", failing_mine)
+    with pytest.raises(MemoryError):
+        abbreviations.update_abbreviation_table(data_dir, changed_tables=[table])
+    # the next run isn't told the table changed, but its old counts are gone, so it's mined again
+    assert not os.path.exists(counts_file)
