@@ -1,3 +1,4 @@
+import re
 import nltk
 from src.documents.document import Document
 
@@ -6,6 +7,8 @@ word_tokenizer_lop = nltk.RegexpTokenizer(r"\w+|[&|()]") # keep logical operator
 logical_operators = ['&', '|', '(', ')']
 
 def sanitize_term_for_search(term: str, keep_logical_operators=True) -> str:
+    if keep_logical_operators:
+        term = remove_text_parentheses(term)
     tokens = _tokenize_text(term, keep_logical_operators)
 
     if not keep_logical_operators:
@@ -18,6 +21,38 @@ def sanitize_term_for_search(term: str, keep_logical_operators=True) -> str:
             out.append(token)
         sanitized = ''.join(out)
     return sanitized
+
+_paren_token = re.compile(r"\w+|[&|()]")
+
+def remove_text_parentheses(term: str) -> str:
+    """Replace parentheses that aren't grouping with spaces. Term lists often use them as text,
+    e.g. 'acute (transverse) myelitis', '(+)-aldosterone', 'ATP-BINDING CASSETTE, SUB-FAMILY A
+    (ABC1), MEMBER 1', which as a query is not valid and matches nothing. A pair of parentheses is
+    grouping if it encloses a word and is bounded on both sides by an operator or by the term's
+    start or end, as in '(a|b)&c'. Unmatched parentheses are never grouping."""
+    tokens = [(m.group(), m.start()) for m in _paren_token.finditer(term)]
+    pairs, stack, text = [], [], []
+    for i, (token, _start) in enumerate(tokens):
+        if token == "(":
+            stack.append(i)
+        elif token == ")":
+            if stack:
+                pairs.append((stack.pop(), i))
+            else:
+                text.append(i)
+    text.extend(stack)
+
+    for open_i, close_i in pairs:
+        opens_group = open_i == 0 or tokens[open_i - 1][0] in ("(", "|", "&")
+        closes_group = close_i == len(tokens) - 1 or tokens[close_i + 1][0] in (")", "|", "&")
+        has_word = any(tokens[k][0] not in logical_operators for k in range(open_i + 1, close_i))
+        if not (opens_group and closes_group and has_word):
+            text.extend((open_i, close_i))
+
+    chars = list(term)
+    for i in text:
+        chars[tokens[i][1]] = " "
+    return "".join(chars)
 
 def get_subterms(composite_term: str, keep_logical_operators=False) -> list[str]:
     """Split a composite term into subterms based on logical operators."""
