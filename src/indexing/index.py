@@ -958,7 +958,7 @@ class Index():
     def _sanitize_and_expand_term(self, term: str, expand_synonyms: bool) -> str:
         if expand_synonyms:
             parts = synonyms.expansion(term, self.data_dir, self._get_stored_ngram_sizes)
-            subterms = [[subterm, variants] for subterm, variants in (p for p in parts if isinstance(p, tuple))]
+            subterms = [list(part) for part in parts if isinstance(part, tuple)]
             if any(len(variants) > 1 for _, variants in subterms) or len(subterms) > 1:
                 self.searched_expansions[term] = subterms
             term = synonyms.join_expansion(parts)
