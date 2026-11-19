@@ -59,7 +59,6 @@ ABBREVIATIONS_FILENAME = "abbreviations.json"  # built by abbreviations.py when 
 RELOAD_AFTER_SECONDS = 24 * 60 * 60            # workers reload the table at least this often
 RETRY_REFRESH_AFTER_SECONDS = 7 * 24 * 60 * 60  # how long to wait before retrying an out of date table's refresh
 CHECK_FILES_EVERY_SECONDS = 60                  # how often workers check whether the table files changed
-READABLE_TABLE_FORMATS = {3, 4}  # format 3 has no gene_symbols; it's used until it can be rebuilt
 TABLE_FORMAT = 4          # bump when the stored layout changes, so old tables are rebuilt
 ABBREVIATIONS_FORMAT = 1  # likewise for the abbreviations table
 MIN_GENE_ALIAS_LENGTH = 3
@@ -399,7 +398,7 @@ def load_synonyms(data_dir: str) -> SynonymTable:
     stored = refresh_synonym_table(data_dir)
     table = SynonymTable(dict(), dict(), set())
     _add_groups(table, stored["groups"], stored["acronyms"])
-    gene_symbols = set(stored.get("gene_symbols", []))  # not in format 3 tables
+    gene_symbols = set(stored["gene_symbols"])
 
     # MeSH and HGNC are curated, so mined abbreviations only fill in short forms they don't define,
     # and never give a gene symbol another meaning: 'AES' (now TLE5) isn't 'adverse events' (from 'AEs')
@@ -439,8 +438,6 @@ def refresh_synonym_table(data_dir: str) -> dict:
             if stored is None:
                 raise
             os.utime(path)  # don't retry until RETRY_REFRESH_AFTER_SECONDS have passed
-            with open(path + ".failed", "w"):
-                pass
             print(f"Could not refresh synonyms, using the {stored.get('year')} table: {e}")
     return stored
 
@@ -449,7 +446,7 @@ def _read_table(path: str) -> dict | None:
         return None
     with open(path) as f:
         stored = json.load(f)
-    return stored if stored.get("format") in READABLE_TABLE_FORMATS else None
+    return stored if stored.get("format") == TABLE_FORMAT else None
 
 def _needs_refresh(stored: dict | None, path: str) -> bool:
     # MeSH for year Y is released late in year Y-1, so a table older than this year is out of date.
@@ -457,11 +454,6 @@ def _needs_refresh(stored: dict | None, path: str) -> bool:
     # this year's isn't out yet, is tried again after a while rather than on every search.
     if stored is None:
         return True
-    if stored.get("format") != TABLE_FORMAT:
-        # an older layout is rebuilt right away, but after a failed rebuild only every
-        # RETRY_REFRESH_AFTER_SECONDS, using the old table meanwhile
-        failed = path + ".failed"
-        return not (os.path.exists(failed) and time.time() - os.path.getmtime(failed) < RETRY_REFRESH_AFTER_SECONDS)
     outdated = stored.get("year", 0) < time.localtime().tm_year
     return outdated and time.time() - os.path.getmtime(path) > RETRY_REFRESH_AFTER_SECONDS
 
