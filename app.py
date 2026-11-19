@@ -74,6 +74,8 @@ if not gvars.SECRET_DEEPSEEK_API_KEY:
 from src.jobs.serial_kinderminer.job import run_serial_kinderminer_job
 from src.jobs.kinderminer.job import run_kinderminer_job
 from src.jobs.hypothesis_eval.job import run_hypothesis_eval_job
+from src.jobs.expand.job import run_expand_job
+from src.jobs.expand.params import ExpandJobParams
 from src.jobs.kinderminer.params import KinderMinerJobParams
 from src.jobs.hypothesis_eval.params import HypothesisEvalJobParams
 from src.jobs.index_corpus.params import IndexingJobParams
@@ -142,6 +144,12 @@ def submit_kinderminer_job(params: KinderMinerJobParams, authorized: bool = Depe
         result = queue_job(run_kinderminer_job, priority, params)
     return JSONResponse(content=result, status_code=202)
 
+@app.post("/api/expand", tags=km_tags, status_code=status.HTTP_202_ACCEPTED)
+def submit_expand_job(params: ExpandJobParams, authorized: bool = Depends(verify_password)) -> JSONResponse:
+    """Preview what synonym expansion ('expand_synonyms') searches each term as, with paper counts."""
+    result = queue_job(run_expand_job, 'HIGH', params)
+    return JSONResponse(content=result, status_code=202)
+
 @app.post("/api/hypothesis_eval", tags=hyp_tags, status_code=status.HTTP_202_ACCEPTED)
 @app.post('/hypothesis_eval/api/jobs/', tags=deprecated_tags, status_code=status.HTTP_202_ACCEPTED)  # old endpoint for hypothesis eval
 def submit_hypothesis_eval_job(params: HypothesisEvalJobParams, authorized: bool = Depends(verify_password)) -> JSONResponse:
@@ -166,6 +174,7 @@ def cancel_job_by_id(id: str, authorized: bool = Depends(verify_password)) -> di
     return job_info
 
 @app.get("/api/kinderminer", tags=km_tags)
+@app.get("/api/expand", tags=km_tags)
 @app.get("/api/hypothesis_eval", tags=hyp_tags)
 @app.get("/api/index", tags=index_tags)
 @app.get('/skim/api/jobs', tags=deprecated_tags)  # old endpoint for SKiM/KM
