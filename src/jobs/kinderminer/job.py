@@ -11,7 +11,7 @@ def run_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
     if params.paired:
         return _run_paired_km(params)
     
-    idx = Index(gvars.data_dir)
+    idx = Index(gvars.data_dir, expand_synonyms=params.expand_synonyms)
 
     kg = None
     if params.query_knowledge_graph:
@@ -53,7 +53,7 @@ def run_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
     return results
 
 def _run_paired_km(params: KinderMinerJobParams) -> list[dict]:
-    idx = Index(gvars.data_dir)
+    idx = Index(gvars.data_dir, expand_synonyms=params.expand_synonyms)
 
     kg = None
     if params.query_knowledge_graph:

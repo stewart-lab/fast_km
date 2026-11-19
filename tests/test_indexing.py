@@ -238,3 +238,45 @@ def _delete_temp_dir(temp_dir: str):
             for name in dirs:
                 os.rmdir(os.path.join(root, name))
         os.rmdir(temp_dir)
+def test_cheapest_bi_gram_cover():
+    from src.indexing.index import _cheapest_bi_gram_cover
+    # 'cancer of the cervix': skip the huge 'of the'
+    assert _cheapest_bi_gram_cover([10, 1000, 10]) == [0, 2]
+    # every token must stay covered, so no gap of more than one bi-gram
+    assert _cheapest_bi_gram_cover([10, 1000, 999, 10]) == [0, 2, 3]
+    assert _cheapest_bi_gram_cover([5]) == [0]
+    assert _cheapest_bi_gram_cover([5, 5]) == [0, 1]
+
+def test_phrase_search_matches_brute_force(temp_dir: str):
+    import random
+    _delete_temp_dir(temp_dir)
+    temp_data_dir = os.path.join(temp_dir, "phrases")
+    idx = Index(temp_data_dir)
+
+    # a tiny vocabulary makes repeated and overlapping phrases common
+    rng = random.Random(0)
+    vocab = ["of", "the", "cancer", "cervix", "a", "b"]
+    docs = {}
+    for pmid in range(1, 301):
+        title = " ".join(rng.choice(vocab) for _ in range(rng.randint(0, 6)))
+        abstract = " ".join(rng.choice(vocab) for _ in range(rng.randint(1, 30)))
+        docs[pmid] = (title.split(), abstract.split())
+    idx.add_or_update_documents([Document(pmid=p, pub_year=2020, title=" ".join(t), abstract=" ".join(a), origin="test.xml.gz") for p, (t, a) in docs.items()])
+    for _progress in idx.index_documents():
+        pass
+
+    def brute_force(phrase: list[str]) -> set[int]:
+        n = len(phrase)
+        # phrases never span the title and abstract
+        return {p for p, (t, a) in docs.items()
+                if any(text[i:i + n] == phrase for text in (t, a) for i in range(len(text) - n + 1))}
+
+    for _ in range(200):
+        phrase = [rng.choice(vocab) for _ in range(rng.randint(3, 6))]
+        term = " ".join(phrase)
+        assert idx.search_documents(term) == brute_force(phrase), term
+        idx.delete_term_from_memory(term)
+
+    assert idx.search_documents("cancer zzz cervix") == set()
+    idx.close()
+    _delete_temp_dir(temp_dir)
