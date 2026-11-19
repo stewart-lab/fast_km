@@ -972,25 +972,18 @@ class Index():
 
     def _get_ngram_sizes(self, ngrams: list[str]) -> list[int]:
         """Stored size of each ngram's data in bytes (0 if it occurs nowhere), without loading the data."""
-        sizes = []
-        for ngram in ngrams:
-            if ngram in self._ngram_cache:
-                sizes.append(1) # already in memory, so nearly free
-                continue
-            shard_name = _ngram_to_shard_name(ngram)
-            self._idx_cursor.execute(f'''SELECT SUM(size) FROM {shard_name} WHERE ngram = ?''', (ngram,))
-            sizes.append(self._idx_cursor.fetchone()[0] or 0)
-        return sizes
+        # an ngram already in memory is nearly free to use
+        return [1 if ngram in self._ngram_cache else self._stored_ngram_size(ngram) for ngram in ngrams]
 
     def _get_stored_ngram_sizes(self, ngrams: list[str]) -> list[int]:
         """Stored size of each ngram's data, also for ngrams held in memory: for comparing how
         common ngrams are (synonym rules), where _get_ngram_sizes' in-memory marker of 1 would
         read as rare."""
-        sizes = []
-        for ngram in ngrams:
-            self._idx_cursor.execute(f'''SELECT SUM(size) FROM {_ngram_to_shard_name(ngram)} WHERE ngram = ?''', (ngram,))
-            sizes.append(self._idx_cursor.fetchone()[0] or 0)
-        return sizes
+        return [self._stored_ngram_size(ngram) for ngram in ngrams]
+
+    def _stored_ngram_size(self, ngram: str) -> int:
+        self._idx_cursor.execute(f'''SELECT SUM(size) FROM {_ngram_to_shard_name(ngram)} WHERE ngram = ?''', (ngram,))
+        return self._idx_cursor.fetchone()[0] or 0
 
     def _get_ngram_data(self, ngram: str) -> set[int] | dict[int, list[int]]:
         """PMIDs of a unigram, or PMIDs and positions of a bi-gram."""

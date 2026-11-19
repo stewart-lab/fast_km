@@ -405,3 +405,7 @@ def test_repeats_are_only_dropped_if_searched_earlier():
     # a long synonym list doesn't crowd out later alternatives
     kept = synonyms._without_repeats([[f"name {i}" for i in range(60)] + ["trop1"]] + [["trop1", "trop 1"]] * 1)
     assert kept[1] == ["trop1", "trop 1"] and len(kept[0]) == synonyms.MAX_VARIANTS_PER_SUBTERM
+
+def test_subterm_of_only_punctuation_has_no_variants(data_dir: str):
+    assert synonyms._add_possessives([], data_dir, lambda ngrams: [0] * len(ngrams)) == []
+    assert "cancer" in synonyms.expand_term("-- & cancer", data_dir, lambda ngrams: [0] * len(ngrams))

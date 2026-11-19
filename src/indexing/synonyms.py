@@ -174,16 +174,14 @@ def _drop_verb_forms(variants: list[str], data_dir: str, ngram_sizes: Callable[[
     for variant in variants[1:]:
         last = variant.split(" ")[-1]
         added_plural = last.endswith("s") and any(other in variants for other in _inflections(variant))
-        if added_plural and _is_mostly_verb_cached(last, data_dir, ngram_sizes):
-            continue
+        if added_plural:
+            key = (data_dir, last)
+            if key not in _verb_cache:
+                _verb_cache[key] = is_mostly_verb(last, ngram_sizes)
+            if _verb_cache[key]:
+                continue
         kept.append(variant)
     return kept
-
-def _is_mostly_verb_cached(word: str, data_dir: str, ngram_sizes: Callable[[list[str]], list[int]]) -> bool:
-    key = (data_dir, word)
-    if key not in _verb_cache:
-        _verb_cache[key] = is_mostly_verb(word, ngram_sizes)
-    return _verb_cache[key]
 
 _verb_cache = dict[tuple[str, str], bool]()  # cleared with the synonym table, so it follows the corpus
 
@@ -198,33 +196,35 @@ def is_usually_possessive(word: str, next_word: str, ngram_sizes: Callable[[list
 def _add_possessives(variants: list[str], data_dir: str, ngram_sizes: Callable[[list[str]], list[int]]) -> list[str]:
     # only words of the typed subterm, judged with the word after them there, so a rare variant
     # ('breast cancers') can't tip it, and synonyms don't get odd forms ('lewy body s ...')
+    if not variants:
+        return variants  # the subterm was only punctuation
     possessive_words = dict[str, bool]()
-    for variant in variants[:1]:
+    words = variants[0].split(" ")
+    for word, next_word in zip(words, words[1:]):
+        if word not in possessive_words and next_word != "s" and word.isalpha() and len(word) >= 3 and word not in FUNCTION_WORDS:
+            key = (data_dir, word, next_word)
+            if key not in _possessive_cache:
+                _possessive_cache[key] = is_usually_possessive(word, next_word, ngram_sizes)
+            possessive_words[word] = _possessive_cache[key]
+
+    def possessive_of(variant: str) -> str | None:
         words = variant.split(" ")
-        for word, next_word in zip(words, words[1:]):
-            if word not in possessive_words and next_word != "s" and word.isalpha() and len(word) >= 3 and word not in FUNCTION_WORDS:
-                key = (data_dir, word, next_word)
-                if key not in _possessive_cache:
-                    _possessive_cache[key] = is_usually_possessive(word, next_word, ngram_sizes)
-                possessive_words[word] = _possessive_cache[key]
+        if "s" in words:
+            return None  # already possessive
+        for i, word in enumerate(words[:-1]):
+            if possessive_words.get(word):
+                return " ".join(words[:i + 1] + ["s"] + words[i + 1:])
+        return None
 
     # the typed subterm's possessive comes right after it; the other variants' come last, so
     # they never push a synonym past the variant cap
-    typed_possessive, possessives = None, []
-    for n, variant in enumerate(variants):
-        words = variant.split(" ")
-        if "s" in words:
-            continue  # already possessive
-        for i, word in enumerate(words[:-1]):
-            if possessive_words.get(word):
-                possessive = " ".join(words[:i + 1] + ["s"] + words[i + 1:])
-                if possessive not in variants and possessive not in possessives and possessive != typed_possessive:
-                    if n == 0:
-                        typed_possessive = possessive
-                    else:
-                        possessives.append(possessive)
-                break
-    return variants[:1] + ([typed_possessive] if typed_possessive else []) + variants[1:] + possessives
+    typed = possessive_of(variants[0])
+    out = variants[:1] + ([typed] if typed and typed not in variants else []) + variants[1:]
+    for variant in variants[1:]:
+        possessive = possessive_of(variant)
+        if possessive and possessive not in out:
+            out.append(possessive)
+    return out
 
 _possessive_cache = dict[tuple[str, str, str], bool]()
 
@@ -255,25 +255,23 @@ def get_variants(subterm: str, data_dir: str) -> list[str]:
     # all-caps lists), but not one that's also an acronym ('IDS', 'AVEN', 'MS').
     table = load_synonyms(data_dir)
     acronyms = table.acronyms
-    typed_acronym = _is_acronym(subterm.split()[-1])
-    if typed_acronym and normalized not in acronyms and any(
-            key in table.word_synonyms for key in [normalized] + _inflections(normalized)):
-        typed_acronym = False
+    keys = [normalized] + _inflections(normalized)
+    typed_acronym = _is_acronym(subterm.split()[-1]) and (
+        normalized in acronyms or not any(key in table.word_synonyms for key in keys))
+
+    # MeSH synonyms (look up the singular form too, e.g. 'breast tumors' -> 'breast tumor')
+    variants = [normalized]
     if typed_acronym:
         acronyms = acronyms | {normalized}
         lookup = [(table.acronym_synonyms, normalized)]
     else:
-        keys = [normalized] + _inflections(normalized)
         if without_possessive := _typed_without_possessive(subterm, normalized):
             keys.append(without_possessive)  # 'Crohn's disease' -> MeSH 'crohn disease'
+            variants.append(without_possessive)
         lookup = [(table.word_synonyms, key) for key in keys]
-        if not any(key in synonyms for synonyms, key in lookup):
+        if not any(key in table.word_synonyms for key in keys):
             lookup.append((table.acronym_synonyms, normalized))  # e.g. 'aids' written in lowercase
 
-    # MeSH synonyms (look up the singular form too, e.g. 'breast tumors' -> 'breast tumor')
-    variants = [normalized]
-    if not typed_acronym and (without_possessive := _typed_without_possessive(subterm, normalized)):
-        variants.append(without_possessive)
     for synonyms, key in lookup:
         for synonym in synonyms.get(key, []):
             if synonym not in variants and synonym not in acronyms:
