@@ -26,6 +26,40 @@ def test_sanitize_term():
     sanitized_no_ops = util.sanitize_term_for_search(term, keep_logical_operators=False)
     assert sanitized_no_ops == "my search term"
 
+def test_text_parentheses():
+    # parentheses that group are kept
+    assert util.sanitize_term_for_search("(a|b)&c") == "(a|b)&c"
+    assert util.sanitize_term_for_search("x|(y & (z|w))") == "x|(y&(z|w))"
+    # parentheses used as text in term lists are not, so the term is still a valid query
+    assert util.sanitize_term_for_search("acute (transverse) myelitis") == "acute transverse myelitis"
+    assert util.sanitize_term_for_search("(+)-aldosterone") == "aldosterone"
+    assert util.sanitize_term_for_search("APOE4(+)") == "apoe4"
+    assert util.sanitize_term_for_search("SUB-FAMILY A (ABC1), MEMBER 1|ABCA1") == "sub family a abc1 member 1|abca1"
+    assert util.sanitize_term_for_search("(acute (transverse) myelitis)|foo") == "(acute transverse myelitis)|foo"
+    # unmatched parentheses
+    assert util.sanitize_term_for_search("PROTEASE)") == "protease"
+    assert util.sanitize_term_for_search("(a") == "a"
+    # a pair around an operator is left alone, or the operator would apply to the whole term
+    assert util.sanitize_term_for_search("cancer (breast|lung)") == "cancer(breast|lung)"
+    assert util.sanitize_term_for_search("x ((a|b)) y") == "x((a|b))y"
+    # strings stored with the old cleanup (knowledge graph heads and tails) can keep it
+    assert util.sanitize_term_for_search("Interleukin-6 (IL-6)", text_parentheses=False) == "interleukin 6(il 6)"
+
+def test_search_terms_with_text_parentheses(temp_dir: str):
+    _delete_temp_dir(temp_dir)
+    idx = Index(os.path.join(temp_dir, "text_parentheses"))
+    idx.add_or_update_documents([
+        Document(pmid=1, pub_year=2020, title="a case", abstract="Acute (transverse) myelitis after vaccination", origin="test.xml.gz"),
+        Document(pmid=2, pub_year=2020, title="a case", abstract="Elevated C-reactive protein (CRP) levels", origin="test.xml.gz"),
+    ])
+    for _progress in idx.index_documents():
+        pass
+    assert idx.search_documents("acute (transverse) myelitis") == {1}
+    assert idx.search_documents("elevated c-reactive protein (crp)") == {2}
+    assert idx.search_documents("(acute (transverse) myelitis)|(elevated c-reactive protein (crp))") == {1, 2}
+    idx.close()
+    _delete_temp_dir(temp_dir)
+
 def test_get_subterms():
     composite_term = "term1 & term2 | term3"
     subterms = util.get_subterms(composite_term, keep_logical_operators=True)

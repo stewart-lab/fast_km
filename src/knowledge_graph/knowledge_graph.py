@@ -25,10 +25,10 @@ class KnowledgeGraph:
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, [
             (
-                sanitize_term_for_search(relationship.head),
+                sanitize_term_for_search(relationship.head, text_parentheses=False),
                 relationship.head_type,
                 relationship.relation,
-                sanitize_term_for_search(relationship.tail),
+                sanitize_term_for_search(relationship.tail, text_parentheses=False),
                 relationship.tail_type,
                 json.dumps(relationship.evidence),
                 relationship.source
@@ -41,8 +41,9 @@ class KnowledgeGraph:
     def get_relationships(self, a_term: str, b_term: str, censor_year_lower: int = None, censor_year_upper: int = None, idx: Index = None) -> list[dict]:
         # TODO: handle logical operators
         
-        a_term = sanitize_term_for_search(a_term)
-        b_term = sanitize_term_for_search(b_term)
+        # stored heads and tails keep the parentheses they were saved with ('interleukin 6(il 6)')
+        a_term = sanitize_term_for_search(a_term, text_parentheses=False)
+        b_term = sanitize_term_for_search(b_term, text_parentheses=False)
 
         cache_key = (a_term, b_term)
         results = self.cache.get(cache_key, None)
