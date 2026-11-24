@@ -71,7 +71,7 @@ def data_dir():
 def test_abbreviations_are_mined_when_indexing(data_dir: str, monkeypatch):
     monkeypatch.setattr(abbreviations, "MIN_DEFINITIONS", 2)
 
-    idx = Index(data_dir, expand_synonyms=True)
+    idx = Index(data_dir)
     idx.add_or_update_documents([
         Document(pmid=1, pub_year=2020, title="a study", abstract="human papillomavirus (HPV) in women", origin="test.xml.gz"),
         Document(pmid=2, pub_year=2020, title="a study", abstract="human papillomavirus (HPV) vaccines", origin="test.xml.gz"),
@@ -82,7 +82,7 @@ def test_abbreviations_are_mined_when_indexing(data_dir: str, monkeypatch):
         pass
 
     assert os.path.exists(os.path.join(data_dir, abbreviations.ABBREVIATIONS_FILENAME))
-    assert idx.search_documents("HPV") == {1, 2, 3, 4}
+    assert idx.search_documents("HPV", expand_synonyms=True) == {1, 2, 3, 4}
     idx.close()
 
 def test_new_abbreviations_are_picked_up_without_restarting(data_dir: str):
