@@ -7,7 +7,7 @@ of a query is rewritten as an OR-group of its variants before searching:
 
     'breast cancer & CDK4'  ->  '(breast cancer|breast cancers|breast neoplasms|...)&(cdk4)'
 
-Variants come from these sources:
+Variants come from three sources:
   1. MeSH entry terms: if the subterm is a term of a MeSH concept, all terms of
      that concept are added. For descriptors, concepts are used rather than whole
      descriptors, since a descriptor also holds narrower concepts that would broaden
@@ -22,6 +22,9 @@ Variants come from these sources:
      that are ordinary words once lowercased ('Ray', 'Men', 'AND-1' -> 'and 1').
   3. Plural/singular inflection of the last word of each variant, unless the phrase has a
      function word in it ('cancer of the cervix'), since then the last word isn't the head noun.
+  4. Abbreviations defined in the corpus itself, e.g. 'human papillomavirus (HPV)'; see abbreviations.py.
+     They are only used when the short form is written the way papers write it ('HPV', 'Mg'), since
+     many collide with ordinary words in the lowercase index ('SPRINT' trial vs 'sprint').
 Names like 'IL6' also get their hyphenated spelling ('il 6', as 'IL-6' is indexed), and vice versa.
 
 The synonym table is built from NLM's MeSH descriptor and supplementary concept XML
@@ -52,10 +55,12 @@ MESH_URLS = [
 ]
 HGNC_URL = "https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt"
 SYNONYMS_FILENAME = "synonyms.json"
+ABBREVIATIONS_FILENAME = "abbreviations.json"  # built by abbreviations.py when documents are indexed
 RELOAD_AFTER_SECONDS = 24 * 60 * 60            # workers reload the table at least this often
 RETRY_REFRESH_AFTER_SECONDS = 7 * 24 * 60 * 60  # how long to wait before retrying an out of date table's refresh
 CHECK_FILES_EVERY_SECONDS = 60                  # how often workers check whether the table files changed
-TABLE_FORMAT = 3  # bump when the stored layout changes, so old tables are rebuilt
+TABLE_FORMAT = 4          # bump when the stored layout changes, so old tables are rebuilt
+ABBREVIATIONS_FORMAT = 1  # likewise for the abbreviations table
 MIN_GENE_ALIAS_LENGTH = 3
 
 # search_documents() rejects terms with more than this many subterms
@@ -280,6 +285,18 @@ def get_variants(subterm: str, data_dir: str) -> list[str]:
             if synonym not in variants and synonym not in acronyms:
                 variants.append(synonym)
 
+    # leave out a word that papers mostly use as an abbreviation for something else: 'Prisma'
+    # (a brand of mesoglycan) is nearly always PRISMA, the systematic review guideline. names with
+    # digits ('IL8', 'CD31') are specific, and are often defined in other words ('interleukin 8')
+    variants = variants[:1] + [v for v in variants[1:] if not v.isalpha() or v not in table.abbreviations_used_for
+                               or set(table.abbreviations_used_for[v]) & set(variants)]
+
+    # abbreviations defined in papers, only when written as papers write them (see the module docstring)
+    abbreviation = table.abbreviation_synonyms.get(normalized)
+    if abbreviation and _case_key(subterm) == abbreviation[0]:
+        acronyms = acronyms | {normalized}
+        variants.extend(long for long in abbreviation[1] if long not in variants)
+
     # plural/singular and hyphenation of each variant
     expanded = []
     for variant in variants:
@@ -327,6 +344,13 @@ def _inflections(phrase: str) -> list[str]:
     other = util.sanitize_term_for_search(other, keep_logical_operators=False)
     return [" ".join(words[:-1] + [other])]
 
+def _case_key(term: str) -> str:
+    # 'HSV-2' and 'HSV 2' are written the same way; 'Mg' and 'MG' aren't
+    return re.sub(r"[^A-Za-z0-9]", "", term)
+
+def _normalize(term: str) -> str:
+    return util.sanitize_term_for_search(term, keep_logical_operators=False)
+
 def _is_acronym(word: str) -> bool:
     # only all-letter acronyms can collide with ordinary words; codes like 'LY2835219' can't
     return word.isalpha() and sum(c.isupper() for c in word) >= 2
@@ -336,19 +360,24 @@ class SynonymTable:
     word_synonyms: dict[str, list[str]]     # a term's synonyms in the groups where it's written as a word
     acronym_synonyms: dict[str, list[str]]  # ... and in the groups where it's written as an acronym
     acronyms: set[str]                      # terms written as an acronym in any group
+    # mined short form -> (how papers write it, see _case_key; its long forms)
+    abbreviation_synonyms: dict[str, tuple[str, list[str]]] = dataclasses.field(default_factory=dict)
+    # every mined short form -> its long forms, including ones MeSH/HGNC also define
+    abbreviations_used_for: dict[str, list[str]] = dataclasses.field(default_factory=dict)
 
 _synonym_cache = dict[str, SynonymTable]()
 _cache_state = dict[str, tuple[tuple, float]]()  # data dir -> (table files' mtimes, time loaded)
 _last_checked = dict[str, float]()                # data dir -> time the table files were last checked
 
 def _table_mtimes(data_dir: str) -> tuple:
-    paths = [os.path.join(data_dir, name) for name in (SYNONYMS_FILENAME,)]
+    paths = [os.path.join(data_dir, name) for name in (SYNONYMS_FILENAME, ABBREVIATIONS_FILENAME)]
     return tuple(os.path.getmtime(p) if os.path.exists(p) else None for p in paths)
 
 def _drop_stale_cache(data_dir: str) -> None:
-    """Workers live a long time, so reload when the table file changes, and check daily whether
-    a new MeSH year is out. Files are checked at most every CHECK_FILES_EVERY_SECONDS, since this
-    runs on every search and the data dir may be on a network filesystem."""
+    """Workers live a long time, so reload when the table files change (abbreviations are
+    rebuilt after indexing), and check daily whether a new MeSH year is out. Files are checked
+    at most every CHECK_FILES_EVERY_SECONDS, since this runs on every search and the data dir
+    may be on a network filesystem."""
     if data_dir not in _synonym_cache:
         return
     now = time.time()
@@ -364,13 +393,26 @@ def _drop_stale_cache(data_dir: str) -> None:
 
 def load_synonyms(data_dir: str) -> SynonymTable:
     """Map each term to all of its synonyms, and find the terms that end in an acronym.
-    Downloads and builds the table if it is missing, from an older MeSH year, or in an old format."""
+    Downloads and builds the table if it is missing, from an older MeSH year, or in an old format.
+    Abbreviations mined from the corpus are added if they have been built."""
     if data_dir in _synonym_cache:
         return _synonym_cache[data_dir]
 
     stored = refresh_synonym_table(data_dir)
     table = SynonymTable(dict(), dict(), set())
     _add_groups(table, stored["groups"], stored["acronyms"])
+    gene_symbols = set(stored["gene_symbols"])
+
+    # MeSH and HGNC are curated, so mined abbreviations only fill in short forms they don't define,
+    # and never give a gene symbol another meaning: 'AES' (now TLE5) isn't 'adverse events' (from 'AEs')
+    for short, *longs in read_abbreviation_table(data_dir) or []:
+        key = _normalize(short)
+        table.abbreviations_used_for[key] = longs
+        if key in table.word_synonyms or key in table.acronym_synonyms or key in gene_symbols:
+            continue
+        table.abbreviation_synonyms[key] = (_case_key(short), longs)
+        if len(longs) > 1:
+            _add_groups(table, [longs], [[]])  # spellings of the long form ('human papilloma virus')
 
     _synonym_cache[data_dir] = table
     _cache_state[data_dir] = (_table_mtimes(data_dir), time.time())
@@ -437,7 +479,7 @@ def build_synonym_table(data_dir: str, year: int | None = None) -> None:
         print(f"Downloading {HGNC_URL}")
         with urllib.request.urlopen(HGNC_URL, timeout=300) as response:
             hgnc_tsv = response.read().decode("utf-8")
-        gene_groups = _parse_hgnc_tsv(hgnc_tsv)
+        gene_groups, gene_symbols = _parse_hgnc_tsv(hgnc_tsv), _hgnc_symbols(hgnc_tsv)
     except Exception as e:
         raise FastKmException(f"Could not download HGNC gene names for synonym expansion: {e}")
 
@@ -454,10 +496,10 @@ def build_synonym_table(data_dir: str, year: int | None = None) -> None:
     else:
         raise FastKmException(f"Could not download MeSH synonyms for synonym expansion: {last_error}")
 
-    save_synonym_table(data_dir, y, groups + gene_groups)
+    save_synonym_table(data_dir, y, groups + gene_groups, gene_symbols=gene_symbols)
     print(f"Saved {len(groups)} MeSH {y} and {len(gene_groups)} HGNC synonym groups")
 
-def save_synonym_table(data_dir: str, year: int, groups: list[list[str]]) -> None:
+def save_synonym_table(data_dir: str, year: int, groups: list[list[str]], gene_symbols: list[str] = ()) -> None:
     """Normalize synonym groups (terms in their original case) the way queries are, and save them."""
     normalized_groups, group_acronyms = [], []
     for group in groups:
@@ -472,10 +514,38 @@ def save_synonym_table(data_dir: str, year: int, groups: list[list[str]]) -> Non
             normalized_groups.append(normalized_group)
             group_acronyms.append(acronyms)
 
+    _write_json(data_dir, SYNONYMS_FILENAME, {"format": TABLE_FORMAT, "year": year, "groups": normalized_groups,
+                                              "acronyms": group_acronyms, "gene_symbols": sorted({_normalize(s) for s in gene_symbols})})
+
+def save_abbreviation_table(data_dir: str, groups: list[list[str]]) -> None:
+    """Save mined abbreviations, each [short form as papers write it, long forms...], with long forms
+    normalized the way queries are."""
+    entries = []
+    for short, *longs in groups:
+        key = _normalize(short)
+        normalized = []
+        for long in longs:
+            n = _normalize(long)
+            if n and n != key and n not in normalized and util.get_ngram_n(n) <= MAX_NGRAM_N:
+                normalized.append(n)
+        if key and normalized:
+            entries.append([short] + normalized)
+    _write_json(data_dir, ABBREVIATIONS_FILENAME, {"format": ABBREVIATIONS_FORMAT, "abbreviations": entries})
+
+def read_abbreviation_table(data_dir: str) -> list[list[str]] | None:
+    """The saved abbreviations, or None if they haven't been built or are in an old format."""
+    path = os.path.join(data_dir, ABBREVIATIONS_FILENAME)
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        stored = json.load(f)
+    return stored["abbreviations"] if stored.get("format") == ABBREVIATIONS_FORMAT else None
+
+def _write_json(data_dir: str, filename: str, data: dict) -> None:
     fd, tmp_path = tempfile.mkstemp(dir=data_dir, suffix=".tmp")
     with os.fdopen(fd, "w") as f:
-        json.dump({"format": TABLE_FORMAT, "year": year, "groups": normalized_groups, "acronyms": group_acronyms}, f)
-    os.replace(tmp_path, os.path.join(data_dir, SYNONYMS_FILENAME))  # atomic, in case several workers build at once
+        json.dump(data, f)
+    os.replace(tmp_path, os.path.join(data_dir, filename))  # atomic, in case several workers build at once
 
 def _download_and_parse(url: str, data_dir: str) -> list[list[str]]:
     # the supplementary file is ~800 MB uncompressed, so stream it from disk rather than memory
@@ -546,6 +616,14 @@ def _parse_hgnc_tsv(tsv: str) -> list[list[str]]:
                 group.append(name)
         groups.append(group)
     return groups
+
+def _hgnc_symbols(tsv: str) -> list[str]:
+    """Every current and previous approved gene symbol, including ones too ambiguous to use as synonyms."""
+    symbols = set()
+    for row in csv.DictReader(tsv.splitlines(), delimiter="\t"):
+        if row["status"] == "Approved":
+            symbols |= {row["symbol"]} | _split_hgnc_list(row["prev_symbol"])
+    return sorted(symbols)
 
 def _gene_name_key(name: str) -> str:
     return util.sanitize_term_for_search(name, keep_logical_operators=False).replace(" ", "")
