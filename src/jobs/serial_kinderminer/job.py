@@ -20,7 +20,7 @@ def run_serial_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
         kg = KnowledgeGraph(data_dir=gvars.data_dir)
     
     # test AB pairs
-    idx.prep_for_search(params.a_terms + params.b_terms)
+    idx.prep_for_search(params.a_terms + params.b_terms, params.expand_synonyms)
     ab_results = []
     for b_i, b_term in enumerate(params.b_terms):
         for a_i, a_term in enumerate(params.a_terms):
@@ -35,6 +35,7 @@ def run_serial_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
                 top_n_articles_most_recent=params.top_n_articles_most_recent,
                 top_n_articles_highest_impact_factor=params.top_n_articles_highest_impact_factor,
                 scoring=params.scoring,
+                expand_synonyms=params.expand_synonyms,
             )
 
             is_valid_hit = ab_result['ab_pvalue'] <= params.ab_fet_threshold
@@ -48,14 +49,14 @@ def run_serial_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
             progress = _calculate_progress(a_i + 1, len(params.a_terms), b_i + 1, len(params.b_terms), 0, len(params.c_terms), params.top_n_ab + top_n_ab_padding)
             report_progress(progress)
 
-        idx.delete_term_from_memory(b_term)
+        idx.delete_term_from_memory(b_term, params.expand_synonyms)
 
     # take top N AB results
     ab_results.sort(key=lambda ab: ab['ab_pred_score'], reverse=True)
     top_ab_results = ab_results[:params.top_n_ab + top_n_ab_padding]
 
     # test BC and AC pairs for each top AB result
-    idx.prep_for_search(params.c_terms)
+    idx.prep_for_search(params.c_terms, params.expand_synonyms)
     abc_results = []
     for c_i, c_term in enumerate(params.c_terms):
         for ab_result in top_ab_results:
@@ -75,6 +76,7 @@ def run_serial_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
                 top_n_articles_most_recent=params.top_n_articles_most_recent,
                 top_n_articles_highest_impact_factor=params.top_n_articles_highest_impact_factor,
                 scoring=params.scoring,
+                expand_synonyms=params.expand_synonyms,
             )
 
             ac_result = km.kinderminer_search(
@@ -89,6 +91,7 @@ def run_serial_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
                 top_n_articles_most_recent=params.top_n_articles_most_recent,
                 top_n_articles_highest_impact_factor=params.top_n_articles_highest_impact_factor,
                 scoring=params.scoring,
+                expand_synonyms=params.expand_synonyms,
             )
 
             is_valid_hit = bc_result['bc_pvalue'] <= params.bc_fet_threshold
@@ -108,7 +111,7 @@ def run_serial_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
             progress = _calculate_progress(len(params.a_terms), len(params.a_terms), len(params.b_terms), len(params.b_terms), c_i + 1, len(params.c_terms), len(top_ab_results))
             report_progress(progress)
 
-        idx.delete_term_from_memory(c_term)
+        idx.delete_term_from_memory(c_term, params.expand_synonyms)
 
     # sort by bc_pred_score descending
     abc_results.sort(key=lambda abc: abc['bc_pred_score'], reverse=True)
@@ -156,7 +159,7 @@ def _run_paired_skim(params: KinderMinerJobParams) -> list[dict]:
     repeat_terms = {term: count for term, count in repeat_terms.items() if count > 1}
 
     abc_results = []
-    idx.prep_for_search(params.a_terms + params.b_terms + params.c_terms)
+    idx.prep_for_search(params.a_terms + params.b_terms + params.c_terms, params.expand_synonyms)
     for i, a_term in enumerate(params.a_terms):
         b_term = params.b_terms[i]
         c_term = params.c_terms[i]
@@ -172,6 +175,7 @@ def _run_paired_skim(params: KinderMinerJobParams) -> list[dict]:
             top_n_articles_most_recent=params.top_n_articles_most_recent,
             top_n_articles_highest_impact_factor=params.top_n_articles_highest_impact_factor,
             scoring=params.scoring,
+            expand_synonyms=params.expand_synonyms,
         )
 
         is_valid_hit = result['ab_pvalue'] <= params.ab_fet_threshold and result['bc_pvalue'] <= params.bc_fet_threshold
@@ -189,11 +193,11 @@ def _run_paired_skim(params: KinderMinerJobParams) -> list[dict]:
         report_progress(i + 1, len(params.a_terms), 0, 1, 0, 0, 0)
         
         if a_term not in repeat_terms:
-            idx.delete_term_from_memory(a_term)
+            idx.delete_term_from_memory(a_term, params.expand_synonyms)
         if b_term not in repeat_terms:
-            idx.delete_term_from_memory(b_term)
+            idx.delete_term_from_memory(b_term, params.expand_synonyms)
         if c_term not in repeat_terms:
-            idx.delete_term_from_memory(c_term)
+            idx.delete_term_from_memory(c_term, params.expand_synonyms)
 
     # sort by bc_pred_score descending
     abc_results.sort(key=lambda abc: abc['bc_pred_score'], reverse=True)

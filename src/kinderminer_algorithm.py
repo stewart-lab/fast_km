@@ -14,7 +14,8 @@ def kinderminer_search(
         top_n_articles_most_cited: int = 0,
         top_n_articles_most_recent: int = 10, 
         top_n_articles_highest_impact_factor: int = 0,
-        scoring: str = 'fet'
+        scoring: str = 'fet',
+        expand_synonyms: bool = False
     ) -> dict:
     """"""
     # validate input
@@ -27,16 +28,16 @@ def kinderminer_search(
     n_total_abstracts = idx.count_documents(censor_year_lower, censor_year_upper)
     result['total_count'] = n_total_abstracts
     if a_term and b_term:
-        a_term_set = idx.search_documents(a_term, censor_year_lower, censor_year_upper)
-        b_term_set = idx.search_documents(b_term, censor_year_lower, censor_year_upper)
+        a_term_set = idx.search_documents(a_term, censor_year_lower, censor_year_upper, expand_synonyms)
+        b_term_set = idx.search_documents(b_term, censor_year_lower, censor_year_upper, expand_synonyms)
         ab_table = _get_contingency_table(a_term_set, b_term_set, n_total_abstracts)
     if b_term and c_term:
-        b_term_set = idx.search_documents(b_term, censor_year_lower, censor_year_upper)
-        c_term_set = idx.search_documents(c_term, censor_year_lower, censor_year_upper)
+        b_term_set = idx.search_documents(b_term, censor_year_lower, censor_year_upper, expand_synonyms)
+        c_term_set = idx.search_documents(c_term, censor_year_lower, censor_year_upper, expand_synonyms)
         bc_table = _get_contingency_table(b_term_set, c_term_set, n_total_abstracts)
     if a_term and c_term:
-        a_term_set = idx.search_documents(a_term, censor_year_lower, censor_year_upper)
-        c_term_set = idx.search_documents(c_term, censor_year_lower, censor_year_upper)
+        a_term_set = idx.search_documents(a_term, censor_year_lower, censor_year_upper, expand_synonyms)
+        c_term_set = idx.search_documents(c_term, censor_year_lower, censor_year_upper, expand_synonyms)
         ac_table = _get_contingency_table(a_term_set, c_term_set, n_total_abstracts)
     
     # statistical testing and scoring

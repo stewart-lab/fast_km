@@ -135,7 +135,7 @@ def _run_skim_gpt(job_dir: str, params: HypothesisEvalJobParams,
     else:
         data = params.data
 
-    data = _populate_pmid_intersections(data, censor_year_lower, censor_year_upper)
+    data = _populate_pmid_intersections(data, censor_year_lower, censor_year_upper, params.expand_synonyms)
 
     if params.is_dch:
         config['JOB_TYPE'] = 'km_with_gpt'
@@ -525,7 +525,7 @@ def _get_config_template():
         }
     }
 
-def _populate_pmid_intersections(data: list[dict], censor_year_lower: int, censor_year_upper: int) -> list[dict]:
+def _populate_pmid_intersections(data: list[dict], censor_year_lower: int, censor_year_upper: int, expand_synonyms: bool = False) -> list[dict]:
     """Run KinderMiner searches to populate ab_pmid_intersection for each data entry.
 
     Used by DCH jobs where the caller provides empty PMID lists and expects
@@ -571,7 +571,8 @@ def _populate_pmid_intersections(data: list[dict], censor_year_lower: int, censo
                                                                 censor_year_lower=censor_year_lower, 
                                                                 censor_year_upper=censor_year_upper,
                                                                 return_pmids=True, 
-                                                                top_n_articles_most_recent=1000)["ab_pmid_intersection"]
+                                                                top_n_articles_most_recent=1000,
+                                                                expand_synonyms=expand_synonyms)["ab_pmid_intersection"]
         if c_term and not result.get("bc_pmid_intersection"):
             result["bc_pmid_intersection"] = kinderminer_search(idx, 
                                                                 a_term=None,
@@ -580,7 +581,8 @@ def _populate_pmid_intersections(data: list[dict], censor_year_lower: int, censo
                                                                 censor_year_lower=censor_year_lower, 
                                                                 censor_year_upper=censor_year_upper,
                                                                 return_pmids=True, 
-                                                                top_n_articles_most_recent=1000)["bc_pmid_intersection"]
+                                                                top_n_articles_most_recent=1000,
+                                                                expand_synonyms=expand_synonyms)["bc_pmid_intersection"]
         if c_term and not result.get("ac_pmid_intersection"):
             result["ac_pmid_intersection"] = kinderminer_search(idx, 
                                                                 a_term=a_term, 
@@ -589,7 +591,8 @@ def _populate_pmid_intersections(data: list[dict], censor_year_lower: int, censo
                                                                 censor_year_lower=censor_year_lower, 
                                                                 censor_year_upper=censor_year_upper,
                                                                 return_pmids=True, 
-                                                                top_n_articles_most_recent=1000)["ac_pmid_intersection"]
+                                                                top_n_articles_most_recent=1000,
+                                                                expand_synonyms=expand_synonyms)["ac_pmid_intersection"]
 
     idx.close()
     return data
