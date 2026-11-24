@@ -81,8 +81,11 @@ def expand_term(term: str, data_dir: str, ngram_sizes: Callable[[list[str]], lis
     # parentheses used as text in term lists ('(+)-aldosterone', 'PROTEASE)') aren't split on
     term = util.remove_text_parentheses(term)
     parts = [p for p in _operator_split.split(term) if p.strip()]
-    n_subterms = sum(1 for p in parts if p not in util.logical_operators)
-    if n_subterms == 0:
+    if not any(p not in util.logical_operators for p in parts):
+        return term
+    # a term already over the subterm limit isn't expanded, so search_documents() rejects it
+    # the same way as without expansion, rather than expansion quietly dropping some of it
+    if len(set(util.get_subterms(util.sanitize_term_for_search(term)))) > MAX_SUBTERMS:
         return term
 
     _drop_stale_cache(data_dir)

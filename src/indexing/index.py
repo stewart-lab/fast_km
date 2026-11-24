@@ -101,9 +101,8 @@ IMPLEMENTATION NOTES
 
 
 class Index():
-    def __init__(self, data_dir: str, expand_synonyms: bool = False):
+    def __init__(self, data_dir: str):
         self.data_dir = data_dir
-        self.expand_synonyms = expand_synonyms
         self.n_documents = 0
         self.doc_origins = set[str]()
         self.pmid_to_pub_year = np.zeros(0, dtype=np.uint16) # saves memory vs python dict
@@ -479,10 +478,15 @@ class Index():
         # so searches don't have to wait for a new MeSH year to download. optional: on failure,
         # searches keep using the current table.
         if os.path.exists(os.path.join(self.data_dir, synonyms.SYNONYMS_FILENAME)):
+            print("Refreshing synonym table...")
             try:
                 synonyms.refresh_synonym_table(self.data_dir)
             except Exception as e:
                 print(f"Could not refresh synonyms: {e}")
+
+        # the synonym refresh is the first 5% of step 4
+        progress = 0.8
+        yield progress
 
 
         ## --- update disk cache ---
@@ -513,7 +517,7 @@ class Index():
             self.delete_term_from_memory(cached_term)
 
             terms_refreshed += 1
-            progress = (terms_refreshed / cached_term_count) * 0.25 + 0.75
+            progress = (terms_refreshed / cached_term_count) * 0.2 + 0.8
             yield progress
 
         # step 4 of 4 complete
@@ -560,14 +564,17 @@ class Index():
             )
         return None
 
-    def search_documents(self, term: str, start_year: int = MIN_CENSOR_YEAR, end_year: int = MAX_CENSOR_YEAR) -> set[int]:
-        """Search the documents for a term, return all matching PMIDs"""
-        # only subterms the user wrote are cached on disk, not every synonym of them, since
-        # the disk cache is re-searched on every indexing run
-        typed_subterms = set(util.get_subterms(util.sanitize_term_for_search(term)))
+    def search_documents(self, term: str, start_year: int = MIN_CENSOR_YEAR, end_year: int = MAX_CENSOR_YEAR,
+                         expand_synonyms: bool = False) -> set[int]:
+        """Search the documents for a term, return all matching PMIDs. With expand_synonyms,
+        the term's synonyms, plurals and other spellings also match (see synonyms.expand_term)."""
+        # only subterms the user wrote are cached on disk, not every synonym of them. the disk
+        # cache is re-searched on every indexing run, and expansion can turn one term into
+        # up to 100 subterms, so caching them all could make that re-search up to 100x slower
+        user_provided_subterms = set(util.get_subterms(util.sanitize_term_for_search(term)))
 
         # lowercase and remove punctuation but keep these chars: & | ( )
-        term = self._prepare_term(term)
+        term = self._sanitize_and_expand_term(term, expand_synonyms)
         if not term:
             return set()
 
@@ -579,8 +586,8 @@ class Index():
         subterms = util.get_subterms(term)
 
         # handle errors
-        if len(set(subterms)) > 100:
-            print(f"Too many subterms in composite term, maximum of 100 allowed: {term}")
+        if len(set(subterms)) > synonyms.MAX_SUBTERMS:
+            print(f"Too many subterms in composite term, maximum of {synonyms.MAX_SUBTERMS} allowed: {term}")
             return set()
         if not subterms:
             print(f"No valid subterms found for: {term}")
@@ -612,7 +619,7 @@ class Index():
             subterm_pmids[subterm] = this_subterm_pmids
 
             # cache trigrams+ on disk
-            if gram_n > 2 and subterm in typed_subterms:
+            if gram_n > 2 and subterm in user_provided_subterms:
                 data = _msgpack_dump(this_subterm_pmids)
                 cache_retries = 10
                 for _ in range(cache_retries):
@@ -677,7 +684,7 @@ class Index():
             return True
         return False
 
-    def prep_for_search(self, terms: list[str]) -> None:
+    def prep_for_search(self, terms: list[str], expand_synonyms: bool = False) -> None:
         """Figure out which bi-grams are heavily used across unique subterms 
         and so might be worth caching in memory to avoid slow disk I/O"""
         self._bi_grams_maybe_should_cache.clear()
@@ -686,7 +693,7 @@ class Index():
 
         unique_subterms = set[str]()
         for term in terms:
-            sanitized = self._prepare_term(term)
+            sanitized = self._sanitize_and_expand_term(term, expand_synonyms)
             subterms = util.get_subterms(sanitized)
             for subterm in subterms:
                 gram_n = util.get_ngram_n(subterm)
@@ -705,8 +712,8 @@ class Index():
             if self._bi_grams_maybe_should_cache[bi_gram] < 20:
                 del self._bi_grams_maybe_should_cache[bi_gram]
 
-    def delete_term_from_memory(self, term: str) -> None:
-        sanitized = self._prepare_term(term)
+    def delete_term_from_memory(self, term: str, expand_synonyms: bool = False) -> None:
+        sanitized = self._sanitize_and_expand_term(term, expand_synonyms)
         if sanitized in self._term_cache:
             del self._term_cache[sanitized]
 
@@ -926,8 +933,8 @@ class Index():
         tables.sort()
         return tables
 
-    def _prepare_term(self, term: str) -> str:
-        if self.expand_synonyms:
+    def _sanitize_and_expand_term(self, term: str, expand_synonyms: bool) -> str:
+        if expand_synonyms:
             term = synonyms.expand_term(term, self.data_dir, self._get_stored_ngram_sizes)
         return util.sanitize_term_for_search(term)
 
@@ -1203,8 +1210,9 @@ def _evaluate_composite_term(composite_term: str, pmids: dict[str, set[int]]) ->
         if subterm in util.logical_operators:
             continue
 
-        # give each subterm a generated variable name; names derived from the subterm aren't
-        # always valid, e.g. Python normalizes 'µ' (micro sign) to 'μ' in names, so it isn't found
+        # we need to make each subterm a valid Python variable name,
+        # so we generate a variable name here for each subterm.
+        # (a name made from the subterm itself can fail: Python reads 'µ' (micro sign) as 'μ')
         if subterm not in names:
             names[subterm] = f"_{len(names)}"
             namespace[names[subterm]] = pmids.get(subterm, set())

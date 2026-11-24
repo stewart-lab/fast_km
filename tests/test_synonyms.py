@@ -7,6 +7,7 @@ import pytest
 import src.indexing.synonyms as synonyms
 from src.documents.document import Document
 from src.indexing.index import Index
+from src.kinderminer_algorithm import kinderminer_search
 
 # a tiny stand-in for the MeSH synonym table, so tests don't download MeSH
 MESH_GROUPS = [
@@ -69,6 +70,11 @@ def test_expansion_stays_under_subterm_limit(data_dir: str):
     n_subterms = expanded.count("|") + 1
     assert n_subterms <= synonyms.MAX_SUBTERMS
 
+def test_term_over_the_subterm_limit_is_not_expanded(data_dir: str):
+    # it's rejected by search_documents() as without expansion, not silently cut down
+    term = "|".join(f"tumor{i}" for i in range(synonyms.MAX_SUBTERMS + 1))
+    assert synonyms.expand_term(term, data_dir) == term
+
 def test_search_with_expansion(data_dir: str):
     idx = Index(data_dir)
     idx.add_or_update_documents([
@@ -80,11 +86,13 @@ def test_search_with_expansion(data_dir: str):
     for _progress in idx.index_documents():
         pass
     assert idx.search_documents("breast cancer") == {1}
-    idx.close()
+    assert idx.search_documents("breast cancer", expand_synonyms=True) == {1, 2, 3}
+    assert idx.search_documents("breast cancer & study", expand_synonyms=True) == {1, 2, 3}
+    # an expanded search doesn't change later plain ones
+    assert idx.search_documents("breast cancer") == {1}
 
-    idx = Index(data_dir, expand_synonyms=True)
-    assert idx.search_documents("breast cancer") == {1, 2, 3}
-    assert idx.search_documents("breast cancer & study") == {1, 2, 3}
+    result = kinderminer_search(idx, "breast cancer", "study", expand_synonyms=True)
+    assert result["a_count"] == 3 and result["ab_count"] == 3
     idx.close()
 
 def _make_outdated(data_dir: str):
@@ -309,13 +317,21 @@ def test_indexing_refreshes_the_synonym_table(data_dir: str, monkeypatch):
     with open(os.path.join(data_dir, synonyms.SYNONYMS_FILENAME)) as f:
         assert json.load(f)["year"] == 9999
 
+def test_synonym_refresh_is_reported_in_indexing_progress(data_dir: str):
+    idx = Index(data_dir)
+    idx.add_or_update_documents([Document(pmid=1, pub_year=2020, title="a study", abstract="heart attack", origin="test.xml.gz")])
+    progress = list(idx.index_documents())
+    idx.close()
+    assert 0.8 in progress
+    assert progress == sorted(progress) and progress[-1] == 1.0
+
 def test_expanded_variants_are_not_cached_on_disk(data_dir: str):
-    idx = Index(data_dir, expand_synonyms=True)
+    idx = Index(data_dir)
     idx.add_or_update_documents([Document(pmid=1, pub_year=2020, title="a study", abstract="cancer of the breast", origin="test.xml.gz")])
     for _progress in idx.index_documents():
         pass
-    assert idx.search_documents("cancer of the breast") == {1}
-    assert idx.search_documents("breast cancer") == {1}
+    assert idx.search_documents("cancer of the breast", expand_synonyms=True) == {1}
+    assert idx.search_documents("breast cancer", expand_synonyms=True) == {1}
     cached = {row[0] for row in idx._idx_cursor.execute("SELECT term FROM query_cache")}
     idx.close()
     # the user's phrase is cached, its synonyms aren't
@@ -324,12 +340,12 @@ def test_expanded_variants_are_not_cached_on_disk(data_dir: str):
 def test_composite_terms_with_non_ascii_letters(data_dir: str):
     # with expansion a single term becomes a composite one; 'µ' (micro sign) isn't a valid
     # Python name as is, so it must not end up in the evaluated expression
-    idx = Index(data_dir, expand_synonyms=True)
+    idx = Index(data_dir)
     idx.add_or_update_documents([Document(pmid=1, pub_year=2020, title="a study", abstract="the µ-opioid receptor", origin="test.xml.gz")])
     for _progress in idx.index_documents():
         pass
-    assert idx.search_documents("µ-opioid receptor") == {1}
-    assert idx.search_documents("µ-opioid receptor|kappa receptor") == {1}
+    assert idx.search_documents("µ-opioid receptor", expand_synonyms=True) == {1}
+    assert idx.search_documents("µ-opioid receptor|kappa receptor", expand_synonyms=True) == {1}
     idx.close()
 
 def test_plurals_used_mostly_as_verbs_are_left_out(data_dir: str):

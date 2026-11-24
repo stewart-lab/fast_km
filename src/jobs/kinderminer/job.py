@@ -11,13 +11,13 @@ def run_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
     if params.paired:
         return _run_paired_km(params)
     
-    idx = Index(gvars.data_dir, expand_synonyms=params.expand_synonyms)
+    idx = Index(gvars.data_dir)
 
     kg = None
     if params.query_knowledge_graph:
         kg = KnowledgeGraph(data_dir=gvars.data_dir)
 
-    idx.prep_for_search(params.a_terms + params.b_terms)
+    idx.prep_for_search(params.a_terms + params.b_terms, params.expand_synonyms)
     results = []
     for b_i, b_term in enumerate(params.b_terms):
         for a_i, a_term in enumerate(params.a_terms):
@@ -32,6 +32,7 @@ def run_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
                 top_n_articles_most_recent=params.top_n_articles_most_recent,
                 top_n_articles_highest_impact_factor=params.top_n_articles_highest_impact_factor,
                 scoring=params.scoring,
+                expand_synonyms=params.expand_synonyms,
             )
 
             if kg and result['ab_pvalue'] <= params.rel_pvalue_cutoff:
@@ -40,7 +41,7 @@ def run_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
             results.append(result)
             report_progress(_calculate_progress(b_i + 1, len(params.b_terms)))
 
-        idx.delete_term_from_memory(b_term)
+        idx.delete_term_from_memory(b_term, params.expand_synonyms)
 
     results.sort(key=lambda ab: ab['ab_pred_score'], reverse=True)
 
@@ -53,7 +54,7 @@ def run_kinderminer_job(params: KinderMinerJobParams) -> list[dict]:
     return results
 
 def _run_paired_km(params: KinderMinerJobParams) -> list[dict]:
-    idx = Index(gvars.data_dir, expand_synonyms=params.expand_synonyms)
+    idx = Index(gvars.data_dir)
 
     kg = None
     if params.query_knowledge_graph:
@@ -68,7 +69,7 @@ def _run_paired_km(params: KinderMinerJobParams) -> list[dict]:
             repeat_terms[term] = 1
     repeat_terms = {term: count for term, count in repeat_terms.items() if count > 1}
     
-    idx.prep_for_search(params.a_terms + params.b_terms)
+    idx.prep_for_search(params.a_terms + params.b_terms, params.expand_synonyms)
     results = []
     for i, a_term in enumerate(params.a_terms):
         b_term = params.b_terms[i]
@@ -83,6 +84,7 @@ def _run_paired_km(params: KinderMinerJobParams) -> list[dict]:
             top_n_articles_most_recent=params.top_n_articles_most_recent,
             top_n_articles_highest_impact_factor=params.top_n_articles_highest_impact_factor,
             scoring=params.scoring,
+            expand_synonyms=params.expand_synonyms,
         )
 
         if kg and result['ab_pvalue'] <= params.rel_pvalue_cutoff:
@@ -92,9 +94,9 @@ def _run_paired_km(params: KinderMinerJobParams) -> list[dict]:
         report_progress(_calculate_progress(i + 1, len(params.b_terms)))
 
         if a_term not in repeat_terms:
-            idx.delete_term_from_memory(a_term)
+            idx.delete_term_from_memory(a_term, params.expand_synonyms)
         if b_term not in repeat_terms:
-            idx.delete_term_from_memory(b_term)
+            idx.delete_term_from_memory(b_term, params.expand_synonyms)
 
     results.sort(key=lambda ab: ab['ab_pred_score'], reverse=True)
 
